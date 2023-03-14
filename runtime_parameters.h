@@ -25,17 +25,9 @@ namespace RunTimeParameters {
     double initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
     double final_time;   /*--- Variable to set the final time ---*/
 
-    // The present code is meant to work using non-dimensional variables and using
-    // the non-dimensional equations described in Orlando et al., JCP, 2022.
-    // If one wishes to consider a dimensional version, it is sufficient
-    // to set the Mach numer equal to 1 and the Froude number equal to 1/sqrt(g),
-    // where is, as usual, the accleration of gravity.
-    //
-    double Mach;   /*--- The Mach number ---*/
-    double Froude; /*--- The Froude number ---*/
-    double dt;     /*--- The time-step ---*/
+    double dt; /*--- The time-step ---*/
 
-    unsigned int n_global_refines;      /*--- Number of global refinements for the initial coarse mesh ---*/
+    unsigned int n_global_refines; /*--- Number of global refinements for the initial coarse mesh ---*/
 
     unsigned int max_iterations; /*--- Maximum number of iterations for the linear solver ---*/
     double       eps;            /*--- Tolerance for the linear solver ---*/
@@ -57,8 +49,6 @@ namespace RunTimeParameters {
   //
   Data_Storage::Data_Storage(): initial_time(0.0),
                                 final_time(1.0),
-                                Mach(1.0),
-                                Froude(1.0),
                                 dt(5e-4),
                                 n_global_refines(0),
                                 max_iterations(1000),
@@ -75,14 +65,6 @@ namespace RunTimeParameters {
                         "1.0",
                         Patterns::Double(0.0),
                         " The final time of the simulation. ");
-      prm.declare_entry("Mach",
-                        "1.0",
-                        Patterns::Double(0.0),
-                        " The Mach number. ");
-      prm.declare_entry("Froude",
-                        "1.0",
-                        Patterns::Double(0.0),
-                        " The Froude number. ");
     }
     prm.leave_subsection();
 
@@ -101,10 +83,6 @@ namespace RunTimeParameters {
                         "3",
                         Patterns::Integer(0, 15),
                         " The number of global refinements we want for the mesh. ");
-      prm.declare_entry("n_of_cells",
-                        "100",
-                        Patterns::Integer(1, 1500),
-                        " The number of cells we want on each direction of the mesh. ");
     }
     prm.leave_subsection();
 
@@ -148,8 +126,6 @@ namespace RunTimeParameters {
     {
       initial_time = prm.get_double("initial_time");
       final_time   = prm.get_double("final_time");
-      Mach         = prm.get_double("Mach");
-      Froude       = prm.get_double("Froude");
     }
     prm.leave_subsection();
 
@@ -161,7 +137,7 @@ namespace RunTimeParameters {
 
     prm.enter_subsection("Space discretization");
     {
-      n_global_refines      = prm.get_integer("n_of_refines");
+      n_global_refines = prm.get_integer("n_of_refines");
     }
     prm.leave_subsection();
 
