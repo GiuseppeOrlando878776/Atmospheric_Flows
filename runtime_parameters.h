@@ -29,13 +29,13 @@ namespace RunTimeParameters {
     // the non-dimensional equations described in Orlando et al., JCP, 2022.
     // If one wishes to consider a dimensional version, it is sufficient
     // to set the Mach numer equal to 1 and the Froude number equal to 1/sqrt(g),
-    // where is, as usual, the accleration of gravity.
+    // where g is, as usual, the acceleration of gravity.
     //
     double Mach;   /*--- The Mach number ---*/
     double Froude; /*--- The Froude number ---*/
     double dt;     /*--- The time-step ---*/
 
-    unsigned int n_global_refines;      /*--- Number of global refinements for the initial coarse mesh ---*/
+    unsigned int n_global_refines; /*--- Number of global refinements for the initial coarse mesh ---*/
 
     unsigned int max_iterations; /*--- Maximum number of iterations for the linear solver ---*/
     double       eps;            /*--- Tolerance for the linear solver ---*/
@@ -101,10 +101,6 @@ namespace RunTimeParameters {
                         "3",
                         Patterns::Integer(0, 15),
                         " The number of global refinements we want for the mesh. ");
-      prm.declare_entry("n_of_cells",
-                        "100",
-                        Patterns::Integer(1, 1500),
-                        " The number of cells we want on each direction of the mesh. ");
     }
     prm.leave_subsection();
 
@@ -161,7 +157,7 @@ namespace RunTimeParameters {
 
     prm.enter_subsection("Space discretization");
     {
-      n_global_refines      = prm.get_integer("n_of_refines");
+      n_global_refines = prm.get_integer("n_of_refines");
     }
     prm.leave_subsection();
 

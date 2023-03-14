@@ -250,7 +250,7 @@ template<int dim>
 EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   t_0(data.initial_time),
   T(data.final_time),
-  HYPERBOLIC_stage(1),            //--- Initialize the flag for the TR_BDF2 stage
+  HYPERBOLIC_stage(1),            //--- Initialize the flag for the IMEX scheme stage
   Ma(data.Mach),
   Fr(data.Froude),
   dt(data.dt),

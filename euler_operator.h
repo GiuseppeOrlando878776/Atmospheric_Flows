@@ -241,10 +241,10 @@ namespace Atmospheric_Flow {
   EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
                      n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
   EULEROperator(): MatrixFreeOperators::Base<dim, Vec>(), Ma(), Fr(), dt(), gamma(2.0 - std::sqrt(2.0)),
-                        a21(gamma), a22(0.0), a31(0.5), a32(0.5), a33(0.0),
-                        a21_tilde(0.5*gamma), a22_tilde(0.5*gamma), a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
-                        a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde), b2(a32_tilde), b3(a33_tilde),
-                        HYPERBOLIC_stage(1), NS_stage(1) {}
+                   a21(gamma), a22(0.0), a31(0.5), a32(0.5), a33(0.0),
+                   a21_tilde(0.5*gamma), a22_tilde(0.5*gamma), a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
+                   a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde), b2(a32_tilde), b3(a33_tilde),
+                   HYPERBOLIC_stage(1), NS_stage(1) {}
 
 
   // Constructor with runtime parameters storage
@@ -254,13 +254,13 @@ namespace Atmospheric_Flow {
   EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
                      n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
   EULEROperator(RunTimeParameters::Data_Storage& data): MatrixFreeOperators::Base<dim, Vec>(),
-                                                             Ma(data.Mach), Fr(data.Froude), dt(data.dt), gamma(2.0 - std::sqrt(2.0)),
-                                                             a21(gamma), a22(0.0), a31(0.5),
-                                                             a32(0.5), a33(0.0),
-                                                             a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
-                                                             a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
-                                                             a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde),
-                                                             b2(a32_tilde), b3(a33_tilde), HYPERBOLIC_stage(1), NS_stage(1) {}
+                                                        Ma(data.Mach), Fr(data.Froude), dt(data.dt), gamma(2.0 - std::sqrt(2.0)),
+                                                        a21(gamma), a22(0.0), a31(0.5),
+                                                        a32(0.5), a33(0.0),
+                                                        a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
+                                                        a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
+                                                        a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde),
+                                                        b2(a32_tilde), b3(a33_tilde), HYPERBOLIC_stage(1), NS_stage(1) {}
 
 
   // Setter of time-step
