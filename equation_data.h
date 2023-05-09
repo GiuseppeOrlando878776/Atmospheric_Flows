@@ -17,7 +17,11 @@
 namespace EquationData {
   using namespace dealii;
 
-  static const unsigned int degree = 3;   /*--- Polynomial degree ---*/
+  static const unsigned int degree = 2; /*--- Polynomial degree ---*/
+
+  template<typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+  }
 
   // We declare now the class that describes the velocity.
   //
@@ -45,14 +49,26 @@ namespace EquationData {
   double Velocity<dim>::value(const Point<dim>& p, const unsigned int component) const {
     AssertIndexRange(component, dim);
 
-    const double omega = 1.0;
-    const double x0    = 0.0;
-    const double y0    = 0.0;
+    const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    const double theta  = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
+    const double lambda = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for geographic applications)
+
+    const double U      = radius;
+
+    const double alpha  = 0.0;
+    const double u      = U*(std::cos(alpha)*std::cos(theta) +
+                             std::sin(theta)*std::cos(lambda)*std::sin(alpha)); //longitudinal
+    const double v      = -U*std::sin(alpha)*std::sin(lambda); //latitudinal
 
     if(component == 0) {
-      return -omega*(p[1] - y0);
+      return -u*std::sin(lambda) -v*std::cos(lambda)*std::sin(theta);
     }
-    return omega*(p[0] - x0);
+    else if(component == 1) {
+      return u*std::cos(lambda) - v*std::sin(lambda)*std::sin(theta);
+    }
+    else {
+      return v*std::cos(theta);
+    }
   }
 
   // Put together for a vector evalutation of the velocity.
@@ -88,14 +104,19 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    const double x0    = 1.0/6.0;
-    const double y0    = 1.0/6.0;
-    const double sigma = 0.2;
+    const double radius   = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    const double theta    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
+    const double lambda   = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for geographic applications)
 
-    const double X     = (p[0] - x0)/sigma;
-    const double Y     = (p[1] - y0)/sigma;
+    const double lambda_c = 1.5*numbers::PI;
+    const double theta_c  = 0.0;
+    const double r        = radius*std::acos(std::sin(theta_c)*std::sin(theta) +
+                                             std::cos(theta_c)*std::cos(theta)*std::cos(lambda - lambda_c));
 
-    return 1.0*((X*X + Y*Y) <= 1);
+    const double R        = 1.0/3.0;
+    const double value    = 0.5*(1.0 + std::cos(numbers::PI*r/R))*(r < R);
+
+    return value;
   }
 
 } // namespace EquationData

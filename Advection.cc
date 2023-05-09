@@ -30,11 +30,12 @@
 #include <deal.II/fe/fe_tools.h>
 #include <deal.II/fe/fe_system.h>
 
-#include <deal.II/numerics/matrix_tools.h>
 #include <deal.II/numerics/vector_tools.h>
 #include <deal.II/numerics/data_out.h>
 
 #include <deal.II/base/timer.h>
+
+#include <deal.II/fe/mapping_q.h>
 
 #include "advection_operator.h"
 
@@ -73,12 +74,15 @@ protected:
   QGaussLobatto<dim> quadrature_density;
   QGaussLobatto<dim> quadrature_velocity;
 
+  QGauss<dim>        quadrature_accurate;
+
   /*--- Variables for the density ---*/
   LinearAlgebra::distributed::Vector<double> rho_old;
   LinearAlgebra::distributed::Vector<double> rho_tmp_2;
   LinearAlgebra::distributed::Vector<double> rho_tmp_3;
   LinearAlgebra::distributed::Vector<double> rho_curr;
   LinearAlgebra::distributed::Vector<double> rhs_rho;
+  LinearAlgebra::distributed::Vector<double> rho_tmp;
 
   /*--- Variables for the velocity ---*/
   LinearAlgebra::distributed::Vector<double> u;
@@ -99,6 +103,8 @@ protected:
   void update_density(); /*--- Function to update the density ---*/
 
   void output_results(const unsigned int step); /*--- Function to save the results ---*/
+
+  void analyze_results();
 
 private:
   EquationData::Velocity<dim> u_init;
@@ -132,6 +138,8 @@ private:
 
   std::ofstream output_n_dofs_density;
 
+  Vector<double> L2_error_per_cell_rho;
+
   double get_maximal_velocity(); /*--- Get maximal velocity to compute the Courant number ---*/
 };
 
@@ -157,6 +165,7 @@ AdvectionSolver<dim>::AdvectionSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_velocity(triangulation),
   quadrature_density(EquationData::degree + 1),
   quadrature_velocity(EquationData::degree + 1),
+  quadrature_accurate(2*EquationData::degree + 1),
   u_init(data.initial_time),
   rho_init(data.initial_time),
   advection_matrix(data),
@@ -195,14 +204,11 @@ template<int dim>
 void AdvectionSolver<dim>::create_triangulation(const unsigned int n_refines) {
   TimerOutput::Scope t(time_table, "Create triangulation");
 
-  GridGenerator::subdivided_hyper_cube(triangulation, 15, -0.5, 0.5, true);
-
-  std::vector<GridTools::PeriodicFacePair<typename Triangulation<dim>::cell_iterator>> periodic_faces;
-  GridTools::collect_periodic_faces(triangulation, 0, 1, 0, periodic_faces);
-  GridTools::collect_periodic_faces(triangulation, 2, 3, 1, periodic_faces);
-  triangulation.add_periodicity(periodic_faces);
+  GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 0.9, 1.0, 1);
 
   triangulation.refine_global(n_refines);
+
+  pcout << "h_min = " << std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
 }
 
 
@@ -252,7 +258,7 @@ void AdvectionSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(2*EquationData::degree + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree), dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(u, 0);
@@ -263,6 +269,10 @@ void AdvectionSolver<dim>::setup_dofs() {
   matrix_free_storage->initialize_dof_vector(rho_tmp_3, 1);
   matrix_free_storage->initialize_dof_vector(rho_curr, 1);
   matrix_free_storage->initialize_dof_vector(rhs_rho, 1);
+  matrix_free_storage->initialize_dof_vector(rho_tmp, 1);
+
+  Vector<double> error_per_cell_tmp(triangulation.n_active_cells());
+  L2_error_per_cell_rho.reinit(error_per_cell_tmp);
 }
 
 
@@ -274,8 +284,8 @@ template<int dim>
 void AdvectionSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(dof_handler_velocity, u_init, u);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree), dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree), dof_handler_velocity, u_init, u);
 }
 
 
@@ -342,6 +352,10 @@ void AdvectionSolver<dim>::output_results(const unsigned int step) {
 
   DataOut<dim> data_out;
 
+  /*DataOutBase::VtkFlags flags;
+  flags.write_higher_order_cells = true;
+  data_out.set_flags(flags);*/
+
   rho_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_old, "rho", {DataComponentInterpretation::component_is_scalar});
 
@@ -349,10 +363,38 @@ void AdvectionSolver<dim>::output_results(const unsigned int step) {
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
   component_interpretation_velocity(dim, DataComponentInterpretation::component_is_part_of_vector);
   u.update_ghost_values();
+  data_out.add_data_vector(dof_handler_velocity, u, velocity_names, component_interpretation_velocity);
 
-  data_out.build_patches();
+  data_out.build_patches(MappingQ<dim>(EquationData::degree), EquationData::degree, DataOut<dim>::curved_inner_cells);
+
   const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
+}
+
+
+// @sect4{ <code>NavierStokesProjection::analyze_results</code> }
+
+// Since we have solved a problem with analytic solution, we want to verify
+// the correctness of our implementation by computing the errors of the
+// numerical result against the analytic solution.
+//
+template <int dim>
+void AdvectionSolver<dim>::analyze_results() {
+  TimerOutput::Scope t(time_table, "Analysis results: computing errrors");
+
+  VectorTools::integrate_difference(dof_handler_density, rho_old, rho_init,
+                                    L2_error_per_cell_rho, quadrature_accurate, VectorTools::L2_norm);
+  const double error_L2_rho = VectorTools::compute_global_error(triangulation, L2_error_per_cell_rho, VectorTools::L2_norm);
+
+  rho_tmp = 0;
+  VectorTools::integrate_difference(dof_handler_density, rho_tmp, rho_init,
+                                    L2_error_per_cell_rho, quadrature_accurate, VectorTools::L2_norm);
+  const double L2_rho = VectorTools::compute_global_error(triangulation, L2_error_per_cell_rho, VectorTools::L2_norm);
+  const double error_rel_L2_rho = error_L2_rho/L2_rho;
+
+  /*--- Save results ---*/
+  pcout << "Verification via L2 error:    "          << error_L2_rho     << std::endl;
+  pcout << "Verification via L2 relative error:    " << error_rel_L2_rho << std::endl;
 }
 
 
@@ -379,6 +421,7 @@ template<int dim>
 void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_interval) {
   ConditionalOStream verbose_cout(std::cout, verbose && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
 
+  analyze_results();
   output_results(0);
   double time = t_0;
   unsigned int n = 0;
@@ -408,7 +451,7 @@ void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_int
     verbose_cout << "  Update stage 3" << std::endl;
     update_density();
 
-    /*--- Update density and velocity before applying the damping layers ---*/
+    /*--- Update density ---*/
     rho_old.equ(1.0, rho_curr);
 
     const double max_velocity = get_maximal_velocity();
@@ -426,6 +469,7 @@ void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_int
       advection_matrix.set_dt(dt);
     }
   }
+  analyze_results(); /*--- Compute the error ---*/
   /*--- Save the final results if not previously done ---*/
   if(n % output_interval != 0) {
     verbose_cout << "Plotting Solution final" << std::endl;
@@ -451,15 +495,16 @@ int main(int argc, char *argv[]) {
     const auto& curr_rank = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
     deallog.depth_console(data.verbose && curr_rank == 0 ? 2 : 0);
 
-    AdvectionSolver<2> test(data);
+    AdvectionSolver<3> test(data);
     test.run(data.verbose, data.output_interval);
 
-    if(curr_rank == 0)
+    if(curr_rank == 0) {
       std::cout << "----------------------------------------------------"
                 << std::endl
                 << "Apparently everything went fine!" << std::endl
                 << "Don't forget to brush your teeth :-)" << std::endl
                 << std::endl;
+    }
 
     return 0;
   }
