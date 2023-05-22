@@ -27,7 +27,9 @@ namespace RunTimeParameters {
 
     double dt; /*--- The time-step ---*/
 
-    unsigned int n_global_refines; /*--- Number of global refinements for the initial coarse mesh ---*/
+    unsigned int n_global_refines;    /*--- Number of global refinements for the initial coarse mesh ---*/
+    unsigned int max_loc_refinements; /*--- Number of maximum local refinements allowed ---*/
+    unsigned int min_loc_refinements; /*--- Number of minimum local refinements allowed ---*/
 
     unsigned int max_iterations; /*--- Maximum number of iterations for the linear solver ---*/
     double       eps;            /*--- Tolerance for the linear solver ---*/
@@ -38,6 +40,8 @@ namespace RunTimeParameters {
     std::string  dir; /*--- Directory where the data are saved. This has to be created before launching the code
                             and we assume it is a subfolder of the folder with the executable and the parameter file.
                             This behaviour can be easily changed giving the absolute path ---*/
+
+    unsigned int refinement_iterations; /*--- How often perform the remeshing procedure ---*/
 
   protected:
     ParameterHandler prm; /*--- Auxiliary variable which handles the parameters ---*/
@@ -51,10 +55,13 @@ namespace RunTimeParameters {
                                 final_time(1.0),
                                 dt(5e-4),
                                 n_global_refines(0),
+                                max_loc_refinements(0),
+                                min_loc_refinements(0),
                                 max_iterations(1000),
                                 eps(1e-12),
                                 verbose(true),
-                                output_interval(15) {
+                                output_interval(15),
+                                refinement_iterations(0) {
     prm.enter_subsection("Physical data");
     {
       prm.declare_entry("initial_time",
@@ -83,6 +90,14 @@ namespace RunTimeParameters {
                         "3",
                         Patterns::Integer(0, 15),
                         " The number of global refinements we want for the mesh. ");
+      prm.declare_entry("max_loc_refinements",
+                        "4",
+                         Patterns::Integer(1, 10),
+                         " The number of maximum local refinements. ");
+      prm.declare_entry("min_loc_refinements",
+                        "2",
+                         Patterns::Integer(0, 10),
+                         " The number of minimum local refinements. ");
     }
     prm.leave_subsection();
 
@@ -112,6 +127,12 @@ namespace RunTimeParameters {
                       "the solution. ");
 
     prm.declare_entry("saving directory", "SimTest");
+
+    prm.declare_entry("refinement_iterations",
+                      "0",
+                      Patterns::Integer(0),
+                      " This number indicates how often we need to "
+                      "refine the mesh");
   }
 
   // Function to read all declared parameters in the constructor
@@ -137,7 +158,9 @@ namespace RunTimeParameters {
 
     prm.enter_subsection("Space discretization");
     {
-      n_global_refines = prm.get_integer("n_of_refines");
+      n_global_refines    = prm.get_integer("n_of_refines");
+      max_loc_refinements = prm.get_integer("max_loc_refinements");
+      min_loc_refinements = prm.get_integer("min_loc_refinements");
     }
     prm.leave_subsection();
 
@@ -153,6 +176,8 @@ namespace RunTimeParameters {
     output_interval = prm.get_integer("output_interval");
 
     dir = prm.get("saving directory");
+
+    refinement_iterations = prm.get_integer("refinement_iterations");
   }
 
 } // namespace RunTimeParameters

@@ -26,7 +26,6 @@
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_dgq.h>
-#include <deal.II/fe/fe_values.h>
 #include <deal.II/fe/fe_tools.h>
 #include <deal.II/fe/fe_system.h>
 
@@ -37,7 +36,10 @@
 
 #include <deal.II/fe/mapping_q.h>
 
+#include <deal.II/distributed/solution_transfer.h>
+
 #include "advection_operator.h"
+#include "refinement_structs.h"
 
 using namespace Advection;
 
@@ -102,9 +104,11 @@ protected:
 
   void update_density(); /*--- Function to update the density ---*/
 
+  void refine_mesh(); /*--- Refine the mesh ---*/
+
   void output_results(const unsigned int step); /*--- Function to save the results ---*/
 
-  void analyze_results();
+  void analyze_results(); /*--- In this case, we have an analytical solution to deal with ---*/
 
 private:
   EquationData::Velocity<dim> u_init;
@@ -126,6 +130,10 @@ private:
 
   unsigned int max_its; /*--- Auxiliary variable for the maximum number of iterations of linear solvers ---*/
   double       eps;     /*--- Auxiliary variable for the tolerance of linear solvers ---*/
+
+  unsigned int max_loc_refinements;   /*--- Auxiliary variable to specify maximum number of refinements allowed ---*/
+  unsigned int min_loc_refinements;   /*--- Auxiliary variable to specify minimum number of refinements allowed ---*/
+  unsigned int refinement_iterations; /*--- Auxiliary variable to specify how often performing the remeshing ---*/
 
   std::string saving_dir; /*--- Auxiliary variable for the directory to save the results ---*/
 
@@ -171,6 +179,9 @@ AdvectionSolver<dim>::AdvectionSolver(RunTimeParameters::Data_Storage& data):
   advection_matrix(data),
   max_its(data.max_iterations),
   eps(data.eps),
+  max_loc_refinements(data.max_loc_refinements),
+  min_loc_refinements(data.min_loc_refinements),
+  refinement_iterations(data.refinement_iterations),
   saving_dir(data.dir),
   pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
   time_out("./" + data.dir + "/time_analysis_" +
@@ -335,6 +346,92 @@ void AdvectionSolver<dim>::update_density() {
 }
 
 
+// @sect{ <code>AdvectionSolver::refine_mesh</code>}
+//
+template <int dim>
+void AdvectionSolver<dim>::refine_mesh() {
+  TimerOutput::Scope t(time_table, "Refine mesh");
+
+  using Iterator = typename DoFHandler<dim>::active_cell_iterator;
+  Vector<float> estimated_indicator_per_cell(triangulation.n_active_cells());
+
+  /*--- We consider an estimator based on the norm of the gradient ---*/
+  auto cell_worker = [&](const Iterator&   cell,
+                         ScratchData<dim>& scratch_data,
+                         CopyData&         copy_data) {
+    FEValues<dim>& fe_values = scratch_data.fe_values;
+    fe_values.reinit(cell);
+
+    std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
+    fe_values.get_function_gradients(rho_old, gradients);
+    copy_data.cell_index = cell->active_cell_index();
+    double max_gradient_norm_square = 0.0;
+    for(unsigned k = 0; k < fe_values.n_quadrature_points; ++k) {
+      double gradient_norm_square = (gradients[k][0]*gradients[k][0] + gradients[k][1]*gradients[k][1]);
+      max_gradient_norm_square = std::max(gradient_norm_square, max_gradient_norm_square);
+    }
+    copy_data.value = std::sqrt(max_gradient_norm_square);
+  };
+
+  auto copier = [&](const CopyData &copy_data) {
+    if(copy_data.cell_index != numbers::invalid_unsigned_int) {
+      estimated_indicator_per_cell[copy_data.cell_index] += copy_data.value;
+    }
+  };
+
+  const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
+
+  ScratchData scratch_data(fe_density, EquationData::degree + 1, cell_flags);
+  CopyData copy_data;
+  rho_old.update_ghost_values();
+  MeshWorker::mesh_loop(dof_handler_density.begin_active(),
+                        dof_handler_density.end(),
+                        cell_worker,
+                        copier,
+                        scratch_data,
+                        copy_data,
+                        MeshWorker::assemble_own_cells);
+
+  GridRefinement::refine(triangulation, estimated_indicator_per_cell, 3.0);
+  GridRefinement::coarsen(triangulation, estimated_indicator_per_cell, 1.0);
+  for(const auto& cell: triangulation.active_cell_iterators()) {
+    if(cell->refine_flag_set() && cell->level() == max_loc_refinements) {
+      cell->clear_refine_flag();
+    }
+    if(cell->coarsen_flag_set() && cell->level() == max_loc_refinements) {
+      cell->clear_refine_flag();
+    }
+  }
+  triangulation.prepare_coarsening_and_refinement();
+
+  parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<double>>
+  solution_transfer(dof_handler_density);
+  solution_transfer.prepare_for_coarsening_and_refinement(rho_old);
+
+  parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<double>>
+  solution_transfer_u(dof_handler_velocity);
+  solution_transfer_u.prepare_for_coarsening_and_refinement(u);
+
+  triangulation.execute_coarsening_and_refinement();
+
+  setup_dofs();
+
+  LinearAlgebra::distributed::Vector<double> tmp_rho_old,
+                                             tmp_u;
+
+  tmp_rho_old.reinit(rho_old);
+  tmp_u.reinit(u);
+
+  solution_transfer.interpolate(tmp_rho_old);
+  tmp_rho_old.update_ghost_values();
+  solution_transfer_u.interpolate(tmp_u);
+  tmp_u.update_ghost_values();
+
+  rho_old = tmp_rho_old;
+  u       = tmp_u;
+}
+
+
 // @sect{ <code>AdvectionSolver::output_results</code> }
 
 // This method plots the current solution. The main difficulty is that we want
@@ -467,6 +564,11 @@ void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_int
       /*--- Recompute and rest the time if needed towards the end of the simulation to stop at the proper final time ---*/
       dt = T - time;
       advection_matrix.set_dt(dt);
+    }
+    /*--- Perform the remeshing if desired ---*/
+    if(refinement_iterations > 0 && n % refinement_iterations == 0) {
+      verbose_cout << "Refining mesh" << std::endl;
+      refine_mesh();
     }
   }
   analyze_results(); /*--- Compute the error ---*/

@@ -14,7 +14,9 @@ end
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
   # we set the number of global refines the triangulation must have.
-  set n_of_refines = 3
+  set n_of_refines        = 2
+  set max_loc_refinements = 3
+  set min_loc_refinements = 1
 end
 
 subsection Data solve
@@ -25,8 +27,11 @@ end
 
 set saving directory = SimTest
 
-#The output frequency
-set output_interval = 25600
+# The output frequency
+set output_interval = 2560
 
-#Finally we set the verbosity level
+# Finally we set the verbosity level
 set verbose = true
+
+# Set how often perfrom the remeshing
+set refinement_iterations = 2000
