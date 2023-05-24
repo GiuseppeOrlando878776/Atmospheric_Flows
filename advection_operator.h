@@ -203,7 +203,7 @@ namespace Advection {
 
         const auto& avg_flux      = 0.5*(phi_rho_prev_p.get_value(q)*velocity +
                                          phi_rho_prev_m.get_value(q)*velocity);
-        const auto  lambda_prev   = std::max(std::abs(scalar_product(velocity, n_plus)),
+        const auto& lambda_prev   = std::max(std::abs(scalar_product(velocity, n_plus)),
                                              std::abs(scalar_product(velocity, n_plus)));
         const auto& jump_rho_prev = phi_rho_prev_p.get_value(q) - phi_rho_prev_m.get_value(q);
 

@@ -38,6 +38,8 @@
 
 #include <deal.II/distributed/solution_transfer.h>
 
+#include <deal.II/grid/grid_in.h>
+
 #include "advection_operator.h"
 #include "refinement_structs.h"
 
@@ -48,7 +50,7 @@ using namespace Advection;
 // Now for the main class of the program. It implements the solver for the
 // Euler equations using the discretization previously implemented.
 //
-template<int dim>
+template<int dim, int spacedim = dim>
 class AdvectionSolver {
 public:
   AdvectionSolver(RunTimeParameters::Data_Storage& data); /*--- Class constructor ---*/
@@ -62,15 +64,15 @@ protected:
   unsigned int HYPERBOLIC_stage; /*--- Flag to check at which current stage of the IMEX we are ---*/
   double       dt;               /*--- Time step auxiliary variable ---*/
 
-  parallel::distributed::Triangulation<dim> triangulation; /*--- The variable which stores the mesh ---*/
+  parallel::distributed::Triangulation<dim, spacedim> triangulation; /*--- The variable which stores the mesh ---*/
 
   /*--- Finite element spaces for all the variables ---*/
-  FESystem<dim> fe_density;
-  FESystem<dim> fe_velocity;
+  FESystem<dim, spacedim> fe_density;
+  FESystem<dim, spacedim> fe_velocity;
 
   /*--- Degrees of freedom handlers for all the variables ---*/
-  DoFHandler<dim> dof_handler_density;
-  DoFHandler<dim> dof_handler_velocity;
+  DoFHandler<dim, spacedim> dof_handler_density;
+  DoFHandler<dim, spacedim> dof_handler_velocity;
 
   /*--- Auxiliary quadratures for all the variables ---*/
   QGaussLobatto<dim> quadrature_density;
@@ -104,15 +106,13 @@ protected:
 
   void update_density(); /*--- Function to update the density ---*/
 
-  void refine_mesh(); /*--- Refine the mesh ---*/
-
   void output_results(const unsigned int step); /*--- Function to save the results ---*/
 
   void analyze_results(); /*--- In this case, we have an analytical solution to deal with ---*/
 
 private:
-  EquationData::Velocity<dim> u_init;
-  EquationData::Density<dim>  rho_init;
+  EquationData::Velocity<spacedim> u_init;
+  EquationData::Density<spacedim>  rho_init;
 
   /*--- Auxiliary structures for the matrix-free and for the multigrid ---*/
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
@@ -120,7 +120,7 @@ private:
   AdvectionOperator<dim, EquationData::degree, 2*EquationData::degree + 1,
                     LinearAlgebra::distributed::Vector<double>> advection_matrix;
 
-  std::vector<const DoFHandler<dim>*> dof_handlers; /*--- Auxiliary container for the matrix-free ---*/
+  std::vector<const DoFHandler<dim, spacedim>*> dof_handlers; /*--- Auxiliary container for the matrix-free ---*/
 
   std::vector<const AffineConstraints<double>*> constraints; /*--- Auxiliary container for the matrix-free ---*/
   AffineConstraints<double> constraints_velocity,
@@ -159,16 +159,16 @@ private:
 // the data we read are reasonable and, finally, create the triangulation and
 // load the initial data.
 //
-template<int dim>
-AdvectionSolver<dim>::AdvectionSolver(RunTimeParameters::Data_Storage& data):
+template<int dim, int spacedim>
+AdvectionSolver<dim, spacedim>::AdvectionSolver(RunTimeParameters::Data_Storage& data):
   t_0(data.initial_time),
   T(data.final_time),
   HYPERBOLIC_stage(1),            //--- Initialize the flag for the time advancing scheme
   dt(data.dt),
-  triangulation(MPI_COMM_WORLD, parallel::distributed::Triangulation<dim>::limit_level_difference_at_vertices,
-                parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy),
-  fe_density(FE_DGQ<dim>(EquationData::degree), 1),
-  fe_velocity(FE_DGQ<dim>(EquationData::degree), dim),
+  triangulation(MPI_COMM_WORLD, parallel::distributed::Triangulation<dim, spacedim>::limit_level_difference_at_vertices,
+                parallel::distributed::Triangulation<dim, spacedim>::construct_multigrid_hierarchy),
+  fe_density(FE_DGQ<dim, spacedim>(EquationData::degree), 1),
+  fe_velocity(FE_DGQ<dim, spacedim>(EquationData::degree), dim),
   dof_handler_density(triangulation),
   dof_handler_velocity(triangulation),
   quadrature_density(EquationData::degree + 1),
@@ -211,11 +211,12 @@ AdvectionSolver<dim>::AdvectionSolver(RunTimeParameters::Data_Storage& data):
 
 // The method that creates the triangulation.
 //
-template<int dim>
-void AdvectionSolver<dim>::create_triangulation(const unsigned int n_refines) {
+template<int dim, int spacedim>
+void AdvectionSolver<dim, spacedim>::create_triangulation(const unsigned int n_refines) {
   TimerOutput::Scope t(time_table, "Create triangulation");
 
-  GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 0.9, 1.0, 1);
+  GridGenerator::hyper_sphere(triangulation);
+  //GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 0.9, 1.0, 1);
 
   triangulation.refine_global(n_refines);
 
@@ -227,8 +228,8 @@ void AdvectionSolver<dim>::create_triangulation(const unsigned int n_refines) {
 // data, i.e. it distributes degrees of freedom and renumbers them, and
 // initializes the matrices and vectors that we will use.
 //
-template<int dim>
-void AdvectionSolver<dim>::setup_dofs() {
+template<int dim, int spacedim>
+void AdvectionSolver<dim, spacedim>::setup_dofs() {
   pcout << "Number of active cells: " << triangulation.n_global_active_cells() << std::endl;
   pcout << "Number of levels: "       << triangulation.n_global_levels()       << std::endl;
 
@@ -269,7 +270,7 @@ void AdvectionSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(2*EquationData::degree + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(MappingQ<dim, spacedim>(EquationData::degree), dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(u, 0);
@@ -291,12 +292,12 @@ void AdvectionSolver<dim>::setup_dofs() {
 
 // This method loads the initial data
 //
-template<int dim>
-void AdvectionSolver<dim>::initialize() {
+template<int dim, int spacedim>
+void AdvectionSolver<dim, spacedim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree), dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree), dof_handler_velocity, u_init, u);
+  VectorTools::interpolate(MappingQ<dim, spacedim>(EquationData::degree), dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(MappingQ<dim, spacedim>(EquationData::degree), dof_handler_velocity, u_init, u);
 }
 
 
@@ -304,8 +305,8 @@ void AdvectionSolver<dim>::initialize() {
 
 // This implements the update of the density for the hyperbolic part
 //
-template<int dim>
-void AdvectionSolver<dim>::update_density() {
+template<int dim, int spacedim>
+void AdvectionSolver<dim, spacedim>::update_density() {
   TimerOutput::Scope t(time_table, "Update density");
 
   const std::vector<unsigned int> tmp = {1};
@@ -346,92 +347,6 @@ void AdvectionSolver<dim>::update_density() {
 }
 
 
-// @sect{ <code>AdvectionSolver::refine_mesh</code>}
-//
-template <int dim>
-void AdvectionSolver<dim>::refine_mesh() {
-  TimerOutput::Scope t(time_table, "Refine mesh");
-
-  using Iterator = typename DoFHandler<dim>::active_cell_iterator;
-  Vector<float> estimated_indicator_per_cell(triangulation.n_active_cells());
-
-  /*--- We consider an estimator based on the norm of the gradient ---*/
-  auto cell_worker = [&](const Iterator&   cell,
-                         ScratchData<dim>& scratch_data,
-                         CopyData&         copy_data) {
-    FEValues<dim>& fe_values = scratch_data.fe_values;
-    fe_values.reinit(cell);
-
-    std::vector<Tensor<1, dim>> gradients(fe_values.n_quadrature_points);
-    fe_values.get_function_gradients(rho_old, gradients);
-    copy_data.cell_index = cell->active_cell_index();
-    double max_gradient_norm_square = 0.0;
-    for(unsigned k = 0; k < fe_values.n_quadrature_points; ++k) {
-      double gradient_norm_square = (gradients[k][0]*gradients[k][0] + gradients[k][1]*gradients[k][1]);
-      max_gradient_norm_square = std::max(gradient_norm_square, max_gradient_norm_square);
-    }
-    copy_data.value = std::sqrt(max_gradient_norm_square);
-  };
-
-  auto copier = [&](const CopyData &copy_data) {
-    if(copy_data.cell_index != numbers::invalid_unsigned_int) {
-      estimated_indicator_per_cell[copy_data.cell_index] += copy_data.value;
-    }
-  };
-
-  const UpdateFlags cell_flags = update_gradients | update_quadrature_points | update_JxW_values;
-
-  ScratchData scratch_data(fe_density, EquationData::degree + 1, cell_flags);
-  CopyData copy_data;
-  rho_old.update_ghost_values();
-  MeshWorker::mesh_loop(dof_handler_density.begin_active(),
-                        dof_handler_density.end(),
-                        cell_worker,
-                        copier,
-                        scratch_data,
-                        copy_data,
-                        MeshWorker::assemble_own_cells);
-
-  GridRefinement::refine(triangulation, estimated_indicator_per_cell, 3.0);
-  GridRefinement::coarsen(triangulation, estimated_indicator_per_cell, 1.0);
-  for(const auto& cell: triangulation.active_cell_iterators()) {
-    if(cell->refine_flag_set() && cell->level() == max_loc_refinements) {
-      cell->clear_refine_flag();
-    }
-    if(cell->coarsen_flag_set() && cell->level() == max_loc_refinements) {
-      cell->clear_refine_flag();
-    }
-  }
-  triangulation.prepare_coarsening_and_refinement();
-
-  parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<double>>
-  solution_transfer(dof_handler_density);
-  solution_transfer.prepare_for_coarsening_and_refinement(rho_old);
-
-  parallel::distributed::SolutionTransfer<dim, LinearAlgebra::distributed::Vector<double>>
-  solution_transfer_u(dof_handler_velocity);
-  solution_transfer_u.prepare_for_coarsening_and_refinement(u);
-
-  triangulation.execute_coarsening_and_refinement();
-
-  setup_dofs();
-
-  LinearAlgebra::distributed::Vector<double> tmp_rho_old,
-                                             tmp_u;
-
-  tmp_rho_old.reinit(rho_old);
-  tmp_u.reinit(u);
-
-  solution_transfer.interpolate(tmp_rho_old);
-  tmp_rho_old.update_ghost_values();
-  solution_transfer_u.interpolate(tmp_u);
-  tmp_u.update_ghost_values();
-
-  rho_old = tmp_rho_old;
-  u       = tmp_u;
-}
-
-
 // @sect{ <code>AdvectionSolver::output_results</code> }
 
 // This method plots the current solution. The main difficulty is that we want
@@ -443,11 +358,11 @@ void AdvectionSolver<dim>::refine_mesh() {
 // into a single DoFHandler object, and then use that to drive graphical
 // output.
 //
-template<int dim>
-void AdvectionSolver<dim>::output_results(const unsigned int step) {
+template<int dim, int spacedim>
+void AdvectionSolver<dim, spacedim>::output_results(const unsigned int step) {
   TimerOutput::Scope t(time_table, "Output results");
 
-  DataOut<dim> data_out;
+  DataOut<dim, DoFHandler<dim, spacedim>> data_out;
 
   /*DataOutBase::VtkFlags flags;
   flags.write_higher_order_cells = true;
@@ -462,7 +377,8 @@ void AdvectionSolver<dim>::output_results(const unsigned int step) {
   u.update_ghost_values();
   data_out.add_data_vector(dof_handler_velocity, u, velocity_names, component_interpretation_velocity);
 
-  data_out.build_patches(MappingQ<dim>(EquationData::degree), EquationData::degree, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(MappingQ<dim, spacedim>(EquationData::degree), EquationData::degree,
+                         DataOut<dim, DoFHandler<dim, spacedim>>::curved_inner_cells);
 
   const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
@@ -475,8 +391,8 @@ void AdvectionSolver<dim>::output_results(const unsigned int step) {
 // the correctness of our implementation by computing the errors of the
 // numerical result against the analytic solution.
 //
-template <int dim>
-void AdvectionSolver<dim>::analyze_results() {
+template <int dim, int spacedim>
+void AdvectionSolver<dim, spacedim>::analyze_results() {
   TimerOutput::Scope t(time_table, "Analysis results: computing errrors");
 
   VectorTools::integrate_difference(dof_handler_density, rho_old, rho_init,
@@ -498,8 +414,8 @@ void AdvectionSolver<dim>::analyze_results() {
 // The following function is used in determining the maximal velocity
 // in order to compute the CFL
 //
-template<int dim>
-double AdvectionSolver<dim>::get_maximal_velocity() {
+template<int dim, int spacedim>
+double AdvectionSolver<dim, spacedim>::get_maximal_velocity() {
   return u.linfty_norm();
 }
 
@@ -514,8 +430,8 @@ double AdvectionSolver<dim>::get_maximal_velocity() {
 // should output information what it is doing at any given moment:
 // we use the ConditionalOStream class to do that for us.
 //
-template<int dim>
-void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_interval) {
+template<int dim, int spacedim>
+void AdvectionSolver<dim, spacedim>::run(const bool verbose, const unsigned int output_interval) {
   ConditionalOStream verbose_cout(std::cout, verbose && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
 
   analyze_results();
@@ -565,11 +481,6 @@ void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_int
       dt = T - time;
       advection_matrix.set_dt(dt);
     }
-    /*--- Perform the remeshing if desired ---*/
-    if(refinement_iterations > 0 && n % refinement_iterations == 0) {
-      verbose_cout << "Refining mesh" << std::endl;
-      refine_mesh();
-    }
   }
   analyze_results(); /*--- Compute the error ---*/
   /*--- Save the final results if not previously done ---*/
@@ -597,7 +508,7 @@ int main(int argc, char *argv[]) {
     const auto& curr_rank = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
     deallog.depth_console(data.verbose && curr_rank == 0 ? 2 : 0);
 
-    AdvectionSolver<3> test(data);
+    AdvectionSolver<2, 3> test(data);
     test.run(data.verbose, data.output_interval);
 
     if(curr_rank == 0) {
