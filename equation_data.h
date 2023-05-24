@@ -25,29 +25,29 @@ namespace EquationData {
 
   // We declare now the class that describes the velocity.
   //
-  template<int spacedim>
-  class Velocity: public Function<spacedim> {
+  template<int dim>
+  class Velocity: public Function<dim> {
   public:
     Velocity(const double initial_time = 0.0);
 
-    virtual double value(const Point<spacedim>&  p,
+    virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override;
 
-    virtual void vector_value(const Point<spacedim>& p,
+    virtual void vector_value(const Point<dim>& p,
                               Vector<double>&   values) const override;
   };
 
 
   // Constructor which simply relies on the 'Function' constructor.
   //
-  template<int spacedim>
-  Velocity<spacedim>::Velocity(const double initial_time): Function<spacedim>(spacedim, initial_time) {}
+  template<int dim>
+  Velocity<dim>::Velocity(const double initial_time): Function<dim>(dim, initial_time) {}
 
   // Specify the value for each spatial component. This function is overriden.
   //
-  template<int spacedim>
-  double Velocity<spacedim>::value(const Point<spacedim>& p, const unsigned int component) const {
-    AssertIndexRange(component, spacedim);
+  template<int dim>
+  double Velocity<dim>::value(const Point<dim>& p, const unsigned int component) const {
+    AssertIndexRange(component, dim);
 
     const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
     const double theta  = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
@@ -73,11 +73,11 @@ namespace EquationData {
 
   // Put together for a vector evalutation of the velocity.
   //
-  template<int spacedim>
-  void Velocity<spacedim>::vector_value(const Point<spacedim>& p, Vector<double>& values) const {
-    Assert(values.size() == spacedim, ExcDimensionMismatch(values.size(), spacedim));
+  template<int dim>
+  void Velocity<dim>::vector_value(const Point<dim>& p, Vector<double>& values) const {
+    Assert(values.size() == dim, ExcDimensionMismatch(values.size(), dim));
 
-    for(unsigned int i = 0; i < spacedim; ++i) {
+    for(unsigned int i = 0; i < dim; ++i) {
       values[i] = value(p, i);
     }
   }
@@ -86,21 +86,21 @@ namespace EquationData {
   // We do the same for the density (since it is a scalar field) we can derive
   // directly from the deal.II built-in class Function.
   //
-  template<int spacedim>
-  class Density: public Function<spacedim> {
+  template<int dim>
+  class Density: public Function<dim> {
   public:
     Density(const double initial_time = 0.0);
 
-    virtual double value(const Point<spacedim>& p,
-                         const unsigned int     component = 0) const override;
+    virtual double value(const Point<dim>&  p,
+                         const unsigned int component = 0) const override;
   };
 
 
-  template<int spacedim>
-  Density<spacedim>::Density(const double initial_time): Function<spacedim>(1, initial_time) {}
+  template<int dim>
+  Density<dim>::Density(const double initial_time): Function<dim>(1, initial_time) {}
 
-  template<int spacedim>
-  double Density<spacedim>::value(const Point<spacedim>& p, const unsigned int component) const {
+  template<int dim>
+  double Density<dim>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
     AssertIndexRange(component, 1);
 
