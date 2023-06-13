@@ -193,44 +193,20 @@ namespace Atmospheric_Flow {
           also face and boundary contributions have to be defined, even though they are empty. ---*/
     void assemble_diagonal_cell_term_rho_update(const MatrixFree<dim, Number>&               data,
                                                 Vec&                                         dst,
-                                                const Vec&                                   src,
+                                                const unsigned int&                          src,
                                                 const std::pair<unsigned int, unsigned int>& cell_range) const;
-    void assemble_diagonal_face_term_rho_update(const MatrixFree<dim, Number>&               data,
-                                                Vec&                                         dst,
-                                                const Vec&                                   src,
-                                                const std::pair<unsigned int, unsigned int>& face_range) const {}
-    void assemble_diagonal_boundary_term_rho_update(const MatrixFree<dim, Number>&               data,
-                                                    Vec&                                         dst,
-                                                    const Vec&                                   src,
-                                                    const std::pair<unsigned int, unsigned int>& face_range) const {}
 
     /*--- Assembler functions for the diagonal part of 'A' matrix. ---*/
     void assemble_diagonal_cell_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
                                                     Vec&                                         dst,
-                                                    const Vec&                                   src,
+                                                    const unsigned int&                          src,
                                                     const std::pair<unsigned int, unsigned int>& cell_range) const;
-    void assemble_diagonal_face_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
-                                                    Vec&                                         dst,
-                                                    const Vec&                                   src,
-                                                    const std::pair<unsigned int, unsigned int>& face_range) const {}
-    void assemble_diagonal_boundary_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
-                                                        Vec&                                         dst,
-                                                        const Vec&                                   src,
-                                                        const std::pair<unsigned int, unsigned int>& face_range) const {}
 
     /*--- Assembler functions for the diagonal part of 'D' matrix. ---*/
     void assemble_diagonal_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
                                                      Vec&                                         dst,
-                                                     const Vec&                                   src,
+                                                     const unsigned int&                          src,
                                                      const std::pair<unsigned int, unsigned int>& cell_range) const;
-    void assemble_diagonal_face_term_internal_energy(const MatrixFree<dim, Number>&               data,
-                                                     Vec&                                         dst,
-                                                     const Vec&                                   src,
-                                                     const std::pair<unsigned int, unsigned int>& face_range) const {}
-    void assemble_diagonal_boundary_term_internal_energy(const MatrixFree<dim, Number>&               data,
-                                                         Vec&                                         dst,
-                                                         const Vec&                                   src,
-                                                         const std::pair<unsigned int, unsigned int>& face_range) const {}
   };
 
 
@@ -794,8 +770,8 @@ namespace Atmospheric_Flow {
 
           phi.submit_value(rho_old*E_old -
                            0.5*rho_tmp_2*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           a21_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           a22_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_fixed[dim - 1], q);
+                           0.0*a21_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
+                           0.0*a22_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_fixed[dim - 1], q);
           phi.submit_gradient(0.5*a21*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               a21_tilde*dt*(rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old, q);
           /*--- The specific enthalpy is computed with the generic relation e + p/rho ---*/
@@ -857,9 +833,9 @@ namespace Atmospheric_Flow {
 
           phi.submit_value(rho_old*E_old -
                            0.5*rho_tmp_3*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           a31_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           a32_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
-                           a33_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_fixed[dim - 1], q);
+                           0.0*a31_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
+                           0.0*a32_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
+                           0.0*a33_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_fixed[dim - 1], q);
           phi.submit_gradient(0.5*a31*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               a31_tilde*dt*
                               (rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old +
@@ -940,9 +916,9 @@ namespace Atmospheric_Flow {
 
           phi.submit_value(rho_old*E_old -
                            0.5*rho_curr*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           b1*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           b2*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
-                           b3*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_tmp_3[dim - 1], q);
+                           0.0*b1*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
+                           0.0*b2*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
+                           0.0*b3*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_tmp_3[dim - 1], q);
           phi.submit_gradient(0.5*b1*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               b1*dt*(rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old +
                               0.5*b2*dt*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2)*rho_tmp_2*u_tmp_2 +
@@ -1457,7 +1433,7 @@ namespace Atmospheric_Flow {
 
       for(unsigned int q = 0; q < phi.n_q_points; ++q) {
         /*--- Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'. ---*/
-        phi.submit_divergence(-coeff*dt/(Ma*Ma)*phi_src.get_value(q), q);
+        phi.submit_divergence(-0.0*coeff*dt/(Ma*Ma)*phi_src.get_value(q), q);
       }
       phi.integrate_scatter(EvaluationFlags::gradients, dst);
     }
@@ -1496,8 +1472,8 @@ namespace Atmospheric_Flow {
 
         const auto& avg_term = 0.5*(phi_src_p.get_value(q) + phi_src_m.get_value(q));
 
-        phi_p.submit_value(coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
-        phi_m.submit_value(-coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
+        phi_p.submit_value(0.0*coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
+        phi_m.submit_value(-0.0*coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
       }
       phi_p.integrate_scatter(EvaluationFlags::values, dst);
       phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -1515,8 +1491,8 @@ namespace Atmospheric_Flow {
                                   Vec&                                         dst,
                                   const Vec&                                   src,
                                   const std::pair<unsigned int, unsigned int>& face_range) const {
-    FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number>   phi(data, true, 0);
-    FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>     phi_src(data, true, 1);
+    FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0);
+    FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_src(data, true, 1);
 
     const double coeff = (HYPERBOLIC_stage == 1) ? a22_tilde : a33_tilde;
 
@@ -1532,7 +1508,7 @@ namespace Atmospheric_Flow {
 
         const auto& pres_fixed_D = phi_src.get_value(q);
 
-        phi.submit_value(coeff*dt/(Ma*Ma)*0.5*(phi_src.get_value(q) + pres_fixed_D)*n_plus, q);
+        phi.submit_value(0.0*coeff*dt/(Ma*Ma)*0.5*(phi_src.get_value(q) + pres_fixed_D)*n_plus, q);
       }
       phi.integrate_scatter(EvaluationFlags::values, dst);
     }
@@ -1598,9 +1574,9 @@ namespace Atmospheric_Flow {
           const auto& rho_tmp_2          = phi_rho_tmp_2.get_value(q);
 
           phi.submit_value(rho_old*u_old -
-                           a21_tilde*dt/(Fr*Fr)*rho_old*e_k -
-                           a22_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k, q);
-          phi.submit_gradient(a21*dt*rho_old*tensor_product_u_n + a21_tilde*dt/(Ma*Ma)*p_n_times_identity, q);
+                           0.0*a21_tilde*dt/(Fr*Fr)*rho_old*e_k -
+                           0.0*a22_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k, q);
+          phi.submit_gradient(a21*dt*rho_old*tensor_product_u_n + 0.0*a21_tilde*dt/(Ma*Ma)*p_n_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
@@ -1664,11 +1640,11 @@ namespace Atmospheric_Flow {
           const auto& rho_curr               = phi_rho_curr.get_value(q);
 
           phi.submit_value(rho_old*u_old -
-                           a31_tilde*dt/(Fr*Fr)*rho_old*e_k -
-                           a32_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k -
-                           a33_tilde*dt/(Fr*Fr)*rho_curr*e_k, q);
-          phi.submit_gradient(a31*dt*rho_old*tensor_product_u_n + a31_tilde*dt/(Ma*Ma)*p_n_times_identity +
-                              a32*dt*rho_tmp_2*tensor_product_u_tmp_2 + a32_tilde*dt/(Ma*Ma)*p_tmp_2_times_identity, q);
+                           0.0*a31_tilde*dt/(Fr*Fr)*rho_old*e_k -
+                           0.0*a32_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k -
+                           0.0*a33_tilde*dt/(Fr*Fr)*rho_curr*e_k, q);
+          phi.submit_gradient(a31*dt*rho_old*tensor_product_u_n + 0.0*a31_tilde*dt/(Ma*Ma)*p_n_times_identity +
+                              a32*dt*rho_tmp_2*tensor_product_u_tmp_2 + 0.0*a32_tilde*dt/(Ma*Ma)*p_tmp_2_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
@@ -1747,12 +1723,12 @@ namespace Atmospheric_Flow {
           }
 
           phi.submit_value(rho_old*u_old -
-                           b1*dt/(Fr*Fr)*rho_old*e_k -
-                           b2*dt/(Fr*Fr)*rho_tmp_2*e_k -
-                           b3*dt/(Fr*Fr)*rho_tmp_3*e_k, q);
-          phi.submit_gradient(b1*dt*rho_old*tensor_product_u_n + b1*dt/(Ma*Ma)*p_n_times_identity +
-                              b2*dt*rho_tmp_2*tensor_product_u_tmp_2 + b2*dt/(Ma*Ma)*p_tmp_2_times_identity +
-                              b3*dt*rho_tmp_3*tensor_product_u_tmp_3 + b3*dt/(Ma*Ma)*p_tmp_3_times_identity, q);
+                           0.0*b1*dt/(Fr*Fr)*rho_old*e_k -
+                           0.0*b2*dt/(Fr*Fr)*rho_tmp_2*e_k -
+                           0.0*b3*dt/(Fr*Fr)*rho_tmp_3*e_k, q);
+          phi.submit_gradient(b1*dt*rho_old*tensor_product_u_n + 0.0*b1*dt/(Ma*Ma)*p_n_times_identity +
+                              b2*dt*rho_tmp_2*tensor_product_u_tmp_2 + 0.0*b2*dt/(Ma*Ma)*p_tmp_2_times_identity +
+                              b3*dt*rho_tmp_3*tensor_product_u_tmp_3 + 0.0*b3*dt/(Ma*Ma)*p_tmp_3_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
@@ -1817,10 +1793,10 @@ namespace Atmospheric_Flow {
                                                         std::abs(scalar_product(u_old_m, n_plus)));
 
           phi_p.submit_value(-a21*dt*avg_tensor_product_u_n*n_plus
-                             -a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
+                             -0.0*a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
                              -a21*dt*0.5*lambda_old*jump_rhou_old, q);
           phi_m.submit_value(a21*dt*avg_tensor_product_u_n*n_plus +
-                             a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
+                             0.0*a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
                              a21*dt*0.5*lambda_old*jump_rhou_old, q);
         }
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
@@ -1906,16 +1882,16 @@ namespace Atmospheric_Flow {
                                                             std::abs(scalar_product(u_tmp_2_m, n_plus)));
 
           phi_p.submit_value(-a31*dt*avg_tensor_product_u_n*n_plus
-                             -a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
+                             -0.0*a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
                              -a31*dt*0.5*lambda_old*jump_rhou_old
                              -a32*dt*avg_tensor_product_u_tmp_2*n_plus
-                             -a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
+                             -0.0*a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
                              -a32*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2, q);
           phi_m.submit_value(a31*dt*avg_tensor_product_u_n*n_plus +
-                             a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
+                             0.0*a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
                              a31*dt*0.5*lambda_old*jump_rhou_old +
                              a32*dt*avg_tensor_product_u_tmp_2*n_plus +
-                             a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
+                             0.0*a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
                              a32*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2, q);
         }
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
@@ -2033,22 +2009,22 @@ namespace Atmospheric_Flow {
                                                             std::abs(scalar_product(u_tmp_3_m, n_plus)));
 
           phi_p.submit_value(-b1*dt*avg_tensor_product_u_n*n_plus
-                             -b1*dt/(Ma*Ma)*avg_pres_old*n_plus
+                             -0.0*b1*dt/(Ma*Ma)*avg_pres_old*n_plus
                              -b1*dt*0.5*lambda_old*jump_rhou_old
                              -b2*dt*avg_tensor_product_u_tmp_2*n_plus
-                             -b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
+                             -0.0*b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
                              -b2*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2
                              -b3*dt*avg_tensor_product_u_tmp_3*n_plus
-                             -b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus
+                             -0.0*b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus
                              -b3*dt*0.5*lambda_tmp_3*jump_rhou_tmp_3, q);
           phi_m.submit_value(b1*dt*avg_tensor_product_u_n*n_plus +
-                             b1*dt/(Ma*Ma)*avg_pres_old*n_plus +
+                             0.0*b1*dt/(Ma*Ma)*avg_pres_old*n_plus +
                              b1*dt*0.5*lambda_old*jump_rhou_old +
                              b2*dt*avg_tensor_product_u_tmp_2*n_plus +
-                             b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
+                             0.0*b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
                              b2*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2 +
                              b3*dt*avg_tensor_product_u_tmp_3*n_plus +
-                             b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus +
+                             0.0*b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus +
                              b3*dt*0.5*lambda_tmp_3*jump_rhou_tmp_3, q);
         }
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
@@ -2089,7 +2065,7 @@ namespace Atmospheric_Flow {
 
           const auto& avg_pres_old = 0.5*(pres_old + pres_old_D);
 
-          phi.submit_value(-a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus, q);
+          phi.submit_value(-0.0*a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
@@ -2124,8 +2100,8 @@ namespace Atmospheric_Flow {
 
           const auto& avg_pres_tmp_2 = 0.5*(pres_tmp_2 + pres_tmp_2_D);
 
-          phi.submit_value(-a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
-                           -a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus, q);
+          phi.submit_value(-0.0*a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
+                           -0.0*a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
@@ -2169,9 +2145,9 @@ namespace Atmospheric_Flow {
 
           const auto& avg_pres_tmp_3 = 0.5*(pres_tmp_3 + pres_tmp_3_D);
 
-          phi.submit_value(-b1*dt/(Ma*Ma)*avg_pres_old*n_plus
-                           -b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
-                           -b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus, q);
+          phi.submit_value(-0.0*b1*dt/(Ma*Ma)*avg_pres_old*n_plus
+                           -0.0*b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
+                           -0.0*b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
@@ -2335,7 +2311,7 @@ namespace Atmospheric_Flow {
                           n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
   assemble_diagonal_cell_term_rho_update(const MatrixFree<dim, Number>&               data,
                                          Vec&                                         dst,
-                                         const Vec&                                   src,
+                                         const unsigned int&                          ,
                                          const std::pair<unsigned int, unsigned int>& cell_range) const {
     FEEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi(data, 2);
 
@@ -2376,9 +2352,9 @@ namespace Atmospheric_Flow {
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
                           n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
   assemble_diagonal_cell_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
-                                              Vec&                                         dst,
-                                              const Vec&                                   src,
-                                              const std::pair<unsigned int, unsigned int>& cell_range) const {
+                                             Vec&                                         dst,
+                                             const unsigned int&                          ,
+                                             const std::pair<unsigned int, unsigned int>& cell_range) const {
     FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, 0);
     FEEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_rho_for_fixed(data, 2);
 
@@ -2428,7 +2404,7 @@ namespace Atmospheric_Flow {
                           n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
   assemble_diagonal_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
                                               Vec&                                         dst,
-                                              const Vec&                                   src,
+                                              const unsigned int&                          ,
                                               const std::pair<unsigned int, unsigned int>& cell_range) const {
     FEEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number> phi(data, 1);
 
@@ -2470,41 +2446,25 @@ namespace Atmospheric_Flow {
     this->inverse_diagonal_entries.reset(new DiagonalMatrix<Vec>());
     auto& inverse_diagonal = this->inverse_diagonal_entries->get_vector();
 
+    const unsigned int dummy = 0;
+
     if(NS_stage == 1 || NS_stage == 4) {
       this->data->initialize_dof_vector(inverse_diagonal, 2);
-      Vec dummy;
-      dummy.reinit(inverse_diagonal.local_size());
 
-      this->data->loop(&EULEROperator::assemble_diagonal_cell_term_rho_update,
-                       &EULEROperator::assemble_diagonal_face_term_rho_update,
-                       &EULEROperator::assemble_diagonal_boundary_term_rho_update,
-                       this, inverse_diagonal, dummy, false,
-                       MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                       MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+      this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_rho_update,
+                            this, inverse_diagonal, dummy, false);
     }
     else if(NS_stage == 2 || NS_stage == 6) {
       this->data->initialize_dof_vector(inverse_diagonal, 1);
-      Vec dummy;
-      dummy.reinit(inverse_diagonal.local_size());
 
-      this->data->loop(&EULEROperator::assemble_diagonal_cell_term_internal_energy,
-                       &EULEROperator::assemble_diagonal_face_term_internal_energy,
-                       &EULEROperator::assemble_diagonal_boundary_term_internal_energy,
-                       this, inverse_diagonal, dummy, false,
-                       MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                       MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+      this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_internal_energy,
+                            this, inverse_diagonal, dummy, false);
     }
     else {
       this->data->initialize_dof_vector(inverse_diagonal, 0);
-      Vec dummy;
-      dummy.reinit(inverse_diagonal.local_size());
 
-      this->data->loop(&EULEROperator::assemble_diagonal_cell_term_velocity_fixed,
-                       &EULEROperator::assemble_diagonal_face_term_velocity_fixed,
-                       &EULEROperator::assemble_diagonal_boundary_term_velocity_fixed,
-                       this, inverse_diagonal, dummy, false,
-                       MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                       MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+      this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_velocity_fixed,
+                            this, inverse_diagonal, dummy, false);
     }
 
     /*--- For the preconditioner, we actually need the inverse of the diagonal ---*/
