@@ -66,7 +66,6 @@ protected:
   const double T;                /*--- Final time auxiliary variable ----*/
   unsigned int HYPERBOLIC_stage; /*--- Flag to check at which current stage of the IMEX we are ---*/
   const double Ma;               /*--- Mach number auxiliary variable ----*/
-  const double Fr;               /*--- Froude number auxiliary variable ---*/
   double       dt;               /*--- Time step auxiliary variable ---*/
 
   parallel::distributed::Triangulation<dim> triangulation; /*--- The variable which stores the mesh ---*/
@@ -187,10 +186,6 @@ private:
   double get_maximal_density(); /*--- Get maximal density ---*/
 
   double compute_max_celerity(); /*--- Compute maximal celerity for acoustic Courant number ---*/
-
-  std::pair<double, double> compute_max_Cu_x_w(); /*--- Get maximal Courant numbers along x and z ---*/
-
-  std::pair<double, double> compute_max_C_x_w(); /*--- Get maximal acoustic Courant numbers along x and z ---*/
 };
 
 
@@ -207,7 +202,6 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   T(data.final_time),
   HYPERBOLIC_stage(1),            //--- Initialize the flag for the IMEX scheme stage
   Ma(data.Mach),
-  Fr(data.Froude),
   dt(data.dt),
   triangulation(MPI_COMM_WORLD, parallel::distributed::Triangulation<dim>::limit_level_difference_at_vertices,
                 parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy),
@@ -217,9 +211,9 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_density(triangulation),
   dof_handler_velocity(triangulation),
   dof_handler_temperature(triangulation),
-  quadrature_density(EquationData::degree_rho + 1 + 1),
-  quadrature_velocity(EquationData::degree_u + 1 + 1),
-  quadrature_temperature(EquationData::degree_T + 1 + 1),
+  quadrature_density(EquationData::degree_rho + 1),
+  quadrature_velocity(EquationData::degree_u + 1),
+  quadrature_temperature(EquationData::degree_T + 1),
   rho_init(data.initial_time),
   u_init(data.initial_time),
   pres_init(data.initial_time),
@@ -266,7 +260,7 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
 
   triangulation.refine_global(n_refines);
 
-  pcout << "h_min = " << std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
+  pcout << "h_min = " << GridTools::minimal_cell_diameter(triangulation)/std::sqrt(dim) << std::endl;
 }
 
 
@@ -290,9 +284,7 @@ void EulerSolver<dim>::setup_dofs() {
         << std::endl
         << "dim (X_h) = " << dof_handler_density.n_dofs()
         << std::endl
-        << "Ma        = " << Ma
-        << std::endl
-        << "Fr        = " << Fr << std::endl
+        << "Ma        = " << Ma << std::endl
         << std::endl;
 
   /*--- Save the number of degrees of freedom just for info ---*/
@@ -326,7 +318,7 @@ void EulerSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_u), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(u_old, 0);
@@ -379,7 +371,6 @@ void EulerSolver<dim>::setup_dofs() {
 
     mg_matrices_euler[level].set_dt(dt);
     mg_matrices_euler[level].set_Mach(Ma);
-    mg_matrices_euler[level].set_Froude(Fr);
   }
 }
 
@@ -392,9 +383,9 @@ template<int dim>
 void EulerSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(dof_handler_velocity, u_init, u_old);
-  VectorTools::interpolate(dof_handler_temperature, pres_init, pres_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, false), dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, false), dof_handler_velocity, u_init, u_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, false), dof_handler_temperature, pres_init, pres_old);
 }
 
 
@@ -873,7 +864,7 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   pres_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_temperature, pres_old, "p", {DataComponentInterpretation::component_is_scalar});
 
-  data_out.build_patches(MappingQ<dim>(EquationData::degree_u), EquationData::degree_u, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping, false), EquationData::degree_u, DataOut<dim>::curved_inner_cells);
 
   const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
@@ -979,63 +970,6 @@ double EulerSolver<dim>::compute_max_celerity() {
   }
 
   return Utilities::MPI::max(max_local_celerity, MPI_COMM_WORLD);
-}
-
-
-// The following function is used in determining the maximal advective Courant numbers along the two directions
-//
-template<int dim>
-std::pair<double, double> EulerSolver<dim>::compute_max_Cu_x_w() {
-  FEValues<dim>               fe_values(fe_velocity, quadrature_velocity, update_values);
-  std::vector<Vector<double>> solution_values_velocity(quadrature_velocity.size(), Vector<double>(dim));
-
-  double max_Cu_x = std::numeric_limits<double>::min();
-  double max_Cu_w = std::numeric_limits<double>::min();
-
-  for(const auto& cell: dof_handler_velocity.active_cell_iterators()) {
-    if(cell->is_locally_owned()) {
-      fe_values.reinit(cell);
-      fe_values.get_function_values(u_old, solution_values_velocity);
-
-      for(unsigned int q = 0; q < quadrature_temperature.size(); ++q) {
-        max_Cu_x = std::max(max_Cu_x,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](0))*dt/cell->extent_in_direction(0));
-        max_Cu_w = std::max(max_Cu_w,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](1))*dt/cell->extent_in_direction(1));
-      }
-    }
-  }
-
-  return std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD), Utilities::MPI::max(max_Cu_w, MPI_COMM_WORLD));
-}
-
-
-// The following function is used in determining the maximal Courant number along the two directions
-//
-template<int dim>
-std::pair<double, double> EulerSolver<dim>::compute_max_C_x_w() {
-  FEValues<dim> fe_values(fe_temperature, quadrature_temperature, update_values);
-  std::vector<double> solution_values_pressure(quadrature_temperature.size()),
-                      solution_values_density(quadrature_temperature.size());
-
-  double max_C_x = std::numeric_limits<double>::min();
-  double max_C_w = std::numeric_limits<double>::min();
-
-  for(const auto& cell: dof_handler_temperature.active_cell_iterators()) {
-    if(cell->is_locally_owned()) {
-      fe_values.reinit(cell);
-      fe_values.get_function_values(pres_old, solution_values_pressure);
-      fe_values.get_function_values(rho_old, solution_values_density);
-
-      for(unsigned int q = 0; q < quadrature_temperature.size(); ++q) {
-        double local_celerity = std::sqrt(EquationData::Cp_Cv*solution_values_pressure[q]/solution_values_density[q]);
-        max_C_x = std::max(max_C_x, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(0));
-        max_C_w = std::max(max_C_w, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(1));
-      }
-    }
-  }
-
-  return std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD), Utilities::MPI::max(max_C_w, MPI_COMM_WORLD));
 }
 
 
@@ -1173,20 +1107,14 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     /*--- Compute Courant numbers ---*/
     const double max_celerity = compute_max_celerity();
     pcout<< "Maximal celerity = " << 1.0/Ma*max_celerity << std::endl;
-    pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*(EquationData::degree_u + 1)*
+    pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
-    const auto max_C_x_w = compute_max_C_x_w();
-    pcout << "CFL_c_x = " << max_C_x_w.first << std::endl;
-    pcout << "CFL_c_w = " << max_C_x_w.second << std::endl;
 
     const double max_velocity = get_maximal_velocity();
     pcout<< "Maximal velocity = " << max_velocity << std::endl;
-    pcout << "CFL_u = " << dt*max_velocity*(EquationData::degree_u + 1)*
+    pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
-    const auto max_Cu_x_w = compute_max_Cu_x_w();
-    pcout << "CFL_u_x = " << max_Cu_x_w.first << std::endl;
-    pcout << "CFL_u_w = " << max_Cu_x_w.second << std::endl;
-    
+
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {
       verbose_cout << "Plotting Solution final" << std::endl;

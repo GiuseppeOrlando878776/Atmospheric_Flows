@@ -1,34 +1,33 @@
 subsection Physical data
   # In this subsection we declare the physical data
+  # The initial and final time, and the Reynolds number
   set initial_time = 0.0
-  set final_time   = 478.08
-  set Mach         = 0.0474433998
-  set Froude       = 0.13407986726
+  set final_time   = 0.008
+  set Mach         = 0.00316227766 
 end
 
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.00664
+  set dt = 0.0002
 end
 
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
-  # we set the number of global refines the triangulation must have and the local refinements allowed
-  set n_of_refines = 1
+  # we set the number of global refines the triangulation must have.
+  set n_of_refines = 4
 end
 
 subsection Data solve
-  # In this section we declare the parameters that are going to control the solver
-  set max_iterations = 30000  # maximal number of iterations that GMRES must make
-  set eps            = 1e-12  # stopping criterion
+  # In this section we declare the parameters that are going to control the solution process.
+  set max_iterations = 10000 # maximal number of iterations that GMRES must make
+  set eps            = 1e-8  # stopping criterion
 end
 
-# The directory where results are saved
-set saving directory = SimTest
+set saving directory = IMEX_3D_Spherical_PressureWave_Q1
 
-#The output frequency
-set output_interval = 3600
+# The output frequency
+set output_interval = 4
 
-#Finally we set the verbosity level
+# Finally we set the verbosity level
 set verbose = true
