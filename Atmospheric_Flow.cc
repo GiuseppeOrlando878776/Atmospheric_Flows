@@ -16,7 +16,6 @@
 
 #include <deal.II/grid/tria.h>
 #include <deal.II/grid/grid_generator.h>
-#include <deal.II/grid/grid_refinement.h>
 #include <deal.II/grid/tria_accessor.h>
 #include <deal.II/grid/tria_iterator.h>
 #include <deal.II/grid/manifold_lib.h>
@@ -218,9 +217,9 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_density(triangulation),
   dof_handler_velocity(triangulation),
   dof_handler_temperature(triangulation),
-  quadrature_density(EquationData::degree_rho + 1),
-  quadrature_velocity(EquationData::degree_u + 1),
-  quadrature_temperature(EquationData::degree_T + 1),
+  quadrature_density(EquationData::degree_rho + 1 + 1),
+  quadrature_velocity(EquationData::degree_u + 1 + 1),
+  quadrature_temperature(EquationData::degree_T + 1 + 1),
   rho_init(data.initial_time),
   u_init(data.initial_time),
   pres_init(data.initial_time),
@@ -305,12 +304,11 @@ void EulerSolver<dim>::setup_dofs() {
 
   /*--- Set additional data to check which variables neeed to be updated ---*/
   typename MatrixFree<dim, double>::AdditionalData additional_data;
-  additional_data.mapping_update_flags                = (update_gradients | update_JxW_values |
-                                                         update_quadrature_points | update_values);
-  additional_data.mapping_update_flags_inner_faces    = (update_gradients | update_JxW_values | update_quadrature_points |
-                                                         update_normal_vectors | update_values);
-  additional_data.mapping_update_flags_boundary_faces = (update_gradients | update_JxW_values | update_quadrature_points |
-                                                         update_normal_vectors | update_values);
+  additional_data.mapping_update_flags                = (update_values | update_JxW_values | update_quadrature_points);
+  additional_data.mapping_update_flags_inner_faces    = (update_values | update_JxW_values | update_quadrature_points |
+                                                         update_normal_vectors);
+  additional_data.mapping_update_flags_boundary_faces = (update_values | update_JxW_values | update_quadrature_points |
+                                                         update_normal_vectors);
   additional_data.tasks_parallel_scheme               = MatrixFree<dim, double>::AdditionalData::none;
 
   /*--- Set the container with the dof handlers ---*/
@@ -372,11 +370,6 @@ void EulerSolver<dim>::setup_dofs() {
   level_projection = MGLevelObject<LinearAlgebra::distributed::Vector<double>>(0, triangulation.n_global_levels() - 1);
   for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
     typename MatrixFree<dim, double>::AdditionalData additional_data_mg;
-    additional_data_mg.tasks_parallel_scheme               = MatrixFree<dim, double>::AdditionalData::none;
-    additional_data_mg.mapping_update_flags                = (update_values | update_JxW_values);
-    additional_data_mg.mapping_update_flags_inner_faces    = update_default;
-    additional_data_mg.mapping_update_flags_boundary_faces = update_default;
-    additional_data_mg.mg_level                            = level;
 
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
     mg_mf_storage_level->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data_mg);
@@ -870,11 +863,13 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
 
   rho_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_old, "rho", {DataComponentInterpretation::component_is_scalar});
+
   std::vector<std::string> velocity_names(dim, "u");
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
   component_interpretation_velocity(dim, DataComponentInterpretation::component_is_part_of_vector);
   u_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_velocity, u_old, velocity_names, component_interpretation_velocity);
+
   pres_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_temperature, pres_old, "p", {DataComponentInterpretation::component_is_scalar});
 
@@ -890,12 +885,8 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
 //
 template<int dim>
 double EulerSolver<dim>::get_maximal_velocity() {
-  QGaussLobatto<dim> quadrature_formula(EquationData::degree_u + 1);
-  const int n_q_points = quadrature_formula.size();
-
-  std::vector<Vector<double>> velocity_values(n_q_points, Vector<double>(dim));
-
-  FEValues<dim> fe_values_velocity(fe_velocity, quadrature_formula, update_quadrature_points | update_values | update_JxW_values);
+  FEValues<dim> fe_values_velocity(fe_velocity, quadrature_velocity, update_quadrature_points | update_values | update_JxW_values);
+  std::vector<Vector<double>> velocity_values(quadrature_velocity.size(), Vector<double>(dim));
 
   double max_local_velocity = 0.0;
 
@@ -905,7 +896,7 @@ double EulerSolver<dim>::get_maximal_velocity() {
 
       fe_values_velocity.get_function_values(u_old, velocity_values);
 
-      for(int q = 0; q < n_q_points; q++) {
+      for(unsigned int q = 0; q < quadrature_velocity.size(); q++) {
         max_local_velocity = std::max(max_local_velocity, std::sqrt(velocity_values[q][0]*velocity_values[q][0] +
                                                                     velocity_values[q][1]*velocity_values[q][1]));
       }
@@ -1103,7 +1094,7 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
       pres_tmp.add(-1.0, pres_fixed_old);
       VectorTools::integrate_difference(dof_handler_temperature, pres_tmp, ZeroFunction<dim>(),
                                         Linfty_error_per_cell_pres, quadrature_temperature, VectorTools::Linfty_norm);
-      error = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm)/den;
+      error = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm)/(den + 1e-10);
       if(error < 1e-10)
         break; /*--- The fixed point loop is stopped whenever the realtive error in infinity norm is below 10^-10 ---*/
 
@@ -1144,7 +1135,7 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
       pres_tmp.add(-1.0, pres_fixed_old);
       VectorTools::integrate_difference(dof_handler_temperature, pres_tmp, ZeroFunction<dim>(),
                                         Linfty_error_per_cell_pres, quadrature_temperature, VectorTools::Linfty_norm);
-      error = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm)/den;
+      error = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm)/(den + 1e-10);
       if(error < 1e-10)
         break; /*--- The fixed point loop is stopped whenever the realtive error in infinity norm is below 10^-10 ---*/
 
@@ -1179,20 +1170,23 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     rho_old.equ(1.0, rho_curr);
     u_old.equ(1.0, u_curr);
 
+    /*--- Compute Courant numbers ---*/
     const double max_celerity = compute_max_celerity();
     pcout<< "Maximal celerity = " << 1.0/Ma*max_celerity << std::endl;
-    pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
+    pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*(EquationData::degree_u + 1)*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
     const auto max_C_x_w = compute_max_C_x_w();
     pcout << "CFL_c_x = " << max_C_x_w.first << std::endl;
     pcout << "CFL_c_w = " << max_C_x_w.second << std::endl;
+
     const double max_velocity = get_maximal_velocity();
     pcout<< "Maximal velocity = " << max_velocity << std::endl;
-    pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
+    pcout << "CFL_u = " << dt*max_velocity*(EquationData::degree_u + 1)*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
     const auto max_Cu_x_w = compute_max_Cu_x_w();
     pcout << "CFL_u_x = " << max_Cu_x_w.first << std::endl;
     pcout << "CFL_u_w = " << max_Cu_x_w.second << std::endl;
+    
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {
       verbose_cout << "Plotting Solution final" << std::endl;

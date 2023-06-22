@@ -1458,7 +1458,7 @@ namespace Atmospheric_Flow {
 
       for(unsigned int q = 0; q < phi.n_q_points; ++q) {
         /*--- Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'. ---*/
-        phi.submit_divergence(-0.0*coeff*dt/(Ma*Ma)*phi_src.get_value(q), q);
+        phi.submit_divergence(-coeff*dt/(Ma*Ma)*phi_src.get_value(q), q);
       }
       phi.integrate_scatter(EvaluationFlags::gradients, dst);
     }
@@ -1498,8 +1498,8 @@ namespace Atmospheric_Flow {
 
         const auto& avg_term = 0.5*(phi_src_p.get_value(q) + phi_src_m.get_value(q));
 
-        phi_p.submit_value(0.0*coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
-        phi_m.submit_value(-0.0*coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
+        phi_p.submit_value(coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
+        phi_m.submit_value(-coeff*dt/(Ma*Ma)*avg_term*n_plus, q);
       }
       phi_p.integrate_scatter(EvaluationFlags::values, dst);
       phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -1535,7 +1535,7 @@ namespace Atmospheric_Flow {
 
         const auto& pres_fixed_D = phi_src.get_value(q);
 
-        phi.submit_value(0.0*coeff*dt/(Ma*Ma)*0.5*(phi_src.get_value(q) + pres_fixed_D)*n_plus, q);
+        phi.submit_value(coeff*dt/(Ma*Ma)*0.5*(phi_src.get_value(q) + pres_fixed_D)*n_plus, q);
       }
       phi.integrate_scatter(EvaluationFlags::values, dst);
     }
@@ -1603,7 +1603,7 @@ namespace Atmospheric_Flow {
           phi.submit_value(rho_old*u_old -
                            0.0*a21_tilde*dt/(Fr*Fr)*rho_old*e_k -
                            0.0*a22_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k, q);
-          phi.submit_gradient(a21*dt*rho_old*tensor_product_u_n + 0.0*a21_tilde*dt/(Ma*Ma)*p_n_times_identity, q);
+          phi.submit_gradient(a21*dt*rho_old*tensor_product_u_n + a21_tilde*dt/(Ma*Ma)*p_n_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
@@ -1670,8 +1670,8 @@ namespace Atmospheric_Flow {
                            0.0*a31_tilde*dt/(Fr*Fr)*rho_old*e_k -
                            0.0*a32_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k -
                            0.0*a33_tilde*dt/(Fr*Fr)*rho_curr*e_k, q);
-          phi.submit_gradient(a31*dt*rho_old*tensor_product_u_n + 0.0*a31_tilde*dt/(Ma*Ma)*p_n_times_identity +
-                              a32*dt*rho_tmp_2*tensor_product_u_tmp_2 + 0.0*a32_tilde*dt/(Ma*Ma)*p_tmp_2_times_identity, q);
+          phi.submit_gradient(a31*dt*rho_old*tensor_product_u_n + a31_tilde*dt/(Ma*Ma)*p_n_times_identity +
+                              a32*dt*rho_tmp_2*tensor_product_u_tmp_2 + a32_tilde*dt/(Ma*Ma)*p_tmp_2_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
@@ -1753,9 +1753,9 @@ namespace Atmospheric_Flow {
                            0.0*b1*dt/(Fr*Fr)*rho_old*e_k -
                            0.0*b2*dt/(Fr*Fr)*rho_tmp_2*e_k -
                            0.0*b3*dt/(Fr*Fr)*rho_tmp_3*e_k, q);
-          phi.submit_gradient(b1*dt*rho_old*tensor_product_u_n + 0.0*b1*dt/(Ma*Ma)*p_n_times_identity +
-                              b2*dt*rho_tmp_2*tensor_product_u_tmp_2 + 0.0*b2*dt/(Ma*Ma)*p_tmp_2_times_identity +
-                              b3*dt*rho_tmp_3*tensor_product_u_tmp_3 + 0.0*b3*dt/(Ma*Ma)*p_tmp_3_times_identity, q);
+          phi.submit_gradient(b1*dt*rho_old*tensor_product_u_n + b1*dt/(Ma*Ma)*p_n_times_identity +
+                              b2*dt*rho_tmp_2*tensor_product_u_tmp_2 + b2*dt/(Ma*Ma)*p_tmp_2_times_identity +
+                              b3*dt*rho_tmp_3*tensor_product_u_tmp_3 + b3*dt/(Ma*Ma)*p_tmp_3_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
@@ -1820,10 +1820,10 @@ namespace Atmospheric_Flow {
                                                         std::abs(scalar_product(u_old_m, n_plus)));
 
           phi_p.submit_value(-a21*dt*avg_tensor_product_u_n*n_plus
-                             -0.0*a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
+                             -a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
                              -a21*dt*0.5*lambda_old*jump_rhou_old, q);
           phi_m.submit_value(a21*dt*avg_tensor_product_u_n*n_plus +
-                             0.0*a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
+                             a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
                              a21*dt*0.5*lambda_old*jump_rhou_old, q);
         }
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
@@ -1909,16 +1909,16 @@ namespace Atmospheric_Flow {
                                                             std::abs(scalar_product(u_tmp_2_m, n_plus)));
 
           phi_p.submit_value(-a31*dt*avg_tensor_product_u_n*n_plus
-                             -0.0*a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
+                             -a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
                              -a31*dt*0.5*lambda_old*jump_rhou_old
                              -a32*dt*avg_tensor_product_u_tmp_2*n_plus
-                             -0.0*a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
+                             -a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
                              -a32*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2, q);
           phi_m.submit_value(a31*dt*avg_tensor_product_u_n*n_plus +
-                             0.0*a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
+                             a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus +
                              a31*dt*0.5*lambda_old*jump_rhou_old +
                              a32*dt*avg_tensor_product_u_tmp_2*n_plus +
-                             0.0*a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
+                             a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
                              a32*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2, q);
         }
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
@@ -2036,22 +2036,22 @@ namespace Atmospheric_Flow {
                                                             std::abs(scalar_product(u_tmp_3_m, n_plus)));
 
           phi_p.submit_value(-b1*dt*avg_tensor_product_u_n*n_plus
-                             -0.0*b1*dt/(Ma*Ma)*avg_pres_old*n_plus
+                             -b1*dt/(Ma*Ma)*avg_pres_old*n_plus
                              -b1*dt*0.5*lambda_old*jump_rhou_old
                              -b2*dt*avg_tensor_product_u_tmp_2*n_plus
-                             -0.0*b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
+                             -b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
                              -b2*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2
                              -b3*dt*avg_tensor_product_u_tmp_3*n_plus
-                             -0.0*b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus
+                             -b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus
                              -b3*dt*0.5*lambda_tmp_3*jump_rhou_tmp_3, q);
           phi_m.submit_value(b1*dt*avg_tensor_product_u_n*n_plus +
-                             0.0*b1*dt/(Ma*Ma)*avg_pres_old*n_plus +
+                             b1*dt/(Ma*Ma)*avg_pres_old*n_plus +
                              b1*dt*0.5*lambda_old*jump_rhou_old +
                              b2*dt*avg_tensor_product_u_tmp_2*n_plus +
-                             0.0*b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
+                             b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus +
                              b2*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2 +
                              b3*dt*avg_tensor_product_u_tmp_3*n_plus +
-                             0.0*b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus +
+                             b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus +
                              b3*dt*0.5*lambda_tmp_3*jump_rhou_tmp_3, q);
         }
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
@@ -2092,7 +2092,7 @@ namespace Atmospheric_Flow {
 
           const auto& avg_pres_old = 0.5*(pres_old + pres_old_D);
 
-          phi.submit_value(-0.0*a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus, q);
+          phi.submit_value(-a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
@@ -2127,8 +2127,8 @@ namespace Atmospheric_Flow {
 
           const auto& avg_pres_tmp_2 = 0.5*(pres_tmp_2 + pres_tmp_2_D);
 
-          phi.submit_value(-0.0*a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
-                           -0.0*a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus, q);
+          phi.submit_value(-a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
+                           -a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
@@ -2172,9 +2172,9 @@ namespace Atmospheric_Flow {
 
           const auto& avg_pres_tmp_3 = 0.5*(pres_tmp_3 + pres_tmp_3_D);
 
-          phi.submit_value(-0.0*b1*dt/(Ma*Ma)*avg_pres_old*n_plus
-                           -0.0*b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
-                           -0.0*b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus, q);
+          phi.submit_value(-b1*dt/(Ma*Ma)*avg_pres_old*n_plus
+                           -b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
+                           -b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
