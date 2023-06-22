@@ -211,24 +211,24 @@ namespace Atmospheric_Flow {
                                     const std::pair<unsigned int, unsigned int>& cell_range) const {
     FEEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi(data, 2),
                                                                  phi_rho(data, 2);
-    FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u(data, 0);
+    FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_rhou(data, 0);
 
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_rho.reinit(cell);
       phi_rho.gather_evaluate(src[0], EvaluationFlags::values);
 
-      phi_u.reinit(cell);
-      phi_u.gather_evaluate(src[1], EvaluationFlags::values);
+      phi_rhou.reinit(cell);
+      phi_rhou.gather_evaluate(src[1], EvaluationFlags::values);
 
       phi.reinit(cell);
 
       for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-        const auto& rho = phi_rho.get_value(q);
+        const auto& rho  = phi_rho.get_value(q);
 
-        const auto& u   = phi_u.get_value(q);
+        const auto& rhou = phi_rhou.get_value(q);
 
         phi.submit_value(rho, q);
-        phi.submit_gradient(dt*rho*u, q);
+        phi.submit_gradient(dt*rhou, q);
       }
       phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
     }
@@ -249,8 +249,8 @@ namespace Atmospheric_Flow {
                                                                      phi_m(data, false, 2),
                                                                      phi_rho_p(data, true, 2),
                                                                      phi_rho_m(data, false, 2);
-    FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_p(data, true, 0),
-                                                                     phi_u_m(data, false, 0);
+    FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_rhou_p(data, true, 0),
+                                                                     phi_rhou_m(data, false, 0);
     FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_rhoE_p(data, true, 1),
                                                                      phi_rhoE_m(data, false, 1);
 
@@ -260,10 +260,10 @@ namespace Atmospheric_Flow {
       phi_rho_m.reinit(face);
       phi_rho_m.gather_evaluate(src[0], EvaluationFlags::values);
 
-      phi_u_p.reinit(face);
-      phi_u_p.gather_evaluate(src[1], EvaluationFlags::values);
-      phi_u_m.reinit(face);
-      phi_u_m.gather_evaluate(src[1], EvaluationFlags::values);
+      phi_rhou_p.reinit(face);
+      phi_rhou_p.gather_evaluate(src[1], EvaluationFlags::values);
+      phi_rhou_m.reinit(face);
+      phi_rhou_m.gather_evaluate(src[1], EvaluationFlags::values);
 
       phi_rhoE_p.reinit(face);
       phi_rhoE_p.gather_evaluate(src[2], EvaluationFlags::values);
@@ -279,23 +279,23 @@ namespace Atmospheric_Flow {
         const auto& rho_p    = phi_rho_p.get_value(q);
         const auto& rho_m    = phi_rho_m.get_value(q);
 
-        const auto& u_p      = phi_u_p.get_value(q);
-        const auto& u_m      = phi_u_m.get_value(q);
+        const auto& rhou_p   = phi_rhou_p.get_value(q);
+        const auto& rhou_m   = phi_rhou_m.get_value(q);
 
         const auto& rhoE_p   = phi_rhoE_p.get_value(q);
         const auto& rhoE_m   = phi_rhoE_m.get_value(q);
 
         const auto& pres_p   = (EquationData::Cp_Cv - 1.0)*
-                               (rhoE_p - 0.5*Ma*Ma*rho_p*scalar_product(u_p, u_p));
+                               (rhoE_p - 0.5*Ma*Ma*scalar_product(rhou_p, rhou_p)/rho_p);
         const auto& pres_m   = (EquationData::Cp_Cv - 1.0)*
-                               (rhoE_m - 0.5*Ma*Ma*rho_m*scalar_product(u_m, u_m));
+                               (rhoE_m - 0.5*Ma*Ma*scalar_product(rhou_m, rhou_m/rho_m));
 
-        const auto& avg_flux = 0.5*(rho_p*u_p + rho_m*u_m);
+        const auto& avg_flux = 0.5*(rhou_p + rhou_m);
 
         const auto& c2_p     = EquationData::Cp_Cv*pres_p/rho_p;
         const auto& c2_m     = EquationData::Cp_Cv*pres_m/rho_m;
-        const auto& lambda   = std::max(std::sqrt(scalar_product(u_p, u_p)),
-                                        std::sqrt(scalar_product(u_m, u_m)));
+        const auto& lambda   = std::max(std::sqrt(scalar_product(rhou_p/rho_p, rhou_p/rho_p)) + 1.0/Ma*std::sqrt(std::abs(c2_p)),
+                                        std::sqrt(scalar_product(rhou_m/rho_m, rhou_m/rho_m)) + 1.0/Ma*std::sqrt(std::abs(c2_m)));
         const auto& jump_rho = rho_p - rho_m;
 
         phi_p.submit_value(-dt*(scalar_product(avg_flux, n_plus) + 0.5*lambda*jump_rho), q);

@@ -91,8 +91,6 @@ protected:
   LinearAlgebra::distributed::Vector<double> rhou_curr;
   LinearAlgebra::distributed::Vector<double> rhs_rhou;
 
-  LinearAlgebra::distributed::Vector<double> u;
-
   /*--- Variables for the energy ---*/
   LinearAlgebra::distributed::Vector<double> rhoE_old;
   LinearAlgebra::distributed::Vector<double> rhoE_tmp_2;
@@ -125,7 +123,6 @@ private:
   EquationData::Density<dim>  rho_init;
   EquationData::Momentum<dim> rhou_init;
   EquationData::Energy<dim>   rhoE_init;
-  EquationData::Velocity<dim> u_init;
 
   /*--- Auxiliary structures for the matrix-free and for the multigrid ---*/
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
@@ -187,13 +184,12 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_density(triangulation),
   dof_handler_momentum(triangulation),
   dof_handler_energy(triangulation),
-  quadrature_density(EquationData::degree_rho + 1),
-  quadrature_momentum(EquationData::degree_u + 1),
-  quadrature_energy(EquationData::degree_T + 1),
+  quadrature_density(EquationData::degree_rho + 1 + 1),
+  quadrature_momentum(EquationData::degree_u + 1 + 1),
+  quadrature_energy(EquationData::degree_T + 1 + 1),
   rho_init(data.initial_time),
   rhou_init(data.initial_time),
   rhoE_init(data.initial_time),
-  u_init(data.initial_time),
   euler_matrix(data),
   max_its(data.max_iterations),
   eps(data.eps),
@@ -304,8 +300,6 @@ void EulerSolver<dim>::setup_dofs() {
   matrix_free_storage->initialize_dof_vector(rhou_curr, 0);
   matrix_free_storage->initialize_dof_vector(rhs_rhou, 0);
 
-  matrix_free_storage->initialize_dof_vector(u, 0);
-
   /*--- Initialize the variables related to the pressure ---*/
   matrix_free_storage->initialize_dof_vector(rhoE_old, 1);
   matrix_free_storage->initialize_dof_vector(rhoE_tmp_2, 1);
@@ -333,8 +327,6 @@ void EulerSolver<dim>::initialize() {
   VectorTools::interpolate(MappingQ<dim>(EquationData::degree_u), dof_handler_density, rho_init, rho_old);
   VectorTools::interpolate(MappingQ<dim>(EquationData::degree_u), dof_handler_momentum, rhou_init, rhou_old);
   VectorTools::interpolate(MappingQ<dim>(EquationData::degree_u), dof_handler_energy, rhoE_init, rhoE_old);
-
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_u), dof_handler_momentum, u_init, u);
 }
 
 
@@ -351,13 +343,13 @@ void EulerSolver<dim>::update_density() {
   euler_matrix.set_NS_stage(1);
 
   if(SSP_stage == 1) {
-    euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_old, u, rhoE_old});
+    euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_old, rhou_old, rhoE_old});
   }
   else if(SSP_stage == 2) {
-    euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_tmp_2, u, rhoE_tmp_2});
+    euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_tmp_2, rhou_tmp_2, rhoE_tmp_2});
   }
   else {
-    euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_tmp_3, u, rhoE_tmp_3});
+    euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_tmp_3, rhou_tmp_3, rhoE_tmp_3});
   }
 
   SolverControl solver_control(max_its, eps*rhs_rho.l2_norm());
@@ -590,11 +582,11 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     pcout << "Minimal density " << get_minimal_density() << std::endl;
     pcout << "Maximal density " << get_maximal_density() << std::endl;
 
-    /*verbose_cout << "  Update momentum stage 1" << std::endl;
+    verbose_cout << "  Update momentum stage 1" << std::endl;
     update_momentum();
 
     verbose_cout << "  Update energy stage 1" << std::endl;
-    update_energy();*/
+    update_energy();
 
     /*--- Second stage of the SSP scheme ---*/
     SSP_stage = 2;
@@ -604,11 +596,11 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     pcout << "Minimal density " << get_minimal_density() << std::endl;
     pcout << "Maximal density " << get_maximal_density() << std::endl;
 
-    /*verbose_cout << "  Update momentum stage 2" << std::endl;
+    verbose_cout << "  Update momentum stage 2" << std::endl;
     update_momentum();
 
     verbose_cout << "  Update energy stage 2" << std::endl;
-    update_energy();*/
+    update_energy();
 
     /*--- Second stage of the SSP scheme ---*/
     SSP_stage = 3;
@@ -618,16 +610,16 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     pcout << "Minimal density " << get_minimal_density() << std::endl;
     pcout << "Maximal density " << get_maximal_density() << std::endl;
 
-    /*verbose_cout << "  Update momentum stage 3" << std::endl;
+    verbose_cout << "  Update momentum stage 3" << std::endl;
     update_momentum();
 
     verbose_cout << "  Update energy stage 3" << std::endl;
-    update_energy();*/
+    update_energy();
 
     /*--- Update density and velocity before applying the damping layers ---*/
     rho_old.equ(1.0, rho_curr);
-    /*rhou_old.equ(1.0, rhou_curr);
-    rhoE_old.equ(1.0, rhoE_curr);*/
+    rhou_old.equ(1.0, rhou_curr);
+    rhoE_old.equ(1.0, rhoE_curr);
 
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {
