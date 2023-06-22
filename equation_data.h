@@ -19,9 +19,8 @@ namespace EquationData {
 
   static const unsigned int degree = 2; /*--- Polynomial degree ---*/
 
-  template<typename T> int sgn(T val) {
-    return (T(0) < val) - (val < T(0));
-  }
+  static const unsigned int degree_mapping = 2; /*--- Polynomial degree for mapping ---*/
+
 
   // We declare now the class that describes the velocity.
   //
