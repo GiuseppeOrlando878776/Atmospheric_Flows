@@ -237,7 +237,7 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
 
   triangulation.refine_global(n_refines);
 
-  pcout << "h_min = " << std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
+  pcout << "h_min = " << GridTools::minimal_cell_diameter(triangulation)/sqrt(dim) << std::endl;
 }
 
 
@@ -295,7 +295,7 @@ void EulerSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_u), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(rhou_old, 0);
@@ -328,9 +328,9 @@ template<int dim>
 void EulerSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_u), dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_u), dof_handler_momentum, rhou_init, rhou_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_u), dof_handler_energy, rhoE_init, rhoE_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_momentum, rhou_init, rhou_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_energy, rhoE_init, rhoE_old);
 }
 
 
@@ -502,7 +502,7 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   rhoE_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_energy, rhoE_old, "rhoE", {DataComponentInterpretation::component_is_scalar});
 
-  data_out.build_patches(MappingQ<dim>(EquationData::degree_u), EquationData::degree_u, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping), EquationData::degree_u, DataOut<dim>::curved_inner_cells);
 
   const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
