@@ -17,9 +17,9 @@ namespace EquationData {
   using namespace dealii;
 
   /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/
-  static const unsigned int degree_T   = 0;
-  static const unsigned int degree_rho = 0;
-  static const unsigned int degree_u   = 0;
+  static const unsigned int degree_T   = 1;
+  static const unsigned int degree_rho = 1;
+  static const unsigned int degree_u   = 1;
 
   static const double Cp_Cv = 1.4; /*--- Specific heats ratio ---*/
 

@@ -159,6 +159,10 @@ private:
   double get_minimal_density(); /*--- Get minimal density ---*/
 
   double get_maximal_density(); /*--- Get maximal density ---*/
+
+  double get_maximal_velocity(); /*--- Get maximal velocity ---*/
+
+  double compute_max_celerity(); /*--- Compute maximum speed of sound so as to compute the acoustic Courant number ---*/
 };
 
 
@@ -184,9 +188,9 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_density(triangulation),
   dof_handler_momentum(triangulation),
   dof_handler_energy(triangulation),
-  quadrature_density(EquationData::degree_rho + 1 + 1),
-  quadrature_momentum(EquationData::degree_u + 1 + 1),
-  quadrature_energy(EquationData::degree_T + 1 + 1),
+  quadrature_density(EquationData::degree_rho + 1),
+  quadrature_momentum(EquationData::degree_u + 1),
+  quadrature_energy(EquationData::degree_T + 1),
   rho_init(data.initial_time),
   rhou_init(data.initial_time),
   rhoE_init(data.initial_time),
@@ -552,6 +556,86 @@ double EulerSolver<dim>::get_maximal_density() {
 }
 
 
+// The following function is used in determining the maximal velocity
+//
+template<int dim>
+double EulerSolver<dim>::get_maximal_velocity() {
+  const int n_q_points = quadrature_momentum.size();
+
+  std::vector<double>         density_values(n_q_points);
+  std::vector<Vector<double>> momentum_values(n_q_points, Vector<double>(dim));
+
+  FEValues<dim> fe_values_momentum(fe_momentum, quadrature_momentum, update_values);
+  FEValues<dim> fe_values_density(fe_density, quadrature_density, update_values);
+
+  double max_local_velocity = std::numeric_limits<double>::min();
+
+  auto tmp_cell = dof_handler_density.begin_active();
+  for(const auto& cell : dof_handler_momentum.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      fe_values_momentum.reinit(cell);
+      fe_values_density.reinit(tmp_cell);
+
+      fe_values_momentum.get_function_values(rhou_old, momentum_values);
+      fe_values_density.get_function_values(rho_old, density_values);
+
+      for(int q = 0; q < n_q_points; q++) {
+        max_local_velocity = std::max(max_local_velocity, std::sqrt(momentum_values[q]*momentum_values[q])/density_values[q]);
+      }
+    }
+    ++tmp_cell;
+  }
+
+  const double max_velocity = Utilities::MPI::max(max_local_velocity, MPI_COMM_WORLD);
+
+  return max_velocity;
+}
+
+
+// The following function is used in determining the maximal celerity
+//
+template<int dim>
+double EulerSolver<dim>::compute_max_celerity() {
+  const int n_q_points = quadrature_energy.size();
+
+  std::vector<double> energy_values(n_q_points);
+  std::vector<double> density_values(n_q_points);
+  std::vector<Vector<double>> momentum_values(n_q_points, Vector<double>(dim));
+
+  FEValues<dim> fe_values_energy(fe_energy, quadrature_energy, update_values);
+  FEValues<dim> fe_values_density(fe_density, quadrature_density, update_values);
+  FEValues<dim> fe_values_momentum(fe_momentum, quadrature_momentum, update_values);
+
+  double max_local_celerity = std::numeric_limits<double>::min();
+
+  auto tmp_cell     = dof_handler_density.begin_active();
+  auto tmp_cell_bis = dof_handler_momentum.begin_active();
+  for(const auto& cell: dof_handler_energy.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      fe_values_energy.reinit(cell);
+      fe_values_density.reinit(tmp_cell);
+      fe_values_momentum.reinit(tmp_cell_bis);
+
+      fe_values_energy.get_function_values(rhoE_old, energy_values);
+      fe_values_density.get_function_values(rho_old, density_values);
+      fe_values_momentum.get_function_values(rhou_old, momentum_values);
+
+      for(int q = 0; q < n_q_points; ++q) {
+        const double rho   = density_values[q];
+        const double pres  = (EquationData::Cp_Cv - 1.0)*
+                             (energy_values[q] - 0.5*Ma*Ma*(momentum_values[q]*momentum_values[q])/rho);
+
+        max_local_celerity = std::max(max_local_celerity, std::sqrt(EquationData::Cp_Cv*pres/rho));
+      }
+    }
+    ++tmp_cell;
+    ++tmp_cell_bis;
+  }
+
+  return Utilities::MPI::max(max_local_celerity, MPI_COMM_WORLD);
+}
+
+
 // @sect{ <code>EulerSolver::run</code> }
 
 // This is the time marching function, which starting at <code>t_0</code>
@@ -620,6 +704,16 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     rho_old.equ(1.0, rho_curr);
     rhou_old.equ(1.0, rhou_curr);
     rhoE_old.equ(1.0, rhoE_curr);
+
+    /*--- Compute Courant numbers ---*/
+    const double max_vel = get_maximal_velocity();
+    pcout<< "Maximal velocity = " << max_vel << std::endl;
+    pcout << "CFL_u = " << dt*max_vel*EquationData::degree_u*
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
+    const double max_celerity = compute_max_celerity();
+    pcout<< "Maximal celerity = " << 1.0/Ma*max_celerity << std::endl;
+    pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
 
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {
