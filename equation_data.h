@@ -52,7 +52,7 @@ namespace EquationData {
     const double theta  = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
     const double lambda = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for geographic applications)
 
-    const double U      = radius;
+    const double U      = radius/86400.0;
 
     const double alpha  = 0.0;
     const double u      = U*(std::cos(alpha)*std::cos(theta) +
@@ -112,8 +112,9 @@ namespace EquationData {
     const double r        = radius*std::acos(std::sin(theta_c)*std::sin(theta) +
                                              std::cos(theta_c)*std::cos(theta)*std::cos(lambda - lambda_c));
 
-    const double R        = 1.0/3.0;
-    const double value    = 0.5*(1.0 + std::cos(numbers::PI*r/R))*(r < R);
+    const double R        = 6.37122e6/3.0;
+    const double h0       = 1000.0;
+    const double value    = 0.5*h0*(1.0 + std::cos(numbers::PI*r/R))*(r < R);
 
     return value;
   }

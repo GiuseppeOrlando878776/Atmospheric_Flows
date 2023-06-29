@@ -214,6 +214,7 @@ void AdvectionSolver<dim>::create_triangulation(const unsigned int n_refines) {
   TimerOutput::Scope t(time_table, "Create triangulation");
 
   GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 0.9, 1.0, 1);
+  GridTools::scale(6.37122e6, triangulation);
 
   triangulation.refine_global(n_refines);
 
@@ -225,7 +226,7 @@ void AdvectionSolver<dim>::create_triangulation(const unsigned int n_refines) {
     if(face->at_boundary()) {
       const Point<dim> center = face->center();
 
-      if(std::abs(std::sqrt(center[0]*center[0] + center[1]*center[1] + center[2]*center[2]) - 1.0) < 2.5e-2) {
+      if(std::abs(std::sqrt(center[0]*center[0] + center[1]*center[1] + center[2]*center[2]) - 6.37122e6) < 2.5e-2*6.37122e6) {
         face->set_boundary_id(1);
       }
     }
@@ -401,14 +402,14 @@ void AdvectionSolver<dim>::refine_mesh() {
                         copy_data,
                         MeshWorker::assemble_own_cells);
 
-  GridRefinement::refine(triangulation, estimated_indicator_per_cell, 3.0);
-  GridRefinement::coarsen(triangulation, estimated_indicator_per_cell, 1.0);
+  GridRefinement::refine(triangulation, estimated_indicator_per_cell, 1e-2);
+  GridRefinement::coarsen(triangulation, estimated_indicator_per_cell, 1e-6);
   for(const auto& cell: triangulation.active_cell_iterators()) {
     if(cell->refine_flag_set() && cell->level() == max_loc_refinements) {
       cell->clear_refine_flag();
     }
-    if(cell->coarsen_flag_set() && cell->level() == max_loc_refinements) {
-      cell->clear_refine_flag();
+    if(cell->coarsen_flag_set() && cell->level() == min_loc_refinements) {
+      cell->clear_coarsen_flag();
     }
   }
   triangulation.prepare_coarsening_and_refinement();

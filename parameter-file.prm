@@ -2,36 +2,34 @@ subsection Physical data
   # In this subsection we declare the physical data
   # The initial and final time, and the Reynolds number
   set initial_time = 0.0
-  set final_time   = 6.28318530718
+  set final_time   = 542867.21054
 end
 
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.00024543692
+  set dt = 10.602874944
 end
 
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
   # we set the number of global refines the triangulation must have.
-  set n_of_refines        = 2
-  set max_loc_refinements = 3
-  set min_loc_refinements = 1
+  set n_of_refines = 4
 end
 
 subsection Data solve
   # In this section we declare the parameters that are going to control the solution process.
   set max_iterations = 10000  # maximal number of iterations that GMRES must make
-  set eps            = 1e-6  # stopping criterion
+  set eps            = 1e-8  # stopping criterion
 end
 
-set saving directory = SimTest
+set saving directory = 4_Refinement
 
 # The output frequency
-set output_interval = 2560
+set output_interval = 5120
 
 # Finally we set the verbosity level
 set verbose = true
 
 # Set how often perfrom the remeshing
-set refinement_iterations = 2000
+set refinement_iterations = 0
