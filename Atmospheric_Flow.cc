@@ -295,7 +295,7 @@ void EulerSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_mapping, true), dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(rhou_old, 0);
@@ -328,9 +328,9 @@ template<int dim>
 void EulerSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_momentum, rhou_init, rhou_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_energy, rhoE_init, rhoE_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_momentum, rhou_init, rhou_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_energy, rhoE_init, rhoE_old);
 }
 
 
