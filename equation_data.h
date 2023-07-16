@@ -48,7 +48,19 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    return 1.0;
+    const double radius   = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    const double theta    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
+
+    const double T_bar    = 273.0;
+
+    const double a        = 1.0;                     /*--- Radius of the earth ---*/
+    const double s        = radius*std::cos(theta); /*--- Radial distance from the polar axis ---*/
+    const double u0_tilde = 1.0;
+    const double g        = 9.81;
+    const double q        = 1.0/(EquationData::R*T_bar)*
+                            (0.5*u0_tilde*u0_tilde*s*s - a*g*(1.0 - a/radius));
+
+    return std::exp(q);
   }
 
 
@@ -78,7 +90,26 @@ namespace EquationData {
   double Velocity<dim>::value(const Point<dim>& p, const unsigned int component) const {
     AssertIndexRange(component, dim);
 
-    return 0.0;
+    const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    const double theta  = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
+    const double lambda = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for geographic applications)
+
+    const double U      = radius/1.0;
+
+    const double alpha  = 0.0;
+    const double u      = U*(std::cos(alpha)*std::cos(theta) +
+                             std::sin(theta)*std::cos(lambda)*std::sin(alpha)); //longitudinal
+    const double v      = -U*std::sin(alpha)*std::sin(lambda); //latitudinal
+
+    if(component == 0) {
+      return -u*std::sin(lambda) -v*std::cos(lambda)*std::sin(theta);
+    }
+    else if(component == 1) {
+      return u*std::cos(lambda) - v*std::sin(lambda)*std::sin(theta);
+    }
+    else {
+      return v*std::cos(theta);
+    }
   }
 
   // Put together for a vector evalutation of the velocity.
@@ -120,21 +151,19 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    const double p0       = 1.0;
-
     const double radius   = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
     const double theta    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
-    const double lambda   = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for geographic applications)
 
-    const double lambda_c = 1.5*numbers::PI;
-    const double theta_c  = 0.0;
-    const double r        = radius*std::acos(std::sin(theta_c)*std::sin(theta) +
-                                             std::cos(theta_c)*std::cos(theta)*std::cos(lambda - lambda_c));
+    const double T_bar    = 273.0;
 
-    const double R        = 1.0/3.0;
-    const double p_prime  = 0.5*(1.0 + std::cos(numbers::PI*r/R))*(r < R);
+    const double a        = 1.0;                     /*--- Radius of the earth ---*/
+    const double s        = radius*std::cos(theta); /*--- Radial distance from the polar axis ---*/
+    const double u0_tilde = 1.0;
+    const double g        = 9.81;
+    const double q        = 1.0/(EquationData::R*T_bar)*
+                            (0.5*u0_tilde*u0_tilde*s*s - a*g*(1.0 - a/radius));
 
-    return p0 + 0.01*p_prime;
+    return std::exp(q);
   }
 
 } // namespace EquationData

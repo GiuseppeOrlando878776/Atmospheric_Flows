@@ -3,7 +3,7 @@ subsection Physical data
   # The initial and final time, and the Reynolds number
   set initial_time = 0.0
   set final_time   = 0.008
-  set Mach         = 0.00316227766 
+  set Mach         = 0.00357254516
 end
 
 subsection Time step data
@@ -24,7 +24,7 @@ subsection Data solve
   set eps            = 1e-8  # stopping criterion
 end
 
-set saving directory = IMEX_3D_Spherical_PressureWave_Q1
+set saving directory = Exact_Steady
 
 # The output frequency
 set output_interval = 4

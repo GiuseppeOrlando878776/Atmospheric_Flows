@@ -16,6 +16,7 @@
 
 #include <deal.II/grid/tria.h>
 #include <deal.II/grid/grid_generator.h>
+#include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/tria_accessor.h>
 #include <deal.II/grid/tria_iterator.h>
 #include <deal.II/grid/manifold_lib.h>
@@ -260,7 +261,8 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
 
   triangulation.refine_global(n_refines);
 
-  pcout << "h_min = " << GridTools::minimal_cell_diameter(triangulation)/std::sqrt(dim) << std::endl;
+  pcout << "h_min = " <<
+  GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))/std::sqrt(dim) << std::endl;
 }
 
 
@@ -864,7 +866,7 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   pres_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_temperature, pres_old, "p", {DataComponentInterpretation::component_is_scalar});
 
-  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping, false), EquationData::degree_u, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping, true), EquationData::degree_u, DataOut<dim>::curved_inner_cells);
 
   const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
@@ -1108,12 +1110,14 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     const double max_celerity = compute_max_celerity();
     pcout<< "Maximal celerity = " << 1.0/Ma*max_celerity << std::endl;
     pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))
+                        << std::endl;
 
     const double max_velocity = get_maximal_velocity();
     pcout<< "Maximal velocity = " << max_velocity << std::endl;
     pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation) << std::endl;
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))
+                        << std::endl;
 
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {
