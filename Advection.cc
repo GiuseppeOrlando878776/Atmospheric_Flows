@@ -279,7 +279,7 @@ void AdvectionSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(EquationData::degree + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_mapping), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_mapping, true), dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(u, 0);
@@ -305,8 +305,8 @@ template<int dim>
 void AdvectionSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping), dof_handler_velocity, u_init, u);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_init, u);
 }
 
 
@@ -403,7 +403,7 @@ void AdvectionSolver<dim>::refine_mesh() {
                         MeshWorker::assemble_own_cells);
 
   GridRefinement::refine(triangulation, estimated_indicator_per_cell, 1e-2);
-  GridRefinement::coarsen(triangulation, estimated_indicator_per_cell, 1e-6);
+  GridRefinement::coarsen(triangulation, estimated_indicator_per_cell, 1e-4);
   for(const auto& cell: triangulation.active_cell_iterators()) {
     if(cell->refine_flag_set() && cell->level() == max_loc_refinements) {
       cell->clear_refine_flag();
@@ -472,7 +472,7 @@ void AdvectionSolver<dim>::output_results(const unsigned int step) {
   u.update_ghost_values();
   data_out.add_data_vector(dof_handler_velocity, u, velocity_names, component_interpretation_velocity);
 
-  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping), EquationData::degree, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping, true), EquationData::degree, DataOut<dim>::curved_inner_cells);
 
   const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
