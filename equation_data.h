@@ -21,6 +21,9 @@ namespace EquationData {
 
   static const unsigned int degree_mapping = 2; /*--- Polynomial degree for mapping ---*/
 
+  static const double a  = 6.37122e6; /*--- Radius of the earth ---*/
+  static const double h0 = 1000.0;
+  static const double T  = 86400.0;  /*--- Characteristic time for velocity ---*/
 
   // We declare now the class that describes the velocity.
   //
@@ -49,24 +52,25 @@ namespace EquationData {
     AssertIndexRange(component, dim);
 
     const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
-    const double theta  = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
-    const double lambda = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for geographic applications)
+    const double phi    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
+    const double lambda = std::atan2(p[1], p[0]) + numbers::PI; // longitude (atan2 returns range -pi to pi,
+                                                                //            which is not ok for geographic applications)
 
-    const double U      = radius/86400.0;
+    const double U      = radius/EquationData::T;
 
     const double alpha  = 0.0;
-    const double u      = U*(std::cos(alpha)*std::cos(theta) +
-                             std::sin(theta)*std::cos(lambda)*std::sin(alpha)); //longitudinal
+    const double u      = U*(std::cos(alpha)*std::cos(phi) +
+                             std::sin(phi)*std::cos(lambda)*std::sin(alpha)); //longitudinal
     const double v      = -U*std::sin(alpha)*std::sin(lambda); //latitudinal
 
     if(component == 0) {
-      return -u*std::sin(lambda) -v*std::cos(lambda)*std::sin(theta);
+      return -u*std::sin(lambda) -v*std::cos(lambda)*std::sin(phi);
     }
     else if(component == 1) {
-      return u*std::cos(lambda) - v*std::sin(lambda)*std::sin(theta);
+      return u*std::cos(lambda) - v*std::sin(lambda)*std::sin(phi);
     }
     else {
-      return v*std::cos(theta);
+      return v*std::cos(phi);
     }
   }
 
@@ -104,17 +108,17 @@ namespace EquationData {
     AssertIndexRange(component, 1);
 
     const double radius   = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
-    const double theta    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
-    const double lambda   = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for geographic applications)
+    const double phi      = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
+    const double lambda   = std::atan2(p[1], p[0]) + numbers::PI; // longitude (atan2 returns range -pi to pi,
+                                                                  //            which is not ok for geographic applications)
 
     const double lambda_c = 1.5*numbers::PI;
-    const double theta_c  = 0.0;
-    const double r        = radius*std::acos(std::sin(theta_c)*std::sin(theta) +
-                                             std::cos(theta_c)*std::cos(theta)*std::cos(lambda - lambda_c));
+    const double phi_c    = 0.0;
+    const double r        = radius*std::acos(std::sin(phi_c)*std::sin(phi) +
+                                             std::cos(phi_c)*std::cos(phi)*std::cos(lambda - lambda_c)); /*--- Great circle distance ---*/
 
-    const double R        = 6.37122e6/3.0;
-    const double h0       = 1000.0;
-    const double value    = 0.5*h0*(1.0 + std::cos(numbers::PI*r/R))*(r < R);
+    const double R        = EquationData::a/3.0;
+    const double value    = 0.5*EquationData::h0*(1.0 + std::cos(numbers::PI*r/R))*(r < R);
 
     return value;
   }
