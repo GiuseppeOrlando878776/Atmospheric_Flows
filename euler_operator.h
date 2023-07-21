@@ -511,11 +511,14 @@ namespace Atmospheric_Flow {
           const auto& n_plus       = phi_p.get_normal_vector(q); /*--- Notice that the unit normal vector is the same from
                                                                        'both sides'. ---*/
 
-          const auto& avg_flux_old = 0.5*(phi_rho_old_p.get_value(q)*phi_u_old_p.get_value(q) +
-                                          phi_rho_old_m.get_value(q)*phi_u_old_m.get_value(q));
-          const auto& lambda_old   = std::max(std::abs(scalar_product(phi_u_old_p.get_value(q), n_plus)),
-                                              std::abs(scalar_product(phi_u_old_m.get_value(q), n_plus)));
-          const auto& jump_rho_old = phi_rho_old_p.get_value(q) - phi_rho_old_m.get_value(q);
+          const auto& rho_old_p    = phi_rho_old_p.get_value(q);
+          const auto& rho_old_m    = phi_rho_old_m.get_value(q);
+          const auto& u_old_p      = phi_u_old_p.get_value(q);
+          const auto& u_old_m      = phi_u_old_m.get_value(q);
+          const auto& avg_flux_old = 0.5*(rho_old_p*u_old_p + rho_old_m*u_old_m);
+          const auto& lambda_old   = std::max(std::abs(scalar_product(u_old_p, n_plus)),
+                                              std::abs(scalar_product(u_old_m, n_plus)));
+          const auto& jump_rho_old = rho_old_p - rho_old_m;
 
           /*--- Using an upwind flux ---*/
           phi_p.submit_value(-a21*dt*(scalar_product(avg_flux_old, n_plus) + 0.5*lambda_old*jump_rho_old), q);
@@ -565,17 +568,23 @@ namespace Atmospheric_Flow {
         for(unsigned int q = 0; q < phi_p.n_q_points; ++q) {
           const auto& n_plus         = phi_p.get_normal_vector(q);
 
-          const auto& avg_flux_old   = 0.5*(phi_rho_old_p.get_value(q)*phi_u_old_p.get_value(q) +
-                                            phi_rho_old_m.get_value(q)*phi_u_old_m.get_value(q));
-          const auto& lambda_old     = std::max(std::abs(scalar_product(phi_u_old_p.get_value(q), n_plus)),
-                                                std::abs(scalar_product(phi_u_old_m.get_value(q), n_plus)));
-          const auto& jump_rho_old   = phi_rho_old_p.get_value(q) - phi_rho_old_m.get_value(q);
+          const auto& rho_old_p      = phi_rho_old_p.get_value(q);
+          const auto& rho_old_m      = phi_rho_old_m.get_value(q);
+          const auto& u_old_p        = phi_u_old_p.get_value(q);
+          const auto& u_old_m        = phi_u_old_m.get_value(q);
+          const auto& avg_flux_old   = 0.5*(rho_old_p*u_old_p + rho_old_m*u_old_m);
+          const auto& lambda_old     = std::max(std::abs(scalar_product(u_old_p, n_plus)),
+                                              std::abs(scalar_product(u_old_m, n_plus)));
+          const auto& jump_rho_old   = rho_old_p - rho_old_m;
 
-          const auto& avg_flux_tmp_2 = 0.5*(phi_rho_tmp_2_p.get_value(q)*phi_u_tmp_2_p.get_value(q) +
-                                            phi_rho_tmp_2_m.get_value(q)*phi_u_tmp_2_m.get_value(q));
-          const auto& lambda_tmp_2   = std::max(std::abs(scalar_product(phi_u_tmp_2_p.get_value(q), n_plus)),
-                                                std::abs(scalar_product(phi_u_tmp_2_m.get_value(q), n_plus)));
-          const auto& jump_rho_tmp_2 = phi_rho_tmp_2_p.get_value(q) - phi_rho_tmp_2_m.get_value(q);
+          const auto& rho_tmp_2_p    = phi_rho_tmp_2_p.get_value(q);
+          const auto& rho_tmp_2_m    = phi_rho_tmp_2_m.get_value(q);
+          const auto& u_tmp_2_p      = phi_u_tmp_2_p.get_value(q);
+          const auto& u_tmp_2_m      = phi_u_tmp_2_m.get_value(q);
+          const auto& avg_flux_tmp_2 = 0.5*(rho_tmp_2_p*u_tmp_2_p + rho_tmp_2_m*u_tmp_2_m);
+          const auto& lambda_tmp_2   = std::max(std::abs(scalar_product(u_tmp_2_p, n_plus)),
+                                                std::abs(scalar_product(u_tmp_2_m, n_plus)));
+          const auto& jump_rho_tmp_2 = rho_tmp_2_p - rho_tmp_2_m;
 
           /*--- Using an upwind flux ---*/
           phi_p.submit_value(-a31*dt*(scalar_product(avg_flux_old, n_plus) + 0.5*lambda_old*jump_rho_old)
@@ -640,23 +649,32 @@ namespace Atmospheric_Flow {
         for(unsigned int q = 0; q < phi_p.n_q_points; ++q) {
           const auto& n_plus         = phi_p.get_normal_vector(q);
 
-          const auto& avg_flux_old   = 0.5*(phi_rho_old_p.get_value(q)*phi_u_old_p.get_value(q) +
-                                            phi_rho_old_m.get_value(q)*phi_u_old_m.get_value(q));
-          const auto& lambda_old     = std::max(std::abs(scalar_product(phi_u_old_p.get_value(q), n_plus)),
-                                                std::abs(scalar_product(phi_u_old_m.get_value(q), n_plus)));
-          const auto& jump_rho_old   = phi_rho_old_p.get_value(q) - phi_rho_old_m.get_value(q);
+          const auto& rho_old_p      = phi_rho_old_p.get_value(q);
+          const auto& rho_old_m      = phi_rho_old_m.get_value(q);
+          const auto& u_old_p        = phi_u_old_p.get_value(q);
+          const auto& u_old_m        = phi_u_old_m.get_value(q);
+          const auto& avg_flux_old   = 0.5*(rho_old_p*u_old_p + rho_old_m*u_old_m);
+          const auto& lambda_old     = std::max(std::abs(scalar_product(u_old_p, n_plus)),
+                                              std::abs(scalar_product(u_old_m, n_plus)));
+          const auto& jump_rho_old   = rho_old_p - rho_old_m;
 
-          const auto& avg_flux_tmp_2 = 0.5*(phi_rho_tmp_2_p.get_value(q)*phi_u_tmp_2_p.get_value(q) +
-                                            phi_rho_tmp_2_m.get_value(q)*phi_u_tmp_2_m.get_value(q));
-          const auto& lambda_tmp_2   = std::max(std::abs(scalar_product(phi_u_tmp_2_p.get_value(q), n_plus)),
-                                                std::abs(scalar_product(phi_u_tmp_2_m.get_value(q), n_plus)));
-          const auto& jump_rho_tmp_2 = phi_rho_tmp_2_p.get_value(q) - phi_rho_tmp_2_m.get_value(q);
+          const auto& rho_tmp_2_p    = phi_rho_tmp_2_p.get_value(q);
+          const auto& rho_tmp_2_m    = phi_rho_tmp_2_m.get_value(q);
+          const auto& u_tmp_2_p      = phi_u_tmp_2_p.get_value(q);
+          const auto& u_tmp_2_m      = phi_u_tmp_2_m.get_value(q);
+          const auto& avg_flux_tmp_2 = 0.5*(rho_tmp_2_p*u_tmp_2_p + rho_tmp_2_m*u_tmp_2_m);
+          const auto& lambda_tmp_2   = std::max(std::abs(scalar_product(u_tmp_2_p, n_plus)),
+                                                std::abs(scalar_product(u_tmp_2_m, n_plus)));
+          const auto& jump_rho_tmp_2 = rho_tmp_2_p - rho_tmp_2_m;
 
-          const auto& avg_flux_tmp_3 = 0.5*(phi_rho_tmp_3_p.get_value(q)*phi_u_tmp_3_p.get_value(q) +
-                                            phi_rho_tmp_3_m.get_value(q)*phi_u_tmp_3_m.get_value(q));
-          const auto& lambda_tmp_3   = std::max(std::abs(scalar_product(phi_u_tmp_3_p.get_value(q), n_plus)),
-                                                std::abs(scalar_product(phi_u_tmp_3_m.get_value(q), n_plus)));
-          const auto& jump_rho_tmp_3 = phi_rho_tmp_3_p.get_value(q) - phi_rho_tmp_3_m.get_value(q);
+          const auto& rho_tmp_3_p    = phi_rho_tmp_3_p.get_value(q);
+          const auto& rho_tmp_3_m    = phi_rho_tmp_3_m.get_value(q);
+          const auto& u_tmp_3_p      = phi_u_tmp_3_p.get_value(q);
+          const auto& u_tmp_3_m      = phi_u_tmp_3_m.get_value(q);
+          const auto& avg_flux_tmp_3 = 0.5*(rho_tmp_3_p*u_tmp_3_p + rho_tmp_3_m*u_tmp_3_m);
+          const auto& lambda_tmp_3   = std::max(std::abs(scalar_product(u_tmp_3_p, n_plus)),
+                                                std::abs(scalar_product(u_tmp_3_m, n_plus)));
+          const auto& jump_rho_tmp_3 = rho_tmp_3_p - rho_tmp_3_m;
 
           /*--- Using an upwind flux ---*/
           phi_p.submit_value(-b1*dt*(scalar_product(avg_flux_old, n_plus) + 0.5*lambda_old*jump_rho_old)
@@ -770,8 +788,8 @@ namespace Atmospheric_Flow {
 
           phi.submit_value(rho_old*E_old -
                            0.5*rho_tmp_2*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           0.0*a21_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           0.0*a22_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_fixed[dim - 1], q);
+                           a21_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
+                           a22_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_fixed[dim - 1], q);
           phi.submit_gradient(0.5*a21*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               a21_tilde*dt*(rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old, q);
           /*--- The specific enthalpy is computed with the generic relation e + p/rho ---*/
@@ -833,9 +851,9 @@ namespace Atmospheric_Flow {
 
           phi.submit_value(rho_old*E_old -
                            0.5*rho_tmp_3*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           0.0*a31_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           0.0*a32_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
-                           0.0*a33_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_fixed[dim - 1], q);
+                           a31_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
+                           a32_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
+                           a33_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_fixed[dim - 1], q);
           phi.submit_gradient(0.5*a31*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               a31_tilde*dt*
                               (rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old +
@@ -916,9 +934,9 @@ namespace Atmospheric_Flow {
 
           phi.submit_value(rho_old*E_old -
                            0.5*rho_curr*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           0.0*b1*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           0.0*b2*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
-                           0.0*b3*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_tmp_3[dim - 1], q);
+                           b1*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
+                           b2*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
+                           b3*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_tmp_3[dim - 1], q);
           phi.submit_gradient(0.5*b1*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               b1*dt*(rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old +
                               0.5*b2*dt*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2)*rho_tmp_2*u_tmp_2 +
@@ -1601,8 +1619,8 @@ namespace Atmospheric_Flow {
           const auto& rho_tmp_2          = phi_rho_tmp_2.get_value(q);
 
           phi.submit_value(rho_old*u_old -
-                           0.0*a21_tilde*dt/(Fr*Fr)*rho_old*e_k -
-                           0.0*a22_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k, q);
+                           a21_tilde*dt/(Fr*Fr)*rho_old*e_k -
+                           a22_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k, q);
           phi.submit_gradient(a21*dt*rho_old*tensor_product_u_n + a21_tilde*dt/(Ma*Ma)*p_n_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -1667,9 +1685,9 @@ namespace Atmospheric_Flow {
           const auto& rho_curr               = phi_rho_curr.get_value(q);
 
           phi.submit_value(rho_old*u_old -
-                           0.0*a31_tilde*dt/(Fr*Fr)*rho_old*e_k -
-                           0.0*a32_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k -
-                           0.0*a33_tilde*dt/(Fr*Fr)*rho_curr*e_k, q);
+                           a31_tilde*dt/(Fr*Fr)*rho_old*e_k -
+                           a32_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k -
+                           a33_tilde*dt/(Fr*Fr)*rho_curr*e_k, q);
           phi.submit_gradient(a31*dt*rho_old*tensor_product_u_n + a31_tilde*dt/(Ma*Ma)*p_n_times_identity +
                               a32*dt*rho_tmp_2*tensor_product_u_tmp_2 + a32_tilde*dt/(Ma*Ma)*p_tmp_2_times_identity, q);
         }
@@ -1750,9 +1768,9 @@ namespace Atmospheric_Flow {
           }
 
           phi.submit_value(rho_old*u_old -
-                           0.0*b1*dt/(Fr*Fr)*rho_old*e_k -
-                           0.0*b2*dt/(Fr*Fr)*rho_tmp_2*e_k -
-                           0.0*b3*dt/(Fr*Fr)*rho_tmp_3*e_k, q);
+                           b1*dt/(Fr*Fr)*rho_old*e_k -
+                           b2*dt/(Fr*Fr)*rho_tmp_2*e_k -
+                           b3*dt/(Fr*Fr)*rho_tmp_3*e_k, q);
           phi.submit_gradient(b1*dt*rho_old*tensor_product_u_n + b1*dt/(Ma*Ma)*p_n_times_identity +
                               b2*dt*rho_tmp_2*tensor_product_u_tmp_2 + b2*dt/(Ma*Ma)*p_tmp_2_times_identity +
                               b3*dt*rho_tmp_3*tensor_product_u_tmp_3 + b3*dt/(Ma*Ma)*p_tmp_3_times_identity, q);
