@@ -259,12 +259,12 @@ template<int dim>
 void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
   TimerOutput::Scope t(time_table, "Create triangulation");
 
-  GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 1.0, 1.00078477905, 1);
-  GridTools::scale(EquationData::a, triangulation);
+  GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 0.9, 1.0, 1);
 
   triangulation.refine_global(n_refines);
 
-  pcout << "h_min = " << GridTools::minimal_cell_diameter(triangulation, MappingQ1<dim>())/std::sqrt(dim) << std::endl;
+  pcout << "h_min = " <<
+  GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))/std::sqrt(dim) << std::endl;
 }
 
 
@@ -324,7 +324,7 @@ void EulerSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_mapping, true), dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(u_old, 0);
@@ -390,9 +390,9 @@ template<int dim>
 void EulerSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ1<dim>(), dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(MappingQ1<dim>(), dof_handler_velocity, u_init, u_old);
-  VectorTools::interpolate(MappingQ1<dim>(), dof_handler_temperature, pres_init, pres_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_init, u_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_init, pres_old);
 }
 
 
@@ -1115,13 +1115,13 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     const double max_celerity = compute_max_celerity();
     pcout<< "Maximal celerity = " << 1.0/Ma*max_celerity << std::endl;
     pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ1<dim>())
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))
                         << std::endl;
 
     const double max_velocity = get_maximal_velocity();
     pcout<< "Maximal velocity = " << max_velocity << std::endl;
     pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ1<dim>())
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))
                         << std::endl;
 
     /*--- Save the results each 'output_interval' steps ---*/

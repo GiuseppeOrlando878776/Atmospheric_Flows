@@ -2,15 +2,15 @@ subsection Physical data
   # In this subsection we declare the physical data
   # The initial and final time, and the Reynolds number
   set initial_time = 0.0
-  set final_time   = 3600.0
-  set Mach         = 1.0
+  set final_time   = 0.008
+  set Mach         = 0.00357254516
   set Froude       = 0.31933793491
 end
 
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.96
+  set dt = 0.0002
 end
 
 subsection Space discretization
@@ -22,13 +22,13 @@ end
 subsection Data solve
   # In this section we declare the parameters that are going to control the solution process.
   set max_iterations = 30000 # maximal number of iterations that GMRES must make
-  set eps            = 1e-18 # stopping criterion
+  set eps            = 1e-8  # stopping criterion
 end
 
-set saving directory = IGW_Sphere
+set saving directory = Exact_Steady
 
 # The output frequency
-set output_interval = 375
+set output_interval = 4
 
 # Finally we set the verbosity level
 set verbose = true

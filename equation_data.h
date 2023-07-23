@@ -21,12 +21,15 @@ namespace EquationData {
   static const unsigned int degree_rho = 1;
   static const unsigned int degree_u   = 1;
 
-  static const double Cp_Cv = 1.4;   /*--- Specific heats ratio ---*/
-  static const double R     = 287.0; /*--- Specific gas constant ---*/
+  static const double Cp_Cv    = 1.4;   /*--- Specific heats ratio ---*/
+  static const double R        = 287.0; /*--- Specific gas constant ---*/
 
-  static const double a     = 6.37122e6; /*--- Radius of Earth ---*/
+  static const double a        = 1.0;     /*--- Radius of the earth ---*/
+  static const double g        = 9.80616; /*--- Acceleartion of gravity ---*/
+  static const double T_bar    = 273.0;   /*--- Isothermal temperature ---*/
+  static const double u0_tilde = 1.0;
 
-  static const unsigned int degree_mapping = 2;
+  static const unsigned int degree_mapping = 2; /*--- Degree for high order mapping (useful in particular for visualization) ---*/
 
   // We start with the density (since it is a scalar field) we can derive
   // directly from the deal.II built-in class Function. Notice that in order to
@@ -50,36 +53,16 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    const double N           = 0.01;    /*--- Buyoancy frequency ---*/
-    const double g           = 9.80616; /*--- Acceleration of gravity ---*/
+    const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    const double phi    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
 
-    const double T_ref       = 300.0;    /*--- Reference temperature ---*/
-    const double p_ref       = 100000.0; /*--- Reference pressure ---*/
-    const double rho_ref     = p_ref/(EquationData::R*T_ref); /*--- Reference density ---*/
-    const double Gamma       = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
+    const double s      = radius*std::cos(phi); /*--- Radial distance from the polar axis ---*/
 
-    const double radius      = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
-    const double z           = radius - EquationData::a;
-    const double pi_bar      = 1.0 - g*g/(N*N)*Gamma*rho_ref/p_ref*(1.0 - std::exp(-N*N/g*z));
+    const double q      = 1.0/(EquationData::R*EquationData::T_bar)*
+                          (0.5*EquationData::u0_tilde*EquationData::u0_tilde*s*s -
+                           EquationData::a*EquationData::g*(1.0 - EquationData::a/radius));
 
-    const double theta_bar   = T_ref*std::exp(N*N/g*z);
-
-    const double phi         = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
-    const double lambda      = std::atan2(p[1], p[0]) + numbers::PI; // longitude (atan2 returns range -pi to pi,
-                                                                     //            which is not ok for geographic applications)
-    const double lambda_c    = numbers::PI;
-    const double phi_c       = 0.0;
-    const double r           = radius*std::acos(std::sin(phi_c)*std::sin(phi) +
-                                                std::cos(phi_c)*std::cos(phi)*std::cos(lambda - lambda_c)); // great circle distance
-    const double R           = EquationData::a/3.0;
-    const double s           = 0.5*(1.0 + std::cos(numbers::PI*r/R))*(r < R);
-    const double dtheta      = 10.0;
-    const double Lz          = 20000.0;
-    const double theta_prime = dtheta*s*std::sin(2.0*numbers::PI*z/Lz);
-
-    const double theta       = theta_bar + theta_prime;
-
-    return rho_ref*T_ref/theta*std::pow(pi_bar, 1.0/(EquationData::Cp_Cv - 1.0));
+    return std::exp(q);
   }
 
 
@@ -109,7 +92,26 @@ namespace EquationData {
   double Velocity<dim>::value(const Point<dim>& p, const unsigned int component) const {
     AssertIndexRange(component, dim);
 
-    return 0.0;
+    const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    const double phi    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
+    const double lambda = std::atan2(p[1], p[0]) + numbers::PI; // longitude (atan2 returns range -pi to pi,
+                                                                //            which is not ok for geographic applications)
+
+    const double U      = radius/EquationData::u0_tilde;
+
+    const double u      = U*std::cos(phi); // longitudinal
+    const double v      = 0.0;             // latitudinal
+    const double w      = 0.0;             // radial
+
+    if(component == 0) {
+      return -u*std::sin(lambda) -v*std::cos(lambda)*std::sin(phi) + w*std::cos(phi)*std::cos(lambda);
+    }
+    else if(component == 1) {
+      return u*std::cos(lambda) - v*std::sin(lambda)*std::sin(phi) + w*std::cos(phi)*std::cos(phi);
+    }
+    else {
+      return v*std::cos(phi) + w*std::sin(phi);
+    }
   }
 
   // Put together for a vector evalutation of the velocity.
@@ -151,20 +153,16 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    const double N       = 0.01;    /*--- Buyoancy frequency ---*/
-    const double g       = 9.80616; /*--- Acceleration of gravity ---*/
+    const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    const double phi    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
 
-    const double T_ref   = 300.0;    /*--- Reference temperature ---*/
-    const double p_ref   = 100000.0; /*--- Reference pressure ---*/
-    const double rho_ref = p_ref/(EquationData::R*T_ref); /*--- Reference density ---*/
-    const double Gamma   = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
+    const double s      = radius*std::cos(phi); /*--- Radial distance from the polar axis ---*/
 
-    const double radius  = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
-    const double z       = radius - EquationData::a;
+    const double q      = 1.0/(EquationData::R*EquationData::T_bar)*
+                          (0.5*EquationData::u0_tilde*EquationData::u0_tilde*s*s -
+                           EquationData::a*EquationData::g*(1.0 - EquationData::a/radius));
 
-    const double pi_bar  = 1.0 - g*g/(N*N)*Gamma*rho_ref/p_ref*(1.0 - std::exp(-N*N/g*z));
-
-    return p_ref*std::pow(pi_bar, 1.0/Gamma);
+    return std::exp(q);
   }
 
 } // namespace EquationData
