@@ -21,13 +21,20 @@ namespace EquationData {
   static const unsigned int degree_rho = 1;
   static const unsigned int degree_u   = 1;
 
-  static const double Cp_Cv    = 1.4;   /*--- Specific heats ratio ---*/
-  static const double R        = 287.0; /*--- Specific gas constant ---*/
+  static const double Cp_Cv     = 1.4;   /*--- Specific heats ratio ---*/
+  static const double R         = 287.0; /*--- Specific gas constant ---*/
 
-  static const double a        = 1.0;     /*--- Radius of the earth ---*/
-  static const double g        = 9.80616; /*--- Acceleartion of gravity ---*/
-  static const double T_bar    = 273.0;   /*--- Isothermal temperature ---*/
-  static const double u0_tilde = 1.0;
+  static const double a         = 1.0;                /*--- Radius of the earth ---*/
+  static const double g         = 9.80616;            /*--- Acceleartion of gravity ---*/
+  static const double T_bar     = 273.0;              /*--- Isothermal temperature ---*/
+  static const double p0        = 100000.0;           /*--- Pressure at surface, which conicides with the reference surface pressure ---*/
+  static const double Tf        = 2.0*numbers::PI;    /*--- Rotation period for solid-body rotation ---*/
+  static const double Omega_sbr = 2.0*numbers::PI/Tf; /*--- Solid-body rotation rate ---*/
+
+  static const double p_ref     = p0;              /*--- Reference pressure for adimensionalization ---*/
+  static const double rho_ref   = p_ref/(R*T_bar); /*--- Reference density for adimensionalization ---*/
+  static const double u_ref     = a*Omega_sbr;     /*--- Reference velocity for adimensionalization ---*/
+  static const double L_ref     = a;               /*--- Reference length for adimensionalization ---*/
 
   static const unsigned int degree_mapping = 2; /*--- Degree for high order mapping (useful in particular for visualization) ---*/
 
@@ -56,13 +63,15 @@ namespace EquationData {
     const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
     const double phi    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
 
-    const double s      = radius*std::cos(phi); /*--- Radial distance from the polar axis ---*/
+    const double s      = radius*std::cos(phi)*EquationData::L_ref; /*--- Radial distance from the polar axis ---*/
 
     const double q      = 1.0/(EquationData::R*EquationData::T_bar)*
-                          (0.5*EquationData::u0_tilde*EquationData::u0_tilde*s*s -
+                          (0.5*EquationData::Omega_sbr*EquationData::Omega_sbr*s*s -
                            EquationData::a*EquationData::g*(1.0 - EquationData::a/radius));
 
-    return std::exp(q);
+    const double rho0   = EquationData::p0/(EquationData::R*EquationData::T_bar);
+
+    return (rho0/EquationData::rho_ref)*std::exp(q);
   }
 
 
@@ -94,10 +103,9 @@ namespace EquationData {
 
     const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
     const double phi    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
-    const double lambda = std::atan2(p[1], p[0]) + numbers::PI; // longitude (atan2 returns range -pi to pi,
-                                                                //            which is not ok for geographic applications)
+    const double lambda = std::atan2(p[1], p[0]); // longitude (atan2 returns range -pi to pi, which is ok for Staniforth paper)
 
-    const double U      = radius/EquationData::u0_tilde;
+    const double U      = radius*EquationData::L_ref*EquationData::Omega_sbr/EquationData::u_ref;
 
     const double u      = U*std::cos(phi); // longitudinal
     const double v      = 0.0;             // latitudinal
@@ -107,7 +115,7 @@ namespace EquationData {
       return -u*std::sin(lambda) -v*std::cos(lambda)*std::sin(phi) + w*std::cos(phi)*std::cos(lambda);
     }
     else if(component == 1) {
-      return u*std::cos(lambda) - v*std::sin(lambda)*std::sin(phi) + w*std::cos(phi)*std::cos(phi);
+      return u*std::cos(lambda) - v*std::sin(lambda)*std::sin(phi) + w*std::cos(phi)*std::sin(lambda);
     }
     else {
       return v*std::cos(phi) + w*std::sin(phi);
@@ -156,13 +164,13 @@ namespace EquationData {
     const double radius = std::sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
     const double phi    = std::asin(p[2]/radius); // latitude (asin returns range -pi/2 to pi/2, which is ok for geographic applications)
 
-    const double s      = radius*std::cos(phi); /*--- Radial distance from the polar axis ---*/
+    const double s      = radius*std::cos(phi)*EquationData::L_ref; /*--- Radial distance from the polar axis ---*/
 
     const double q      = 1.0/(EquationData::R*EquationData::T_bar)*
-                          (0.5*EquationData::u0_tilde*EquationData::u0_tilde*s*s -
+                          (0.5*EquationData::Omega_sbr*EquationData::Omega_sbr*s*s -
                            EquationData::a*EquationData::g*(1.0 - EquationData::a/radius));
 
-    return std::exp(q);
+    return (EquationData::p0/EquationData::p_ref)*std::exp(q);
   }
 
 } // namespace EquationData

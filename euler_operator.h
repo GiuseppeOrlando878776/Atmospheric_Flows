@@ -1020,10 +1020,28 @@ namespace Atmospheric_Flow {
           const auto& rho_tmp_2 = phi_rho_tmp_2.get_value(q);
           const auto& u_fixed   = phi_u_fixed.get_value(q);
 
+          /*--- Compute the unit normal vecotr for gravity, which for spherical geoemetry is radial and therefore space dependent ---*/
+          Tensor<1, dim, VectorizedArray<Number>> e_r;
+          const auto& point_vectorized = phi.quadrature_point(q);
+          Point<dim> point;
+          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
+            for(unsigned int d = 0; d < dim; ++d) {
+              point[d] = point_vectorized[d][v];
+            }
+          }
+          const double radius  = std::sqrt(point[0]*point[0] + point[1]*point[1] + point[2]*point[2]);
+          const double phi_lat = std::asin(point[2]/radius);
+          const double lambda  = std::atan2(point[1], point[0]);
+          e_r[0] = make_vectorized_array<Number>(std::cos(phi_lat)*std::cos(lambda));
+          e_r[1] = make_vectorized_array<Number>(std::cos(phi_lat)*std::sin(lambda));
+          e_r[2] = make_vectorized_array<Number>(std::sin(phi_lat));
+
           phi.submit_value(rho_old*E_old -
                            0.5*rho_tmp_2*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           a21_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           a22_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_fixed[dim - 1], q);
+                           a21_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*scalar_product(u_old, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           a22_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*scalar_product(u_fixed, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref), q);
           phi.submit_gradient(0.5*a21*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               a21_tilde*dt*(rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old, q);
           /*--- The specific enthalpy is computed with the generic relation e + p/rho ---*/
@@ -1083,11 +1101,30 @@ namespace Atmospheric_Flow {
           const auto& rho_tmp_3  = phi_rho_tmp_3.get_value(q);
           const auto& u_fixed    = phi_u_fixed.get_value(q);
 
+          /*--- Compute the unit normal vecotr for gravity, which for spherical geoemetry is radial and therefore space dependent ---*/
+          Tensor<1, dim, VectorizedArray<Number>> e_r;
+          const auto& point_vectorized = phi.quadrature_point(q);
+          Point<dim> point;
+          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
+            for(unsigned int d = 0; d < dim; ++d) {
+              point[d] = point_vectorized[d][v];
+            }
+          }
+          const double radius  = std::sqrt(point[0]*point[0] + point[1]*point[1] + point[2]*point[2]);
+          const double phi_lat = std::asin(point[2]/radius);
+          const double lambda  = std::atan2(point[1], point[0]);
+          e_r[0] = make_vectorized_array<Number>(std::cos(phi_lat)*std::cos(lambda));
+          e_r[1] = make_vectorized_array<Number>(std::cos(phi_lat)*std::sin(lambda));
+          e_r[2] = make_vectorized_array<Number>(std::sin(phi_lat));
+
           phi.submit_value(rho_old*E_old -
                            0.5*rho_tmp_3*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           a31_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           a32_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
-                           a33_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_fixed[dim - 1], q);
+                           a31_tilde*dt*Ma*Ma/(Fr*Fr)*rho_old*scalar_product(u_old, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           a32_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*scalar_product(u_tmp_2, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           a33_tilde*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*scalar_product(u_fixed, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref), q);
           phi.submit_gradient(0.5*a31*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               a31_tilde*dt*
                               (rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old +
@@ -1166,11 +1203,30 @@ namespace Atmospheric_Flow {
           const auto& rho_curr   = phi_rho_curr.get_value(q);
           const auto& u_fixed    = phi_u_fixed.get_value(q);
 
+          /*--- Compute the unit normal vecotr for gravity, which for spherical geoemetry is radial and therefore space dependent ---*/
+          Tensor<1, dim, VectorizedArray<Number>> e_r;
+          const auto& point_vectorized = phi.quadrature_point(q);
+          Point<dim> point;
+          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
+            for(unsigned int d = 0; d < dim; ++d) {
+              point[d] = point_vectorized[d][v];
+            }
+          }
+          const double radius  = std::sqrt(point[0]*point[0] + point[1]*point[1] + point[2]*point[2]);
+          const double phi_lat = std::asin(point[2]/radius);
+          const double lambda  = std::atan2(point[1], point[0]);
+          e_r[0] = make_vectorized_array<Number>(std::cos(phi_lat)*std::cos(lambda));
+          e_r[1] = make_vectorized_array<Number>(std::cos(phi_lat)*std::sin(lambda));
+          e_r[2] = make_vectorized_array<Number>(std::sin(phi_lat));
+
           phi.submit_value(rho_old*E_old -
                            0.5*rho_curr*Ma*Ma*scalar_product(u_fixed, u_fixed) -
-                           b1*dt*Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1] -
-                           b2*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1] -
-                           b3*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*u_tmp_3[dim - 1], q);
+                           b1*dt*Ma*Ma/(Fr*Fr)*rho_old*scalar_product(u_old, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           b2*dt*Ma*Ma/(Fr*Fr)*rho_tmp_2*scalar_product(u_tmp_2, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           b3*dt*Ma*Ma/(Fr*Fr)*rho_tmp_3*scalar_product(u_tmp_3, e_r)*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref), q);
           phi.submit_gradient(0.5*b1*dt*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old +
                               b1*dt*(rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) + pres_old)*u_old +
                               0.5*b2*dt*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2)*rho_tmp_2*u_tmp_2 +
@@ -2255,14 +2311,6 @@ namespace Atmospheric_Flow {
                                          Vec&                                         dst,
                                          const std::vector<Vec>&                      src,
                                          const std::pair<unsigned int, unsigned int>& cell_range) const {
-    /*--- We create an auxiliary vector for the unit vector along vertical direction. This will never change
-          independently on the stage, so we declare it once and for all. ---*/
-    Tensor<1, dim, VectorizedArray<Number>> e_k;
-    for(unsigned int d = 0; d < dim - 1; ++d) {
-      e_k[d] = make_vectorized_array<Number>(0.0);
-    }
-    e_k[dim - 1] = make_vectorized_array<Number>(1.0);
-
     if(HYPERBOLIC_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, 0),
@@ -2303,9 +2351,27 @@ namespace Atmospheric_Flow {
 
           const auto& rho_tmp_2          = phi_rho_tmp_2.get_value(q);
 
+          /*--- Compute the unit normal vecotr for gravity, which for spherical geoemetry is radial and therefore space dependent ---*/
+          Tensor<1, dim, VectorizedArray<Number>> e_r;
+          const auto& point_vectorized = phi.quadrature_point(q);
+          Point<dim> point;
+          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
+            for(unsigned int d = 0; d < dim; ++d) {
+              point[d] = point_vectorized[d][v];
+            }
+          }
+          const double radius  = std::sqrt(point[0]*point[0] + point[1]*point[1] + point[2]*point[2]);
+          const double phi_lat = std::asin(point[2]/radius);
+          const double lambda  = std::atan2(point[1], point[0]);
+          e_r[0] = make_vectorized_array<Number>(std::cos(phi_lat)*std::cos(lambda));
+          e_r[1] = make_vectorized_array<Number>(std::cos(phi_lat)*std::sin(lambda));
+          e_r[2] = make_vectorized_array<Number>(std::sin(phi_lat));
+
           phi.submit_value(rho_old*u_old -
-                           a21_tilde*dt/(Fr*Fr)*rho_old*e_k -
-                           a22_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k, q);
+                           a21_tilde*dt/(Fr*Fr)*rho_old*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           a22_tilde*dt/(Fr*Fr)*rho_tmp_2*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref), q);
           phi.submit_gradient(a21*dt*rho_old*tensor_product_u_n + a21_tilde*dt/(Ma*Ma)*p_n_times_identity, q);
         }
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -2369,10 +2435,29 @@ namespace Atmospheric_Flow {
 
           const auto& rho_curr               = phi_rho_curr.get_value(q);
 
+          /*--- Compute the unit normal vecotr for gravity, which for spherical geoemetry is radial and therefore space dependent ---*/
+          Tensor<1, dim, VectorizedArray<Number>> e_r;
+          const auto& point_vectorized = phi.quadrature_point(q);
+          Point<dim> point;
+          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
+            for(unsigned int d = 0; d < dim; ++d) {
+              point[d] = point_vectorized[d][v];
+            }
+          }
+          const double radius  = std::sqrt(point[0]*point[0] + point[1]*point[1] + point[2]*point[2]);
+          const double phi_lat = std::asin(point[2]/radius);
+          const double lambda  = std::atan2(point[1], point[0]);
+          e_r[0] = make_vectorized_array<Number>(std::cos(phi_lat)*std::cos(lambda));
+          e_r[1] = make_vectorized_array<Number>(std::cos(phi_lat)*std::sin(lambda));
+          e_r[2] = make_vectorized_array<Number>(std::sin(phi_lat));
+
           phi.submit_value(rho_old*u_old -
-                           a31_tilde*dt/(Fr*Fr)*rho_old*e_k -
-                           a32_tilde*dt/(Fr*Fr)*rho_tmp_2*e_k -
-                           a33_tilde*dt/(Fr*Fr)*rho_curr*e_k, q);
+                           a31_tilde*dt/(Fr*Fr)*rho_old*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           a32_tilde*dt/(Fr*Fr)*rho_tmp_2*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           a33_tilde*dt/(Fr*Fr)*rho_curr*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref), q);
           phi.submit_gradient(a31*dt*rho_old*tensor_product_u_n + a31_tilde*dt/(Ma*Ma)*p_n_times_identity +
                               a32*dt*rho_tmp_2*tensor_product_u_tmp_2 + a32_tilde*dt/(Ma*Ma)*p_tmp_2_times_identity, q);
         }
@@ -2452,10 +2537,29 @@ namespace Atmospheric_Flow {
             p_tmp_3_times_identity[d][d] = pres_tmp_3;
           }
 
+          /*--- Compute the unit normal vecotr for gravity, which for spherical geoemetry is radial and therefore space dependent ---*/
+          Tensor<1, dim, VectorizedArray<Number>> e_r;
+          const auto& point_vectorized = phi.quadrature_point(q);
+          Point<dim> point;
+          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
+            for(unsigned int d = 0; d < dim; ++d) {
+              point[d] = point_vectorized[d][v];
+            }
+          }
+          const double radius  = std::sqrt(point[0]*point[0] + point[1]*point[1] + point[2]*point[2]);
+          const double phi_lat = std::asin(point[2]/radius);
+          const double lambda  = std::atan2(point[1], point[0]);
+          e_r[0] = make_vectorized_array<Number>(std::cos(phi_lat)*std::cos(lambda));
+          e_r[1] = make_vectorized_array<Number>(std::cos(phi_lat)*std::sin(lambda));
+          e_r[2] = make_vectorized_array<Number>(std::sin(phi_lat));
+
           phi.submit_value(rho_old*u_old -
-                           b1*dt/(Fr*Fr)*rho_old*e_k -
-                           b2*dt/(Fr*Fr)*rho_tmp_2*e_k -
-                           b3*dt/(Fr*Fr)*rho_tmp_3*e_k, q);
+                           b1*dt/(Fr*Fr)*rho_old*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           b2*dt/(Fr*Fr)*rho_tmp_2*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref) -
+                           b3*dt/(Fr*Fr)*rho_tmp_3*e_r*
+                           EquationData::a*EquationData::a/(radius*radius*EquationData::L_ref*EquationData::L_ref), q);
           phi.submit_gradient(b1*dt*rho_old*tensor_product_u_n + b1*dt/(Ma*Ma)*p_n_times_identity +
                               b2*dt*rho_tmp_2*tensor_product_u_tmp_2 + b2*dt/(Ma*Ma)*p_tmp_2_times_identity +
                               b3*dt*rho_tmp_3*tensor_product_u_tmp_3 + b3*dt/(Ma*Ma)*p_tmp_3_times_identity, q);

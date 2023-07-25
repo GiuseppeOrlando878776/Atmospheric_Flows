@@ -260,6 +260,7 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
   TimerOutput::Scope t(time_table, "Create triangulation");
 
   GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 0.9, 1.0, 1);
+  GridTools::scale(EquationData::a/EquationData::L_ref, triangulation);
 
   triangulation.refine_global(n_refines);
 

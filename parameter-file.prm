@@ -10,7 +10,7 @@ end
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.0002
+  set dt = 0.0008
 end
 
 subsection Space discretization
@@ -28,7 +28,7 @@ end
 set saving directory = Exact_Steady
 
 # The output frequency
-set output_interval = 4
+set output_interval = 2
 
 # Finally we set the verbosity level
 set verbose = true
