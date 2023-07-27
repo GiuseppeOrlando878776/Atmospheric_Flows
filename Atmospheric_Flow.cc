@@ -136,10 +136,12 @@ protected:
 
   void output_results(const unsigned int step); /*--- Function to save the results ---*/
 
+  void analyze_results(); /*--- Since we have an analytical result, we check the errors ---*/
+
 private:
-  EquationData::Density<dim>  rho_init;
-  EquationData::Velocity<dim> u_init;
-  EquationData::Pressure<dim> pres_init;
+  EquationData::Density<dim>  rho_exact;
+  EquationData::Velocity<dim> u_exact;
+  EquationData::Pressure<dim> pres_exact;
 
   /*--- Auxiliary structures for the matrix-free and for the multigrid ---*/
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
@@ -176,6 +178,18 @@ private:
   std::ofstream output_n_dofs_velocity;
   std::ofstream output_n_dofs_temperature;
   std::ofstream output_n_dofs_density;
+
+  /*--- Now we declare a bunch of variables for error analysis ---*/
+  std::ofstream output_error_vel;
+  std::ofstream output_error_rho;
+  std::ofstream output_error_pres;
+
+  Vector<double> L2_error_per_cell_vel,
+                 L2_rel_error_per_cell_vel,
+                 L2_error_per_cell_rho,
+                 L2_rel_error_per_cell_rho,
+                 L2_error_per_cell_pres,
+                 L2_rel_error_per_cell_pres;
 
   Vector<double> Linfty_error_per_cell_pres; /*--- Auxiliary variable for the end of the fixed point loop ---*/
 
@@ -217,9 +231,9 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   quadrature_density(EquationData::degree_rho + 1),
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_temperature(EquationData::degree_T + 1),
-  rho_init(data.initial_time),
-  u_init(data.initial_time),
-  pres_init(data.initial_time),
+  rho_exact(data.initial_time),
+  u_exact(data.initial_time),
+  pres_exact(data.initial_time),
   euler_matrix(data),
   max_its(data.max_iterations),
   eps(data.eps),
@@ -231,7 +245,10 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   time_table(ptime_out, TimerOutput::summary, TimerOutput::cpu_and_wall_times),
   output_n_dofs_velocity("./" + data.dir + "/n_dofs_velocity.dat", std::ofstream::out),
   output_n_dofs_temperature("./" + data.dir + "/n_dofs_temperature.dat", std::ofstream::out),
-  output_n_dofs_density("./" + data.dir + "/n_dofs_density.dat", std::ofstream::out) {
+  output_n_dofs_density("./" + data.dir + "/n_dofs_density.dat", std::ofstream::out),
+  output_error_vel("./" + data.dir + "/error_analysis_vel.dat", std::ofstream::out),
+  output_error_rho("./" + data.dir + "/error_analysis_rho.dat", std::ofstream::out),
+  output_error_pres("./" + data.dir + "/error_analysis_pres.dat", std::ofstream::out) {
     AssertThrow(!((dt <= 0.0) || (dt > 0.5*T)), ExcInvalidTimeStep(dt, 0.5*T));
 
     matrix_free_storage = std::make_shared<MatrixFree<dim, double>>();
@@ -358,6 +375,12 @@ void EulerSolver<dim>::setup_dofs() {
   /*--- Initialize the auxiliary variable to check the error and stop the fixed point loop ---*/
   Vector<double> error_per_cell_tmp(triangulation.n_active_cells());
   Linfty_error_per_cell_pres.reinit(error_per_cell_tmp);
+  L2_error_per_cell_vel.reinit(error_per_cell_tmp);
+  L2_rel_error_per_cell_vel.reinit(error_per_cell_tmp);
+  L2_error_per_cell_rho.reinit(error_per_cell_tmp);
+  L2_rel_error_per_cell_rho.reinit(error_per_cell_tmp);
+  L2_error_per_cell_pres.reinit(error_per_cell_tmp);
+  L2_rel_error_per_cell_pres.reinit(error_per_cell_tmp);
 
   /*--- Initialize the multigrid physical parameters ---*/
   mg_matrices_euler.clear_elements();
@@ -391,9 +414,9 @@ template<int dim>
 void EulerSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_init, u_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_init, pres_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_exact, rho_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_exact, u_old);
+  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_exact, pres_old);
 }
 
 
@@ -879,6 +902,61 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
 }
 
 
+// Since we have solved a problem with analytic solution, we want to verify
+// the correctness of our implementation by computing the errors of the
+// numerical result against the analytic solution.
+//
+template<int dim>
+void EulerSolver<dim>::analyze_results() {
+  TimerOutput::Scope t(time_table, "Analysis results: computing errrors");
+
+  u_tmp_2 = 0;
+
+  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_old, u_exact,
+                                    L2_error_per_cell_vel, QGauss<dim>(EquationData::degree_u + 1), VectorTools::L2_norm);
+  const double error_vel_L2 = VectorTools::compute_global_error(triangulation, L2_error_per_cell_vel, VectorTools::L2_norm);
+  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_tmp_2, u_exact,
+                                    L2_rel_error_per_cell_vel, QGauss<dim>(EquationData::degree_u + 1), VectorTools::L2_norm);
+  const double L2_vel = VectorTools::compute_global_error(triangulation, L2_rel_error_per_cell_vel, VectorTools::L2_norm);
+  const double error_rel_vel_L2 = error_vel_L2/L2_vel;
+  pcout << "Verification via L2 error velocity:    "<< error_vel_L2 << std::endl;
+  pcout << "Verification via L2 relative error velocity:    "<< error_rel_vel_L2 << std::endl;
+
+  rho_tmp_2 = 0;
+
+  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_old, rho_exact,
+                                    L2_error_per_cell_rho, QGauss<dim>(EquationData::degree_rho + 1), VectorTools::L2_norm);
+  const double error_rho_L2 = VectorTools::compute_global_error(triangulation, L2_error_per_cell_rho, VectorTools::L2_norm);
+  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_tmp_2, rho_exact,
+                                    L2_rel_error_per_cell_rho, QGauss<dim>(EquationData::degree_rho + 1), VectorTools::L2_norm);
+  const double L2_rho = VectorTools::compute_global_error(triangulation, L2_rel_error_per_cell_rho, VectorTools::L2_norm);
+  const double error_rel_rho_L2 = error_rho_L2/L2_rho;
+  pcout << "Verification via L2 error density:    "<< error_rho_L2 << std::endl;
+  pcout << "Verification via L2 relative error density:    "<< error_rel_rho_L2 << std::endl;
+
+  pres_tmp_2 = 0;
+
+  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_old, pres_exact,
+                                    L2_error_per_cell_pres, QGauss<dim>(EquationData::degree_T + 1), VectorTools::L2_norm);
+  const double error_pres_L2 = VectorTools::compute_global_error(triangulation, L2_error_per_cell_pres, VectorTools::L2_norm);
+  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_tmp_2, pres_exact,
+                                    L2_rel_error_per_cell_pres, QGauss<dim>(EquationData::degree_T + 1), VectorTools::L2_norm);
+  const double L2_pres = VectorTools::compute_global_error(triangulation, L2_rel_error_per_cell_pres, VectorTools::L2_norm);
+  const double error_rel_pres_L2 = error_pres_L2/L2_pres;
+  pcout << "Verification via L2 error pressure:    "          << error_pres_L2     << std::endl;
+  pcout << "Verification via L2 relative error pressure:    " << error_rel_pres_L2 << std::endl;
+
+  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+    output_error_vel << error_vel_L2       << std::endl;
+    output_error_vel << error_rel_vel_L2   << std::endl;
+    output_error_rho << error_rho_L2       << std::endl;
+    output_error_rho << error_rel_rho_L2   << std::endl;
+    output_error_pres << error_pres_L2     << std::endl;
+    output_error_pres << error_rel_pres_L2 << std::endl;
+  }
+}
+
+
 // The following function is used in determining the maximal velocity
 // in order to compute the CFL
 //
@@ -996,8 +1074,11 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
   ConditionalOStream verbose_cout(std::cout, verbose && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
 
   output_results(0);
-  double time = t_0;
+  analyze_results();
+
+  double time    = t_0;
   unsigned int n = 0;
+
   while(std::abs(T - time) > 1e-10) {
     time += dt;
     n++;
@@ -1130,6 +1211,7 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
       verbose_cout << "Plotting Solution final" << std::endl;
       output_results(n);
     }
+    analyze_results();
     if(T - time < dt && T - time > 1e-10) {
       /*--- Recompute and rest the time if needed towards the end of the simulation to stop at the proper final time ---*/
       dt = T - time;
