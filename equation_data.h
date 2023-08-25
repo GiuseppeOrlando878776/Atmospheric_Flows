@@ -23,7 +23,12 @@ namespace EquationData {
 
   static const double a  = 6.37122e6; /*--- Radius of the earth ---*/
   static const double h0 = 1000.0;
-  static const double T  = 86400.0;  /*--- Characteristic time for velocity ---*/
+
+  static const double Tf        = 86400.0;            /*--- Rotation period for solid-body rotation ---*/
+  static const double Omega_sbr = 2.0*numbers::PI/Tf; /*--- Solid-body rotation rate ---*/
+
+  static const double L_ref = 1.0; /*--- Reference length for adimensinoalization ---*/
+  static const double u_ref = 1.0; /*--- Reference velocity for adimensionalization ---*/
 
   // We declare now the class that describes the velocity.
   //
@@ -56,7 +61,7 @@ namespace EquationData {
     const double lambda = std::atan2(p[1], p[0]) + numbers::PI; // longitude (atan2 returns range -pi to pi,
                                                                 //            which is not ok for geographic applications)
 
-    const double U      = radius/EquationData::T;
+    const double U      = radius*EquationData::L_ref*EquationData::Omega_sbr/EquationData::u_ref;
 
     const double alpha  = 0.0;
     const double u      = U*(std::cos(alpha)*std::cos(phi) +

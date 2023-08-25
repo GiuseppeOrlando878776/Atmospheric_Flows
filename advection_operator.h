@@ -33,7 +33,7 @@ namespace Advection {
     void set_dt(const double time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
                                                in case of modifications of the time step. ---*/
 
-    void vmult_rhs_update(Vec& dst, const std::vector<Vec>& src) const; /*--- Auxiliary function to assemble the rhs. ---*/
+    void vmult_rhs_update(Vec& dst, const Vec& src) const; /*--- Auxiliary function to assemble the rhs. ---*/
 
     virtual void compute_diagonal() override; /*--- Overriden function to compute the diagonal. ---*/
 
@@ -52,15 +52,15 @@ namespace Advection {
           we distinguish between the contribution for cells, faces and boundary. ---*/
     void assemble_rhs_cell_term_update(const MatrixFree<dim, Number>&               data,
                                        Vec&                                         dst,
-                                       const std::vector<Vec>&                      src,
+                                       const Vec&                                   src,
                                        const std::pair<unsigned int, unsigned int>& cell_range) const;
     void assemble_rhs_face_term_update(const MatrixFree<dim, Number>&               data,
                                        Vec&                                         dst,
-                                       const std::vector<Vec>&                      src,
+                                       const Vec&                                   src,
                                        const std::pair<unsigned int, unsigned int>& face_range) const;
     void assemble_rhs_boundary_term_update(const MatrixFree<dim, Number>&               data,
                                            Vec&                                         dst,
-                                           const std::vector<Vec>&                      src,
+                                           const Vec&                                   src,
                                            const std::pair<unsigned int, unsigned int>& face_range) const {}
 
     /*--- Assembler function related to the bilinear form. Only cell contribution is present,
@@ -108,14 +108,14 @@ namespace Advection {
   void AdvectionOperator<dim, fe_degree, n_q_points_1d, Vec>::
   assemble_rhs_cell_term_update(const MatrixFree<dim, Number>&               data,
                                 Vec&                                         dst,
-                                const std::vector<Vec>&                      src,
+                                const Vec&                                   src,
                                 const std::pair<unsigned int, unsigned int>& cell_range) const {
     FEEvaluation<dim, fe_degree, n_q_points_1d, 1, Number> phi(data, 1),
                                                            phi_rho_prev(data, 1);
 
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_rho_prev.reinit(cell);
-      phi_rho_prev.gather_evaluate(src[0], EvaluationFlags::values);
+      phi_rho_prev.gather_evaluate(src, EvaluationFlags::values);
 
       phi.reinit(cell);
 
@@ -144,7 +144,7 @@ namespace Advection {
   void AdvectionOperator<dim, fe_degree, n_q_points_1d, Vec>::
   assemble_rhs_face_term_update(const MatrixFree<dim, Number>&               data,
                                 Vec&                                         dst,
-                                const std::vector<Vec>&                      src,
+                                const Vec&                                   src,
                                 const std::pair<unsigned int, unsigned int>& face_range) const {
     FEFaceEvaluation<dim, fe_degree, n_q_points_1d, 1, Number> phi_p(data, true, 1),
                                                                phi_m(data, false, 1),
@@ -153,9 +153,9 @@ namespace Advection {
 
     for(unsigned int face = face_range.first; face < face_range.second; ++face) {
       phi_rho_prev_p.reinit(face);
-      phi_rho_prev_p.gather_evaluate(src[0], EvaluationFlags::values);
+      phi_rho_prev_p.gather_evaluate(src, EvaluationFlags::values);
       phi_rho_prev_m.reinit(face);
-      phi_rho_prev_m.gather_evaluate(src[0], EvaluationFlags::values);
+      phi_rho_prev_m.gather_evaluate(src, EvaluationFlags::values);
 
       phi_p.reinit(face);
       phi_m.reinit(face);
@@ -193,10 +193,8 @@ namespace Advection {
   //
   template<int dim, int fe_degree, int n_q_points_1d, typename Vec>
   void AdvectionOperator<dim, fe_degree, n_q_points_1d, Vec>::
-  vmult_rhs_update(Vec& dst, const std::vector<Vec>& src) const {
-    for(unsigned int d = 0; d < src.size(); ++d) {
-      src[d].update_ghost_values();
-    }
+  vmult_rhs_update(Vec& dst, const Vec& src) const {
+    src.update_ghost_values();
 
     this->data->loop(&AdvectionOperator::assemble_rhs_cell_term_update,
                      &AdvectionOperator::assemble_rhs_face_term_update,

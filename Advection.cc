@@ -16,6 +16,7 @@
 #include <deal.II/grid/tria.h>
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_refinement.h>
+#include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/tria_accessor.h>
 #include <deal.II/grid/tria_iterator.h>
 #include <deal.II/grid/manifold_lib.h>
@@ -57,7 +58,7 @@ public:
   /*--- The run function which actually runs the simulation ---*/
 
 protected:
-  const double t_0;       /*--- Initial time auxiliary variable ----*/
+  const double t0;        /*--- Initial time auxiliary variable ----*/
   const double T;         /*--- Final time auxiliary variable ----*/
   unsigned int SSP_stage; /*--- Flag to check at which current stage of the IMEX we are ---*/
   double       dt;        /*--- Time step auxiliary variable ---*/
@@ -73,6 +74,9 @@ protected:
   /*--- Degrees of freedom handlers for all the variables ---*/
   DoFHandler<dim> dof_handler_density;
   DoFHandler<dim> dof_handler_velocity;
+
+  /*--- Mapping since we have curved domain ---*/
+  MappingQ<dim> mapping;
 
   /*--- Variables for the density ---*/
   LinearAlgebra::distributed::Vector<double> rho_old;
@@ -144,11 +148,11 @@ private:
 
   Vector<double> L2_error_per_cell_rho;
 
-  double get_maximal_velocity(); /*--- Get maximal velocity to compute the Courant number ---*/
+  double get_max_velocity(); /*--- Get maximum velocity to compute the Courant number ---*/
 
-  double get_minimal_density(); /*--- Get minimal density ---*/
+  double get_min_density(); /*--- Get minimum density ---*/
 
-  double get_maximal_density(); /*--- Get maximal density ---*/
+  double get_max_density(); /*--- Get maximum density ---*/
 };
 
 
@@ -161,17 +165,17 @@ private:
 //
 template<int dim>
 AdvectionSolver<dim>::AdvectionSolver(RunTimeParameters::Data_Storage& data):
-  t_0(data.initial_time),
+  t0(data.initial_time),
   T(data.final_time),
-  SSP_stage(1),            //--- Initialize the flag for the time advancing scheme
+  SSP_stage(1),
   dt(data.dt),
-  triangulation(MPI_COMM_WORLD, parallel::distributed::Triangulation<dim>::limit_level_difference_at_vertices,
-                parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy),
+  triangulation(MPI_COMM_WORLD),
   boundary_triangulation(MPI_COMM_WORLD),
   fe_density(FE_DGQ<dim>(EquationData::degree), 1),
   fe_velocity(FE_DGQ<dim>(EquationData::degree), dim),
   dof_handler_density(triangulation),
   dof_handler_velocity(triangulation),
+  mapping(EquationData::degree_mapping, true),
   u_init(data.initial_time),
   rho_init(data.initial_time),
   advection_matrix(data),
@@ -214,7 +218,7 @@ void AdvectionSolver<dim>::create_triangulation(const unsigned int n_refines) {
   TimerOutput::Scope t(time_table, "Create triangulation");
 
   GridGenerator::concentric_hyper_shells(triangulation, Point<dim>(), 0.99843044189, 1.0, 1);
-  GridTools::scale(EquationData::a, triangulation);
+  GridTools::scale(EquationData::a/EquationData::L_ref, triangulation);
 
   triangulation.refine_global(n_refines);
 
@@ -279,7 +283,7 @@ void AdvectionSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(EquationData::degree + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_mapping, true), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(mapping, dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(u, 0);
@@ -305,8 +309,8 @@ template<int dim>
 void AdvectionSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_init, rho_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_init, u);
+  VectorTools::interpolate(mapping, dof_handler_density, rho_init, rho_old);
+  VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u);
 }
 
 
@@ -323,13 +327,13 @@ void AdvectionSolver<dim>::update_density() {
   advection_matrix.initialize(matrix_free_storage, tmp, tmp);
 
   if(SSP_stage == 1) {
-    advection_matrix.vmult_rhs_update(rhs_rho, {rho_old});
+    advection_matrix.vmult_rhs_update(rhs_rho, rho_old);
   }
   else if(SSP_stage == 2){
-    advection_matrix.vmult_rhs_update(rhs_rho, {rho_tmp_2});
+    advection_matrix.vmult_rhs_update(rhs_rho, rho_tmp_2);
   }
   else {
-    advection_matrix.vmult_rhs_update(rhs_rho, {rho_tmp_3});
+    advection_matrix.vmult_rhs_update(rhs_rho, rho_tmp_3);
   }
 
   SolverControl solver_control(max_its, eps*rhs_rho.l2_norm());
@@ -378,7 +382,7 @@ void AdvectionSolver<dim>::refine_mesh() {
     double max_gradient_norm_square = 0.0;
     for(unsigned k = 0; k < fe_values.n_quadrature_points; ++k) {
       double gradient_norm_square = (gradients[k][0]*gradients[k][0] + gradients[k][1]*gradients[k][1]);
-      max_gradient_norm_square = std::max(gradient_norm_square, max_gradient_norm_square);
+      max_gradient_norm_square    = std::max(gradient_norm_square, max_gradient_norm_square);
     }
     copy_data.value = std::sqrt(max_gradient_norm_square);
   };
@@ -459,10 +463,6 @@ void AdvectionSolver<dim>::output_results(const unsigned int step) {
 
   DataOut<dim> data_out;
 
-  DataOutBase::VtkFlags flags;
-  flags.write_higher_order_cells = true;
-  data_out.set_flags(flags);
-
   rho_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_old, "rho", {DataComponentInterpretation::component_is_scalar});
 
@@ -472,10 +472,21 @@ void AdvectionSolver<dim>::output_results(const unsigned int step) {
   u.update_ghost_values();
   data_out.add_data_vector(dof_handler_velocity, u, velocity_names, component_interpretation_velocity);
 
-  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping, true), EquationData::degree, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(mapping, EquationData::degree, DataOut<dim>::curved_inner_cells);
 
-  const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
+  std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
+
+  /*--- Save high order mapping ---*/
+  DataOutBase::VtkFlags flags;
+  flags.write_higher_order_cells = true;
+  data_out.set_flags(flags);
+
+  output = "./" + saving_dir + "/solution_high_order-" + Utilities::int_to_string(step, 5) + ".vtu";
+  data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
+
+  rho_old.zero_out_ghosts();
+  u.zero_out_ghosts();
 }
 
 
@@ -492,6 +503,7 @@ void AdvectionSolver<dim>::analyze_results() {
   QGauss<dim - 1> face_quadrature_formula(EquationData::degree + 1);
   const unsigned int n_q_points = face_quadrature_formula.size();
   FEFaceValues<dim> fe_face_values(fe_density, face_quadrature_formula, update_values | update_quadrature_points | update_JxW_values);
+
   std::vector<double> rho_values(n_q_points);
 
   double local_error_squared = 0.0;
@@ -525,22 +537,50 @@ void AdvectionSolver<dim>::analyze_results() {
 }
 
 
-// The following function is used in determining the maximal velocity
+// The following function is used in determining the maximum velocity
 // in order to compute the CFL
 //
 template<int dim>
-double AdvectionSolver<dim>::get_maximal_velocity() {
-  return u.linfty_norm();
+double AdvectionSolver<dim>::get_max_velocity() {
+  QGaussLobatto<dim - 1> face_quadrature_formula(EquationData::degree + 1);
+  FEFaceValues<dim> fe_face_values(mapping, fe_velocity, face_quadrature_formula, update_values);
+  const unsigned int n_q_points = face_quadrature_formula.size();
+
+  std::vector<Vector<double>> velocity_values(n_q_points, Vector<double>(dim));
+
+  double max_local_velocity = 0.0;
+
+  for(const auto& cell : dof_handler_velocity.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      for(unsigned int face = 0; face < GeometryInfo<dim>::faces_per_cell; ++face) {
+        if(cell->face(face)->at_boundary() && cell->face(face)->boundary_id() == 1) {
+          fe_face_values.reinit(cell, face);
+
+          fe_face_values.get_function_values(u, velocity_values);
+
+          for(unsigned int q = 0; q < n_q_points; q++) {
+            max_local_velocity = std::max(max_local_velocity, std::sqrt(velocity_values[q][0]*velocity_values[q][0] +
+                                                                        velocity_values[q][1]*velocity_values[q][1]));
+          }
+        }
+      }
+    }
+  }
+
+  const double max_velocity = Utilities::MPI::max(max_local_velocity, MPI_COMM_WORLD);
+
+  return max_velocity;
 }
 
 
-// The following function is used in determining the minimal density
+// The following function is used in determining the minimum density
 //
 template<int dim>
-double AdvectionSolver<dim>::get_minimal_density() {
+double AdvectionSolver<dim>::get_min_density() {
   QGaussLobatto<dim - 1> face_quadrature_formula(EquationData::degree + 1);
+  FEFaceValues<dim> fe_face_values(mapping, fe_density, face_quadrature_formula, update_values);
   const unsigned int n_q_points = face_quadrature_formula.size();
-  FEFaceValues<dim> fe_face_values(fe_density, face_quadrature_formula, update_values);
+
   std::vector<double> rho_values(n_q_points);
 
   double min_local_density = std::numeric_limits<double>::max();
@@ -573,13 +613,14 @@ double AdvectionSolver<dim>::get_minimal_density() {
 }
 
 
-// The following function is used in determining the maximal density
+// The following function is used in determining the maximum density
 //
 template<int dim>
-double AdvectionSolver<dim>::get_maximal_density() {
+double AdvectionSolver<dim>::get_max_density() {
   QGaussLobatto<dim - 1> face_quadrature_formula(EquationData::degree + 1);
+  FEFaceValues<dim> fe_face_values(mapping, fe_density, face_quadrature_formula, update_values);
   const unsigned int n_q_points = face_quadrature_formula.size();
-  FEFaceValues<dim> fe_face_values(fe_density, face_quadrature_formula, update_values);
+
   std::vector<double> rho_values(n_q_points);
 
   double max_local_density = std::numeric_limits<double>::min();
@@ -614,7 +655,7 @@ double AdvectionSolver<dim>::get_maximal_density() {
 
 // @sect{ <code>AdvectionSolver::run</code> }
 
-// This is the time marching function, which starting at <code>t_0</code>
+// This is the time marching function, which starting at <code>t0</code>
 // advances in time using the projection method with time step <code>dt</code>
 // until <code>T</code>.
 //
@@ -628,8 +669,10 @@ void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_int
 
   analyze_results();
   output_results(0);
-  double time = t_0;
+
+  double time    = t0;
   unsigned int n = 0;
+
   while(std::abs(T - time) > 1e-10) {
     time += dt;
     n++;
@@ -640,31 +683,31 @@ void AdvectionSolver<dim>::run(const bool verbose, const unsigned int output_int
 
     verbose_cout << "  Update stage 1" << std::endl;
     update_density();
-    pcout << "Minimal density " << get_minimal_density() << std::endl;
-    pcout << "Maximal density " << get_maximal_density() << std::endl;
+    pcout << "Minimum density " << get_min_density() << std::endl;
+    pcout << "Maximum density " << get_max_density() << std::endl;
 
     /*--- Second stage of IMEX operator ---*/
     SSP_stage = 2;
 
     verbose_cout << "  Update stage 2" << std::endl;
     update_density();
-    pcout << "Minimal density " << get_minimal_density() << std::endl;
-    pcout << "Maximal density " << get_maximal_density() << std::endl;
+    pcout << "Minimum density " << get_min_density() << std::endl;
+    pcout << "Maximum density " << get_max_density() << std::endl;
 
     /*--- Final stage of RK scheme to update ---*/
     SSP_stage = 3;
 
     verbose_cout << "  Update stage 3" << std::endl;
     update_density();
-    pcout << "Minimal density " << get_minimal_density() << std::endl;
-    pcout << "Maximal density " << get_maximal_density() << std::endl;
+    pcout << "Minimum density " << get_min_density() << std::endl;
+    pcout << "Maximum density " << get_max_density() << std::endl;
 
     /*--- Update density ---*/
     rho_old.equ(1.0, rho_curr);
 
     /*--- Compute Courant number ---*/
-    const double max_velocity = get_maximal_velocity();
-    pcout<< "Maximal velocity = " << max_velocity << std::endl;
+    const double max_velocity = get_max_velocity();
+    pcout<< "Maximum velocity = " << max_velocity << std::endl;
     pcout << "CFL_u = " << dt*max_velocity*EquationData::degree*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(boundary_triangulation) << std::endl;
 

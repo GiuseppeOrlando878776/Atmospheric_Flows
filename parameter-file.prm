@@ -2,19 +2,21 @@ subsection Physical data
   # In this subsection we declare the physical data
   # The initial and final time, and the Reynolds number
   set initial_time = 0.0
-  set final_time   = 542867.21054
+  set final_time   = 86400.0
 end
 
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 10.602874944
+  set dt = 16.875
 end
 
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
   # we set the number of global refines the triangulation must have.
-  set n_of_refines = 4
+  set n_of_refines        = 4
+  set max_loc_refinements = 5
+  set min_loc_refinements = 3
 end
 
 subsection Data solve
@@ -26,7 +28,7 @@ end
 set saving directory = 4_Refinement
 
 # The output frequency
-set output_interval = 5120
+set output_interval = 512
 
 # Finally we set the verbosity level
 set verbose = true
