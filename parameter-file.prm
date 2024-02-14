@@ -1,0 +1,43 @@
+subsection Physical data
+  # In this subsection we declare the physical data
+  set initial_time = 0.0
+  set final_time   = 239.04
+  set Mach         = 0.0474433998
+  set Froude       = 0.13407986726
+end
+
+subsection Time step data
+  # In this subsection we declare the data that is to be used for time discretization,
+  # i.e. the time step dt
+  set dt = 0.01328
+end
+
+subsection Space discretization
+  # In this subsection we declare the data that is relevant to the space discretization
+  # we set the number of global refines the triangulation must have
+  set n_of_refines = 3
+end
+
+subsection Data solve
+  # In this section we declare the parameters that are going to control the solver
+  set max_iterations = 30000  # maximal number of iterations
+  set eps            = 1e-12  # stopping criterion
+end
+
+# The directory where results are saved
+set saving directory = NONLINEAR_NONHYDROSTATIC_48x48
+
+#The output frequency
+set output_interval = 3600
+
+#Finally we set the verbosity level
+set verbose = true
+
+#Set whether we are in presence of a restart or not
+set restart = false
+
+#Set if you want to save files for possible restart
+set save_for_restart = false
+
+#Set if you want to use the saved data for initial conditions
+set as_initial_conditions = true
