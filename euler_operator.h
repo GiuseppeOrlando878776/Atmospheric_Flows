@@ -38,9 +38,9 @@ namespace Atmospheric_Flow {
 
     void set_Froude(const double Fr_); /*--- Setter of the Froude number. This is useful for multigrid purpose. ---*/
 
-    void set_HYPERBOLIC_stage(const unsigned int stage); /*--- Setter of the IMEX stage. ---*/
+    void set_IMEX_stage(const unsigned int stage); /*--- Setter of the IMEX stage. ---*/
 
-    void set_NS_stage(const unsigned int stage); /*--- Setter of the equation currently under solution. ---*/
+    void set_Euler_stage(const unsigned int stage); /*--- Setter of the equation currently under solution. ---*/
 
     void set_rho_for_fixed(const Vec& src); /*--- Setter of the current density. This is for the assembling of the bilinear forms
                                                   where only one source vector can be passed in input. ---*/
@@ -281,7 +281,7 @@ namespace Atmospheric_Flow {
            int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
                           n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
-  set_HYPERBOLIC_stage(const unsigned int stage) {
+  set_IMEX_stage(const unsigned int stage) {
     AssertIndexRange(stage, 4);
     Assert(stage > 0, ExcInternalError());
 
@@ -296,7 +296,7 @@ namespace Atmospheric_Flow {
            int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
                           n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
-  set_NS_stage(const unsigned int stage) {
+  set_Euler_stage(const unsigned int stage) {
     AssertIndexRange(stage, 7);
     Assert(stage > 0, ExcInternalError());
 

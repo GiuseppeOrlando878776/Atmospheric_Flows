@@ -66,12 +66,12 @@ public:
   /*--- The run function which actually runs the simulation ---*/
 
 protected:
-  const double t_0;              /*--- Initial time auxiliary variable ----*/
-  const double T;                /*--- Final time auxiliary variable ----*/
-  unsigned int HYPERBOLIC_stage; /*--- Flag to check at which current stage of the IMEX we are ---*/
-  const double Ma;               /*--- Mach number auxiliary variable ----*/
-  const double Fr;               /*--- Froude number auxiliary variable ---*/
-  double       dt;               /*--- Time step auxiliary variable ---*/
+  const double t0;         /*--- Initial time auxiliary variable ----*/
+  const double T;          /*--- Final time auxiliary variable ----*/
+  unsigned int IMEX_stage; /*--- Flag to check at which current stage of the IMEX we are ---*/
+  const double Ma;         /*--- Mach number auxiliary variable ----*/
+  const double Fr;         /*--- Froude number auxiliary variable ---*/
+  double       dt;         /*--- Time step auxiliary variable ---*/
 
   parallel::distributed::Triangulation<dim> triangulation; /*--- The variable which stores the mesh ---*/
 
@@ -270,9 +270,9 @@ private:
 //
 template<int dim>
 EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
-  t_0(data.initial_time),
+  t0(data.initial_time),
   T(data.final_time),
-  HYPERBOLIC_stage(1),            //--- Initialize the flag for the IMEX scheme stage
+  IMEX_stage(1),
   Ma(data.Mach),
   Fr(data.Froude),
   dt(data.dt),
@@ -601,17 +601,17 @@ void EulerSolver<dim>::update_density() {
 
   const std::vector<unsigned int> tmp = {2};
   euler_matrix.initialize(matrix_free_storage, tmp, tmp);
-  euler_matrix.set_NS_stage(1);
+  euler_matrix.set_Euler_stage(1);
 
-  if(HYPERBOLIC_stage == 1) {
+  if(IMEX_stage == 1) {
     euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_old, u_old});
   }
-  else if(HYPERBOLIC_stage == 2) {
+  else if(IMEX_stage == 2) {
     euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_old, u_old,
                                                 rho_tmp_2, u_tmp_2});
   }
   else {
-    euler_matrix.set_NS_stage(4);
+    euler_matrix.set_Euler_stage(4);
     euler_matrix.vmult_rhs_rho_update(rhs_rho, {rho_old, u_old,
                                                 rho_tmp_2, u_tmp_2,
                                                 rho_tmp_3, u_tmp_3});
@@ -646,11 +646,11 @@ void EulerSolver<dim>::update_density() {
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
-    if(HYPERBOLIC_stage == 3) {
-      mg_matrices_euler[level].set_NS_stage(4);
+    if(IMEX_stage == 3) {
+      mg_matrices_euler[level].set_Euler_stage(4);
     }
     else {
-      mg_matrices_euler[level].set_NS_stage(1);
+      mg_matrices_euler[level].set_Euler_stage(1);
     }
 
     if(level > 0) {
@@ -688,11 +688,11 @@ void EulerSolver<dim>::update_density() {
                  MGTransferMatrixFree<dim, double>> preconditioner(dof_handler_density, mg, mg_transfer);
 
   /*--- Solve the system for the density ---*/
-  if(HYPERBOLIC_stage == 1) {
+  if(IMEX_stage == 1) {
     rho_tmp_2.equ(1.0, rho_old);
     cg.solve(euler_matrix, rho_tmp_2, rhs_rho, preconditioner);
   }
-  else if(HYPERBOLIC_stage == 2) {
+  else if(IMEX_stage == 2) {
     rho_tmp_3.equ(1.0, rho_tmp_2);
     cg.solve(euler_matrix, rho_tmp_3, rhs_rho, preconditioner);
   }
@@ -713,18 +713,18 @@ void EulerSolver<dim>::pressure_fixed_point() {
 
   const std::vector<unsigned int> tmp = {1};
   euler_matrix.initialize(matrix_free_storage, tmp, tmp);
-  euler_matrix.set_NS_stage(2);
+  euler_matrix.set_Euler_stage(2);
 
   euler_matrix.set_pres_fixed(pres_fixed_old); /*--- Set the current pressure for the fixed point loop to the operator ---*/
   euler_matrix.set_u_fixed(u_fixed); /*--- Set the current velocity for the fixed point loop to the operator ---*/
-  if(HYPERBOLIC_stage == 1) {
+  if(IMEX_stage == 1) {
     euler_matrix.vmult_rhs_pressure(rhs_pres, {rho_old, u_old, pres_old,
                                                rho_tmp_2, u_fixed});
 
     euler_matrix.vmult_rhs_velocity_fixed(rhs_u, {rho_old, u_old, pres_old,
                                                   rho_tmp_2});
   }
-  else if(HYPERBOLIC_stage == 2) {
+  else if(IMEX_stage == 2) {
     euler_matrix.vmult_rhs_pressure(rhs_pres, {rho_old, u_old, pres_old,
                                                rho_tmp_2, u_tmp_2, pres_tmp_2,
                                                rho_tmp_3, u_fixed});
@@ -738,7 +738,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   SolverCG<LinearAlgebra::distributed::Vector<double>> cg_schur(solver_control_schur);
   const std::vector<unsigned int> tmp_reinit = {0};
   euler_matrix.initialize(matrix_free_storage, tmp_reinit, tmp_reinit);
-  euler_matrix.set_NS_stage(3);
+  euler_matrix.set_Euler_stage(3);
 
   /*--- Set MultiGrid for velocity matrix ---*/
   MGTransferMatrixFree<dim, double> mg_transfer;
@@ -766,7 +766,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp_reinit, tmp_reinit);
-    mg_matrices_euler[level].set_NS_stage(3);
+    mg_matrices_euler[level].set_Euler_stage(3);
 
     if(level > 0) {
       smoother_data[level].smoothing_range     = 15.0;
@@ -813,7 +813,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   /*--- Conclude computation of rhs for pressure fixed point ---*/
   rhs_pres.add(-1.0, tmp_2);
 
-  euler_matrix.set_NS_stage(2);
+  euler_matrix.set_Euler_stage(2);
   euler_matrix.initialize(matrix_free_storage, tmp, tmp);
 
   /*--- Solve the system for the pressure ---*/
@@ -848,8 +848,9 @@ void EulerSolver<dim>::update_velocity() {
 
   const std::vector<unsigned int> tmp = {0};
   euler_matrix.initialize(matrix_free_storage, tmp, tmp);
-  if(HYPERBOLIC_stage == 1 || HYPERBOLIC_stage == 2) {
-    euler_matrix.set_NS_stage(3);
+
+  if(IMEX_stage == 1 || IMEX_stage == 2) {
+    euler_matrix.set_Euler_stage(3);
 
     LinearAlgebra::distributed::Vector<double> tmp_3;
     matrix_free_storage->initialize_dof_vector(tmp_3, 0);
@@ -857,7 +858,7 @@ void EulerSolver<dim>::update_velocity() {
     rhs_u.add(-1.0, tmp_3);
   }
   else {
-    euler_matrix.set_NS_stage(5);
+    euler_matrix.set_Euler_stage(5);
     euler_matrix.vmult_rhs_velocity_fixed(rhs_u, {rho_old, u_old, pres_old,
                                                   rho_tmp_2, u_tmp_2, pres_tmp_2,
                                                   rho_tmp_3, u_tmp_3, pres_tmp_3});
@@ -892,11 +893,11 @@ void EulerSolver<dim>::update_velocity() {
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
-    if(HYPERBOLIC_stage == 3) {
-      mg_matrices_euler[level].set_NS_stage(5);
+    if(IMEX_stage == 3) {
+      mg_matrices_euler[level].set_Euler_stage(5);
     }
     else {
-      mg_matrices_euler[level].set_NS_stage(3);
+      mg_matrices_euler[level].set_Euler_stage(3);
     }
 
     if(level > 0) {
@@ -933,8 +934,8 @@ void EulerSolver<dim>::update_velocity() {
                  LinearAlgebra::distributed::Vector<double>,
                  MGTransferMatrixFree<dim, double>> preconditioner(dof_handler_velocity, mg, mg_transfer);
 
-  //--- Solve the system for the velocity
-  if(HYPERBOLIC_stage == 1 || HYPERBOLIC_stage == 2) {
+  /*--- Solve the system for the velocity ---*/
+  if(IMEX_stage == 1 || IMEX_stage == 2) {
     cg.solve(euler_matrix, u_fixed, rhs_u, preconditioner);
   }
   else {
@@ -955,7 +956,7 @@ void EulerSolver<dim>::update_pressure() {
   const std::vector<unsigned int> tmp = {1};
   euler_matrix.initialize(matrix_free_storage, tmp, tmp);
 
-  euler_matrix.set_NS_stage(6);
+  euler_matrix.set_Euler_stage(6);
   euler_matrix.vmult_rhs_pressure(rhs_pres, {rho_old, u_old, pres_old,
                                              rho_tmp_2, u_tmp_2, pres_tmp_2,
                                              rho_tmp_3, u_tmp_3, pres_tmp_3,
@@ -990,7 +991,7 @@ void EulerSolver<dim>::update_pressure() {
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
-    mg_matrices_euler[level].set_NS_stage(6);
+    mg_matrices_euler[level].set_Euler_stage(6);
 
     if(level > 0) {
       smoother_data[level].smoothing_range     = 15.0;
@@ -1155,10 +1156,10 @@ double EulerSolver<dim>::get_min_density() {
   for(const auto& cell: dof_handler_density.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
-      if(HYPERBOLIC_stage == 1) {
+      if(IMEX_stage == 1) {
         fe_values.get_function_values(rho_tmp_2, solution_values);
       }
-      else if(HYPERBOLIC_stage == 2) {
+      else if(IMEX_stage == 2) {
         fe_values.get_function_values(rho_tmp_3, solution_values);
       }
       else {
@@ -1179,15 +1180,16 @@ double EulerSolver<dim>::get_min_density() {
 //
 template<int dim>
 double EulerSolver<dim>::get_max_density() {
-  if(HYPERBOLIC_stage == 1) {
+  if(IMEX_stage == 1) {
     return rho_tmp_2.linfty_norm();
   }
-  if(HYPERBOLIC_stage == 2) {
+  if(IMEX_stage == 2) {
     return rho_tmp_3.linfty_norm();
   }
 
   return rho_curr.linfty_norm();
 }
+
 
 // The following function is used in determining the maximum celerity
 //
@@ -1275,7 +1277,7 @@ std::pair<double, double> EulerSolver<dim>::compute_max_C_x_w() {
 
 // @sect{ <code>EulerSolver::run</code> }
 
-// This is the time marching function, which starting at <code>t_0</code>
+// This is the time marching function, which starting at <code>t0</code>
 // advances in time using the projection method with time step <code>dt</code>
 // until <code>T</code>.
 //
@@ -1287,7 +1289,7 @@ template<int dim>
 void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interval) {
   ConditionalOStream verbose_cout(std::cout, verbose && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
 
-  double time    = t_0;
+  double time    = t0;
   unsigned int n = 0;
 
   if(restart && !as_initial_conditions) {
@@ -1304,8 +1306,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     pcout << "Step = " << n << " Time = " << time << std::endl;
 
     /*--- First stage of the IMEX operator ---*/
-    HYPERBOLIC_stage = 1;
-    euler_matrix.set_HYPERBOLIC_stage(HYPERBOLIC_stage);
+    IMEX_stage = 1;
+    euler_matrix.set_IMEX_stage(IMEX_stage);
 
     verbose_cout << "  Update density stage 1" << std::endl;
     update_density();
@@ -1347,8 +1349,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     u_tmp_2.equ(1.0, u_fixed);
 
     /*--- Second stage of IMEX operator ---*/
-    HYPERBOLIC_stage = 2;
-    euler_matrix.set_HYPERBOLIC_stage(HYPERBOLIC_stage);
+    IMEX_stage = 2;
+    euler_matrix.set_IMEX_stage(IMEX_stage);
 
     verbose_cout << "  Update density stage 2" << std::endl;
     update_density();
@@ -1388,8 +1390,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     u_tmp_3.equ(1.0, u_fixed);
 
     /*--- Final stage of RK scheme to update ---*/
-    HYPERBOLIC_stage = 3;
-    euler_matrix.set_HYPERBOLIC_stage(HYPERBOLIC_stage);
+    IMEX_stage = 3;
+    euler_matrix.set_IMEX_stage(IMEX_stage);
 
     verbose_cout << "  Update density" << std::endl;
     update_density();
