@@ -145,14 +145,16 @@ private:
 
   /*--- Auxiliary structures for the matrix-free and for the multigrid ---*/
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
+  MappingQ<dim>  mapping;
+  MappingQ1<dim> mapping_mg;
 
   EULEROperator<dim, EquationData::degree_rho, EquationData::degree_T, EquationData::degree_u,
                 2*EquationData::degree_rho + 1, 2*EquationData::degree_T + 1, 2*EquationData::degree_u + 1,
-                LinearAlgebra::distributed::Vector<double>, double> euler_matrix;
+                LinearAlgebra::distributed::Vector<double>> euler_matrix;
 
   MGLevelObject<EULEROperator<dim, EquationData::degree_rho, EquationData::degree_T, EquationData::degree_u,
                               2*EquationData::degree_rho + 1, 2*EquationData::degree_T + 1, 2*EquationData::degree_u + 1,
-                              LinearAlgebra::distributed::Vector<double>, double>> mg_matrices_euler;
+                              LinearAlgebra::distributed::Vector<double>>> mg_matrices_euler;
 
   std::vector<const DoFHandler<dim>*> dof_handlers; /*--- Auxiliary container for the matrix-free ---*/
 
@@ -195,13 +197,13 @@ private:
 
   MGLevelObject<LinearAlgebra::distributed::Vector<double>> level_projection; /*--- Auxiliary variable for the multigrid ---*/
 
-  double get_maximal_velocity(); /*--- Get maximal velocity to compute the Courant number ---*/
+  double get_max_velocity(); /*--- Get maximum velocity to compute the Courant number ---*/
 
-  double get_minimal_density(); /*--- Get minimal density ---*/
+  double get_min_density(); /*--- Get minimum density ---*/
 
-  double get_maximal_density(); /*--- Get maximal density ---*/
+  double get_max_density(); /*--- Get maximum density ---*/
 
-  double compute_max_celerity(); /*--- Compute maximal celerity for acoustic Courant number ---*/
+  double compute_max_celerity(); /*--- Compute maximum celerity for acoustic Courant number ---*/
 };
 
 
@@ -234,6 +236,8 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   rho_exact(data.initial_time),
   u_exact(data.initial_time),
   pres_exact(data.initial_time),
+  mapping(EquationData::degree_mapping, true),
+  mapping_mg(),
   euler_matrix(data),
   max_its(data.max_iterations),
   eps(data.eps),
@@ -281,8 +285,7 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
 
   triangulation.refine_global(n_refines);
 
-  pcout << "h_min = " <<
-  GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))/std::sqrt(dim) << std::endl;
+  pcout << "h_min = " << GridTools::minimal_cell_diameter(triangulation, mapping)/std::sqrt(dim) << std::endl;
 }
 
 
@@ -342,7 +345,7 @@ void EulerSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
-  matrix_free_storage->reinit(MappingQ<dim>(EquationData::degree_mapping, true), dof_handlers, constraints, quadratures, additional_data);
+  matrix_free_storage->reinit(mapping, dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
   matrix_free_storage->initialize_dof_vector(u_old, 0);
@@ -394,7 +397,7 @@ void EulerSolver<dim>::setup_dofs() {
     typename MatrixFree<dim, double>::AdditionalData additional_data_mg;
 
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
-    mg_mf_storage_level->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data_mg);
+    mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     const std::vector<unsigned int> tmp = {2};
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
     mg_matrices_euler[level].initialize_dof_vector(level_projection[level]);
@@ -414,9 +417,9 @@ template<int dim>
 void EulerSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_exact, rho_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_exact, u_old);
-  VectorTools::interpolate(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_exact, pres_old);
+  VectorTools::interpolate(mapping, dof_handler_density, rho_exact, rho_old);
+  VectorTools::interpolate(mapping, dof_handler_velocity, u_exact, u_old);
+  VectorTools::interpolate(mapping, dof_handler_temperature, pres_exact, pres_old);
 }
 
 
@@ -459,7 +462,7 @@ void EulerSolver<dim>::update_density() {
     additional_data_mg.mg_level                            = level;
 
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
-    mg_mf_storage_level->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data_mg);
+    mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
     if(HYPERBOLIC_stage == 3) {
       mg_matrices_euler[level].set_NS_stage(4);
@@ -478,7 +481,7 @@ void EulerSolver<dim>::update_density() {
                                                            2*EquationData::degree_rho + 1,
                                                            2*EquationData::degree_T + 1,
                                                            2*EquationData::degree_u + 1,
-                                                           LinearAlgebra::distributed::Vector<double>, double>,
+                                                           LinearAlgebra::distributed::Vector<double>>,
                                              LinearAlgebra::distributed::Vector<double>>;
   mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<double>> mg_smoother;
   MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
@@ -510,7 +513,7 @@ void EulerSolver<dim>::update_density() {
                                             2*EquationData::degree_rho + 1,
                                             2*EquationData::degree_T + 1,
                                             2*EquationData::degree_u + 1,
-                                            LinearAlgebra::distributed::Vector<double>, double>,
+                                            LinearAlgebra::distributed::Vector<double>>,
                               PreconditionIdentity> mg_coarse(cg_mg, mg_matrices_euler[0], identity);
   mg::Matrix<LinearAlgebra::distributed::Vector<double>> mg_matrix(mg_matrices_euler);
   Multigrid<LinearAlgebra::distributed::Vector<double>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -581,7 +584,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
     additional_data_mg.mg_level                            = level;
 
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
-    mg_mf_storage_level->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data_mg);
+    mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp_reinit, tmp_reinit);
     mg_matrices_euler[level].set_NS_stage(3);
   }
@@ -595,7 +598,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
                                                            2*EquationData::degree_rho + 1,
                                                            2*EquationData::degree_T + 1,
                                                            2*EquationData::degree_u + 1,
-                                                           LinearAlgebra::distributed::Vector<double>, double>,
+                                                           LinearAlgebra::distributed::Vector<double>>,
                                               LinearAlgebra::distributed::Vector<double>>;
   mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<double>> mg_smoother;
   MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
@@ -627,7 +630,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
                                             2*EquationData::degree_rho + 1,
                                             2*EquationData::degree_T + 1,
                                             2*EquationData::degree_u + 1,
-                                            LinearAlgebra::distributed::Vector<double>, double>,
+                                            LinearAlgebra::distributed::Vector<double>>,
                               PreconditionIdentity> mg_coarse(cg_mg, mg_matrices_euler[0], identity);
   mg::Matrix<LinearAlgebra::distributed::Vector<double>> mg_matrix(mg_matrices_euler);
   Multigrid<LinearAlgebra::distributed::Vector<double>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -653,6 +656,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   SolverControl solver_control(max_its, eps*rhs_pres.l2_norm());
   SolverGMRES<LinearAlgebra::distributed::Vector<double>> gmres(solver_control);
   pres_fixed.equ(1.0, pres_fixed_old);
+
   /*--- Jacobi preconditioner for this system ---*/
   PreconditionJacobi<EULEROperator<dim,
                                    EquationData::degree_rho,
@@ -661,9 +665,10 @@ void EulerSolver<dim>::pressure_fixed_point() {
                                    2*EquationData::degree_rho + 1,
                                    2*EquationData::degree_T + 1,
                                    2*EquationData::degree_u + 1,
-                                   LinearAlgebra::distributed::Vector<double>, double>> preconditioner_Jacobi;
+                                   LinearAlgebra::distributed::Vector<double>>> preconditioner_Jacobi;
   euler_matrix.compute_diagonal();
   preconditioner_Jacobi.initialize(euler_matrix);
+
   gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
 }
 
@@ -706,7 +711,7 @@ void EulerSolver<dim>::update_velocity() {
     additional_data_mg.mg_level                            = level;
 
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
-    mg_mf_storage_level->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data_mg);
+    mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
     if(HYPERBOLIC_stage == 3) {
       mg_matrices_euler[level].set_NS_stage(5);
@@ -725,7 +730,7 @@ void EulerSolver<dim>::update_velocity() {
                                                            2*EquationData::degree_rho + 1,
                                                            2*EquationData::degree_T + 1,
                                                            2*EquationData::degree_u + 1,
-                                                           LinearAlgebra::distributed::Vector<double>, double>,
+                                                           LinearAlgebra::distributed::Vector<double>>,
                                               LinearAlgebra::distributed::Vector<double>>;
   mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<double>> mg_smoother;
   MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
@@ -757,7 +762,7 @@ void EulerSolver<dim>::update_velocity() {
                                             2*EquationData::degree_rho + 1,
                                             2*EquationData::degree_T + 1,
                                             2*EquationData::degree_u + 1,
-                                            LinearAlgebra::distributed::Vector<double>, double>,
+                                            LinearAlgebra::distributed::Vector<double>>,
                               PreconditionIdentity> mg_coarse(cg_mg, mg_matrices_euler[0], identity);
   mg::Matrix<LinearAlgebra::distributed::Vector<double>> mg_matrix(mg_matrices_euler);
   Multigrid<LinearAlgebra::distributed::Vector<double>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -806,7 +811,7 @@ void EulerSolver<dim>::update_pressure() {
     additional_data_mg.mg_level                            = level;
 
     std::shared_ptr<MatrixFree<dim, double>> mg_mf_storage_level(new MatrixFree<dim, double>());
-    mg_mf_storage_level->reinit(MappingQ1<dim>(), dof_handlers, constraints, quadratures, additional_data_mg);
+    mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
     mg_matrices_euler[level].set_NS_stage(6);
   }
@@ -820,7 +825,7 @@ void EulerSolver<dim>::update_pressure() {
                                                            2*EquationData::degree_rho + 1,
                                                            2*EquationData::degree_T + 1,
                                                            2*EquationData::degree_u + 1,
-                                                           LinearAlgebra::distributed::Vector<double>, double>,
+                                                           LinearAlgebra::distributed::Vector<double>>,
                                              LinearAlgebra::distributed::Vector<double>>;
   mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<double>> mg_smoother;
   MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
@@ -852,7 +857,7 @@ void EulerSolver<dim>::update_pressure() {
                                             2*EquationData::degree_rho + 1,
                                             2*EquationData::degree_T + 1,
                                             2*EquationData::degree_u + 1,
-                                            LinearAlgebra::distributed::Vector<double>, double>,
+                                            LinearAlgebra::distributed::Vector<double>>,
                               PreconditionIdentity> mg_coarse(cg_mg, mg_matrices_euler[0], identity);
   mg::Matrix<LinearAlgebra::distributed::Vector<double>> mg_matrix(mg_matrices_euler);
   Multigrid<LinearAlgebra::distributed::Vector<double>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -895,10 +900,21 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   pres_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_temperature, pres_old, "p", {DataComponentInterpretation::component_is_scalar});
 
-  data_out.build_patches(MappingQ<dim>(EquationData::degree_mapping, true), EquationData::degree_u, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(mapping, EquationData::degree_u, DataOut<dim>::curved_inner_cells);
 
-  const std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
+  std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
+
+  /*--- Save high order mappings ---*/
+  output = "./" + saving_dir + "/solution_high_order-" + Utilities::int_to_string(step, 5) + ".vtu";
+  DataOutBase::VtkFlags flags_high_order;
+  flags_high_order.write_higher_order_cells = true;
+  data_out.set_flags(flags_high_order);
+  data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
+
+  rho_old.zero_out_ghosts();
+  u_old.zero_out_ghosts();
+  pres_old.zero_out_ghosts();
 }
 
 
@@ -912,11 +928,15 @@ void EulerSolver<dim>::analyze_results() {
 
   u_tmp_2 = 0;
 
-  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_old, u_exact,
+  u_old.update_ghost_values();
+  VectorTools::integrate_difference(mapping, dof_handler_velocity, u_old, u_exact,
                                     L2_error_per_cell_vel, QGauss<dim>(EquationData::degree_u + 1), VectorTools::L2_norm);
+  u_old.zero_out_ghosts();
   const double error_vel_L2 = VectorTools::compute_global_error(triangulation, L2_error_per_cell_vel, VectorTools::L2_norm);
-  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_velocity, u_tmp_2, u_exact,
+  u_tmp_2.update_ghost_values();
+  VectorTools::integrate_difference(mapping, dof_handler_velocity, u_tmp_2, u_exact,
                                     L2_rel_error_per_cell_vel, QGauss<dim>(EquationData::degree_u + 1), VectorTools::L2_norm);
+  u_tmp_2.zero_out_ghosts();
   const double L2_vel = VectorTools::compute_global_error(triangulation, L2_rel_error_per_cell_vel, VectorTools::L2_norm);
   const double error_rel_vel_L2 = error_vel_L2/L2_vel;
   pcout << "Verification via L2 error velocity:    "<< error_vel_L2 << std::endl;
@@ -924,11 +944,15 @@ void EulerSolver<dim>::analyze_results() {
 
   rho_tmp_2 = 0;
 
-  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_old, rho_exact,
+  rho_old.update_ghost_values();
+  VectorTools::integrate_difference(mapping, dof_handler_density, rho_old, rho_exact,
                                     L2_error_per_cell_rho, QGauss<dim>(EquationData::degree_rho + 1), VectorTools::L2_norm);
+  rho_old.zero_out_ghosts();
   const double error_rho_L2 = VectorTools::compute_global_error(triangulation, L2_error_per_cell_rho, VectorTools::L2_norm);
-  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_density, rho_tmp_2, rho_exact,
+  rho_tmp_2.update_ghost_values();
+  VectorTools::integrate_difference(mapping, dof_handler_density, rho_tmp_2, rho_exact,
                                     L2_rel_error_per_cell_rho, QGauss<dim>(EquationData::degree_rho + 1), VectorTools::L2_norm);
+  rho_tmp_2.zero_out_ghosts();
   const double L2_rho = VectorTools::compute_global_error(triangulation, L2_rel_error_per_cell_rho, VectorTools::L2_norm);
   const double error_rel_rho_L2 = error_rho_L2/L2_rho;
   pcout << "Verification via L2 error density:    "<< error_rho_L2 << std::endl;
@@ -936,11 +960,15 @@ void EulerSolver<dim>::analyze_results() {
 
   pres_tmp_2 = 0;
 
-  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_old, pres_exact,
+  pres_old.update_ghost_values();
+  VectorTools::integrate_difference(mapping, dof_handler_temperature, pres_old, pres_exact,
                                     L2_error_per_cell_pres, QGauss<dim>(EquationData::degree_T + 1), VectorTools::L2_norm);
+  pres_old.zero_out_ghosts();
   const double error_pres_L2 = VectorTools::compute_global_error(triangulation, L2_error_per_cell_pres, VectorTools::L2_norm);
-  VectorTools::integrate_difference(MappingQ<dim>(EquationData::degree_mapping, true), dof_handler_temperature, pres_tmp_2, pres_exact,
+  pres_tmp_2.update_ghost_values();
+  VectorTools::integrate_difference(mapping, dof_handler_temperature, pres_tmp_2, pres_exact,
                                     L2_rel_error_per_cell_pres, QGauss<dim>(EquationData::degree_T + 1), VectorTools::L2_norm);
+  pres_tmp_2.zero_out_ghosts();
   const double L2_pres = VectorTools::compute_global_error(triangulation, L2_rel_error_per_cell_pres, VectorTools::L2_norm);
   const double error_rel_pres_L2 = error_pres_L2/L2_pres;
   pcout << "Verification via L2 error pressure:    "          << error_pres_L2     << std::endl;
@@ -957,12 +985,12 @@ void EulerSolver<dim>::analyze_results() {
 }
 
 
-// The following function is used in determining the maximal velocity
+// The following function is used in determining the maximum velocity
 // in order to compute the CFL
 //
 template<int dim>
-double EulerSolver<dim>::get_maximal_velocity() {
-  FEValues<dim> fe_values_velocity(fe_velocity, quadrature_velocity, update_quadrature_points | update_values | update_JxW_values);
+double EulerSolver<dim>::get_max_velocity() {
+  FEValues<dim> fe_values_velocity(mapping, fe_velocity, quadrature_velocity, update_values);
   std::vector<Vector<double>> velocity_values(quadrature_velocity.size(), Vector<double>(dim));
 
   double max_local_velocity = 0.0;
@@ -986,11 +1014,11 @@ double EulerSolver<dim>::get_maximal_velocity() {
 }
 
 
-// The following function is used in determining the minimal density
+// The following function is used in determining the minimum density
 //
 template<int dim>
-double EulerSolver<dim>::get_minimal_density() {
-  FEValues<dim> fe_values(fe_density, quadrature_density, update_values);
+double EulerSolver<dim>::get_min_density() {
+  FEValues<dim> fe_values(mapping, fe_density, quadrature_density, update_values);
   std::vector<double> solution_values(quadrature_density.size());
 
   double min_local_density = std::numeric_limits<double>::max();
@@ -1018,10 +1046,10 @@ double EulerSolver<dim>::get_minimal_density() {
 }
 
 
-// The following function is used in determining the maximal density
+// The following function is used in determining the maximum density
 //
 template<int dim>
-double EulerSolver<dim>::get_maximal_density() {
+double EulerSolver<dim>::get_max_density() {
   if(HYPERBOLIC_stage == 1) {
     return rho_tmp_2.linfty_norm();
   }
@@ -1032,11 +1060,11 @@ double EulerSolver<dim>::get_maximal_density() {
   return rho_curr.linfty_norm();
 }
 
-// The following function is used in determining the maximal celerity
+// The following function is used in determining the maximum celerity
 //
 template<int dim>
 double EulerSolver<dim>::compute_max_celerity() {
-  FEValues<dim> fe_values(fe_temperature, quadrature_temperature, update_values);
+  FEValues<dim> fe_values(mapping, fe_temperature, quadrature_temperature, update_values);
   std::vector<double> solution_values_pressure(quadrature_temperature.size()),
                       solution_values_density(quadrature_temperature.size());
 
@@ -1090,8 +1118,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
 
     verbose_cout << "  Update density stage 1" << std::endl;
     update_density();
-    pcout << "Minimal density " << get_minimal_density() << std::endl;
-    pcout << "Maximal density " << get_maximal_density() << std::endl;
+    pcout << "Minimum density " << get_min_density() << std::endl;
+    pcout << "Maximum density " << get_max_density() << std::endl;
 
     verbose_cout << "  Fixed point pressure stage 1" << std::endl;
     /*--- Set the current density to the operator and set the variables for multigrid ---*/
@@ -1133,8 +1161,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
 
     verbose_cout << "  Update density stage 2" << std::endl;
     update_density();
-    pcout<< "Minimal density " << get_minimal_density() << std::endl;
-    pcout<< "Maximal density " << get_maximal_density() << std::endl;
+    pcout<< "Minimum density " << get_min_density() << std::endl;
+    pcout<< "Maximum density " << get_max_density() << std::endl;
 
     verbose_cout << "  Fixed point pressure stage 2" << std::endl;
     /*--- Set the current density to the operator and set the variables for multigrid ---*/
@@ -1174,8 +1202,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
 
     verbose_cout << "  Update density" << std::endl;
     update_density();
-    pcout << "Minimal density " << get_minimal_density() << std::endl;
-    pcout << "Maximal density " << get_maximal_density() << std::endl;
+    pcout << "Minimal density " << get_min_density() << std::endl;
+    pcout << "Maximum density " << get_max_density() << std::endl;
 
     verbose_cout << "  Update velocity" << std::endl;
     /*--- Set the current density to the operator and set the variables for multigrid ---*/
@@ -1195,15 +1223,15 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
 
     /*--- Compute Courant numbers ---*/
     const double max_celerity = compute_max_celerity();
-    pcout<< "Maximal celerity = " << 1.0/Ma*max_celerity << std::endl;
+    pcout<< "Maximum celerity = " << 1.0/Ma*max_celerity << std::endl;
     pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping)
                         << std::endl;
 
-    const double max_velocity = get_maximal_velocity();
-    pcout<< "Maximal velocity = " << max_velocity << std::endl;
+    const double max_velocity = get_max_velocity();
+    pcout<< "Maximum velocity = " << max_velocity << std::endl;
     pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, MappingQ<dim>(EquationData::degree_mapping, true))
+                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping)
                         << std::endl;
 
     /*--- Save the results each 'output_interval' steps ---*/

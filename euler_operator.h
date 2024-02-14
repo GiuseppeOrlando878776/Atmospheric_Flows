@@ -22,9 +22,11 @@ namespace Atmospheric_Flow {
   // @sect{ <code>EULEROperator::EULEROperator</code> }
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   class EULEROperator: public MatrixFreeOperators::Base<dim, Vec> {
   public:
+    using Number = typename Vec::value_type;
+
     EULEROperator(); /*--- Default constructor ---*/
 
     EULEROperator(RunTimeParameters::Data_Storage& data); /*--- Constructor with some input related data ---*/
@@ -96,10 +98,6 @@ namespace Atmospheric_Flow {
         pres_fixed,
         u_fixed;
 
-    EquationData::Density<dim>  rho_exact;
-    EquationData::Velocity<dim> u_exact;
-    EquationData::Pressure<dim> pres_exact;
-
     /*--- Assembler functions for the rhs related to the continuity equation. Here, and also in the following,
           we distinguish between the contribution for cells, faces and boundary. ---*/
     void assemble_rhs_cell_term_rho_update(const MatrixFree<dim, Number>&               data,
@@ -113,7 +111,8 @@ namespace Atmospheric_Flow {
     void assemble_rhs_boundary_term_rho_update(const MatrixFree<dim, Number>&               data,
                                                Vec&                                         dst,
                                                const std::vector<Vec>&                      src,
-                                               const std::pair<unsigned int, unsigned int>& face_range) const;
+                                               const std::pair<unsigned int, unsigned int>& face_range) const {}
+                                               /*-- No flux, so no contribution from this function ---*/
 
     /*--- Assembler function related to the bilinear form of the continuity equation. Only cell contribution is present,
           since, basically, we end up with a mass matrix. ---*/
@@ -168,7 +167,8 @@ namespace Atmospheric_Flow {
     void assemble_rhs_boundary_term_pressure(const MatrixFree<dim, Number>&               data,
                                              Vec&                                         dst,
                                              const std::vector<Vec>&                      src,
-                                             const std::pair<unsigned int, unsigned int>& face_range) const;
+                                             const std::pair<unsigned int, unsigned int>& face_range) const {}
+                                             /*-- No flux, so no contribution from this function ---*/
 
     /*--- Assembler function for the 'D' matrix. ---*/
     void assemble_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
@@ -188,7 +188,8 @@ namespace Atmospheric_Flow {
     void assemble_boundary_term_enthalpy(const MatrixFree<dim, Number>&               data,
                                          Vec&                                         dst,
                                          const Vec&                                   src,
-                                         const std::pair<unsigned int, unsigned int>& face_range) const;
+                                         const std::pair<unsigned int, unsigned int>& face_range) const {}
+                                         /*-- No flux, so no contribution from this function ---*/
 
     /*--- Assembler functions for the diagonal part of the matrix for the continuity equation. ---*/
     void assemble_diagonal_cell_term_rho_update(const MatrixFree<dim, Number>&               data,
@@ -213,40 +214,38 @@ namespace Atmospheric_Flow {
   // Default constructor
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                     n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                     n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   EULEROperator(): MatrixFreeOperators::Base<dim, Vec>(), Ma(), Fr(), dt(), gamma(2.0 - std::sqrt(2.0)),
                    a21(gamma), a22(0.0), a31(0.5), a32(0.5), a33(0.0),
                    a21_tilde(0.5*gamma), a22_tilde(0.5*gamma), a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
                    a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde), b2(a32_tilde), b3(a33_tilde),
-                   HYPERBOLIC_stage(1), NS_stage(1), rho_exact(), u_exact(), pres_exact() {}
+                   HYPERBOLIC_stage(1), NS_stage(1) {}
 
 
   // Constructor with runtime parameters storage
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                     n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                     n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   EULEROperator(RunTimeParameters::Data_Storage& data): MatrixFreeOperators::Base<dim, Vec>(),
-                                                        Ma(data.Mach), Fr(data.Froude), dt(data.dt), gamma(2.0 - std::sqrt(2.0)),
-                                                        a21(gamma), a22(0.0), a31(0.5),
-                                                        a32(0.5), a33(0.0),
+                                                        Ma(data.Mach), Fr(data.Froude), dt(data.dt),
+                                                        gamma(2.0 - std::sqrt(2.0)), a21(gamma), a22(0.0),
+                                                        a31(0.5), a32(0.5), a33(0.0),
                                                         a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
                                                         a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
                                                         a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde),
-                                                        b2(a32_tilde), b3(a33_tilde), HYPERBOLIC_stage(1), NS_stage(1),
-                                                        rho_exact(data.initial_time), u_exact(data.initial_time),
-                                                        pres_exact(data.initial_time) {}
+                                                        b2(a32_tilde), b3(a33_tilde), HYPERBOLIC_stage(1), NS_stage(1) {}
 
 
   // Setter of time-step
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_dt(const double time_step) {
     dt = time_step;
   }
@@ -255,9 +254,9 @@ namespace Atmospheric_Flow {
   // Setter of Mach number
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_Mach(const double Ma_) {
     Ma = Ma_;
   }
@@ -266,9 +265,9 @@ namespace Atmospheric_Flow {
   // Setter of Froude number
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_Froude(const double Fr_) {
     Fr = Fr_;
   }
@@ -278,9 +277,9 @@ namespace Atmospheric_Flow {
   // and so it has to be demanded to the class that really solves the problem)
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_HYPERBOLIC_stage(const unsigned int stage) {
     AssertIndexRange(stage, 4);
     Assert(stage > 0, ExcInternalError());
@@ -293,9 +292,9 @@ namespace Atmospheric_Flow {
   // and so it has to be demanded to the class that really solves the problem)
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_NS_stage(const unsigned int stage) {
     AssertIndexRange(stage, 7);
     Assert(stage > 0, ExcInternalError());
@@ -307,9 +306,9 @@ namespace Atmospheric_Flow {
   // Setter of density for fixed point
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_rho_for_fixed(const Vec& src) {
     rho_for_fixed = src;
     rho_for_fixed.update_ghost_values();
@@ -319,9 +318,9 @@ namespace Atmospheric_Flow {
   // Setter of pressure for fixed point
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_pres_fixed(const Vec& src) {
     pres_fixed = src;
     pres_fixed.update_ghost_values();
@@ -331,9 +330,9 @@ namespace Atmospheric_Flow {
   // Setter of velocity for fixed point
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   set_u_fixed(const Vec& src) {
     u_fixed = src;
     u_fixed.update_ghost_values();
@@ -343,9 +342,9 @@ namespace Atmospheric_Flow {
   // Assemble rhs cell term for the density update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_rhs_cell_term_rho_update(const MatrixFree<dim, Number>&               data,
                                     Vec&                                         dst,
                                     const std::vector<Vec>&                      src,
@@ -477,9 +476,9 @@ namespace Atmospheric_Flow {
   // Assemble rhs face term for the density update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_rhs_face_term_rho_update(const MatrixFree<dim, Number>&               data,
                                     Vec&                                         dst,
                                     const std::vector<Vec>&                      src,
@@ -693,244 +692,12 @@ namespace Atmospheric_Flow {
   }
 
 
-  // Assemble rhs boundary term for the density update
-  //
-  template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
-  void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
-  assemble_rhs_boundary_term_rho_update(const MatrixFree<dim, Number>&               data,
-                                        Vec&                                         dst,
-                                        const std::vector<Vec>&                      src,
-                                        const std::pair<unsigned int, unsigned int>& face_range) const {
-    if(HYPERBOLIC_stage == 1) {
-      /*--- We first start by declaring the suitable instances to read the available quantities.
-            'true' means that we are reading the information from 'inside'. ---*/
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi(data, true, 2),
-                                                                       phi_rho_old(data, true, 2);
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_old(data, true, 0);
-
-      /*--- Loop over all internal faces ---*/
-      for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-
-        phi.reinit(face);
-
-        /*--- Loop over quadrature points of each internal face ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus           = phi.get_normal_vector(q);
-
-          const auto& rho_old          = phi_rho_old.get_value(q);
-          const auto& u_old            = phi_u_old.get_value(q);
-          auto rho_old_D               = VectorizedArray<Number>();
-          auto u_old_D                 = Tensor<1, dim, VectorizedArray<Number>>();
-          const auto& point_vectorized = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point; /*--- The point returned by the 'quadrature_point' function is not an instance of Point
-                                    and so it is not ready to be directly used. We need to pay attention to the
-                                    vectorization ---*/
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_flux_old    = 0.5*(rho_old*u_old + rho_old_D*u_old_D);
-          const auto& lambda_old      = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                 std::abs(scalar_product(u_old_D, n_plus)));
-          const auto& jump_rho_old    = rho_old - rho_old_D;
-
-          /*--- Using an upwind flux ---*/
-          phi.submit_value(-a21*dt*(scalar_product(avg_flux_old, n_plus) + 0.5*lambda_old*jump_rho_old), q);
-        }
-        phi.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-    else if(HYPERBOLIC_stage == 2) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi(data, true, 2),
-                                                                       phi_rho_old(data, true, 2),
-                                                                       phi_rho_tmp_2(data, true, 2);
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_old(data, true, 0),
-                                                                       phi_u_tmp_2(data, true, 0);
-
-      /*--- Loop over all internal faces ---*/
-      for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-
-        phi_rho_tmp_2.reinit(face);
-        phi_rho_tmp_2.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_u_tmp_2.reinit(face);
-        phi_u_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
-
-        phi.reinit(face);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus           = phi.get_normal_vector(q);
-
-          const auto& rho_old          = phi_rho_old.get_value(q);
-          const auto& u_old            = phi_u_old.get_value(q);
-          auto rho_old_D               = VectorizedArray<Number>();
-          auto u_old_D                 = Tensor<1, dim, VectorizedArray<Number>>();
-          const auto& point_vectorized = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_flux_old    = 0.5*(rho_old*u_old + rho_old_D*u_old_D);
-          const auto& lambda_old      = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                 std::abs(scalar_product(u_old_D, n_plus)));
-          const auto& jump_rho_old    = rho_old - rho_old_D;
-
-          const auto& rho_tmp_2       = phi_rho_tmp_2.get_value(q);
-          const auto& u_tmp_2         = phi_u_tmp_2.get_value(q);
-          auto rho_tmp_2_D            = VectorizedArray<Number>();
-          auto u_tmp_2_D              = Tensor<1, dim, VectorizedArray<Number>>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_2_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_2_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_flux_tmp_2  = 0.5*(rho_tmp_2*u_tmp_2 + rho_tmp_2_D*u_tmp_2_D);
-          const auto& lambda_tmp_2    = std::max(std::abs(scalar_product(u_tmp_2, n_plus)),
-                                                 std::abs(scalar_product(u_tmp_2_D, n_plus)));
-          const auto& jump_rho_tmp_2  = rho_tmp_2 - rho_tmp_2_D;
-
-          /*--- Using an upwind flux ---*/
-          phi.submit_value(-a31*dt*(scalar_product(avg_flux_old, n_plus) + 0.5*lambda_old*jump_rho_old)
-                           -a32*dt*(scalar_product(avg_flux_tmp_2, n_plus) + 0.5*lambda_tmp_2*jump_rho_tmp_2), q);
-        }
-        phi.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-    else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi(data, true, 2),
-                                                                       phi_rho_old(data, true, 2),
-                                                                       phi_rho_tmp_2(data, true, 2),
-                                                                       phi_rho_tmp_3(data, true, 2);
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_old(data, true, 0),
-                                                                       phi_u_tmp_2(data, true, 0),
-                                                                       phi_u_tmp_3(data, true, 0);
-
-      /*--- Loop over all internal faces ---*/
-      for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-
-        phi_rho_tmp_2.reinit(face);
-        phi_rho_tmp_2.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_u_tmp_2.reinit(face);
-        phi_u_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
-
-        phi_rho_tmp_3.reinit(face);
-        phi_rho_tmp_3.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_tmp_3.reinit(face);
-        phi_u_tmp_3.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi.reinit(face);
-
-        /*--- Loop over all quadrature points. ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus         = phi.get_normal_vector(q);
-
-          const auto& rho_old          = phi_rho_old.get_value(q);
-          const auto& u_old            = phi_u_old.get_value(q);
-          auto rho_old_D               = VectorizedArray<Number>();
-          auto u_old_D                 = Tensor<1, dim, VectorizedArray<Number>>();
-          const auto& point_vectorized = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_flux_old    = 0.5*(rho_old*u_old + rho_old_D*u_old_D);
-          const auto& lambda_old      = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                 std::abs(scalar_product(u_old_D, n_plus)));
-          const auto& jump_rho_old    = rho_old - rho_old_D;
-
-          const auto& rho_tmp_2       = phi_rho_tmp_2.get_value(q);
-          const auto& u_tmp_2         = phi_u_tmp_2.get_value(q);
-          auto rho_tmp_2_D            = VectorizedArray<Number>();
-          auto u_tmp_2_D              = Tensor<1, dim, VectorizedArray<Number>>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_2_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_2_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_flux_tmp_2  = 0.5*(rho_tmp_2*u_tmp_2 + rho_tmp_2_D*u_tmp_2_D);
-          const auto& lambda_tmp_2    = std::max(std::abs(scalar_product(u_tmp_2, n_plus)),
-                                                 std::abs(scalar_product(u_tmp_2_D, n_plus)));
-          const auto& jump_rho_tmp_2  = rho_tmp_2 - rho_tmp_2_D;
-
-          const auto& rho_tmp_3       = phi_rho_tmp_3.get_value(q);
-          const auto& u_tmp_3         = phi_u_tmp_3.get_value(q);
-          auto rho_tmp_3_D            = VectorizedArray<Number>();
-          auto u_tmp_3_D              = Tensor<1, dim, VectorizedArray<Number>>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_3_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_3_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_flux_tmp_3  = 0.5*(rho_tmp_3*u_tmp_3 + rho_tmp_3_D*u_tmp_3_D);
-          const auto& lambda_tmp_3    = std::max(std::abs(scalar_product(u_tmp_3, n_plus)),
-                                                 std::abs(scalar_product(u_tmp_3_D, n_plus)));
-          const auto& jump_rho_tmp_3  = rho_tmp_3 - rho_tmp_3_D;
-
-          /*--- Using an upwind flux ---*/
-          phi.submit_value(-b1*dt*(scalar_product(avg_flux_old, n_plus) + 0.5*lambda_old*jump_rho_old)
-                           -b2*dt*(scalar_product(avg_flux_tmp_2, n_plus) + 0.5*lambda_tmp_2*jump_rho_tmp_2)
-                           -b3*dt*(scalar_product(avg_flux_tmp_3, n_plus) + 0.5*lambda_tmp_3*jump_rho_tmp_3), q);
-        }
-        phi.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-  }
-
-
   // Put together all the previous steps for density update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   vmult_rhs_rho_update(Vec& dst, const std::vector<Vec>& src) const {
     for(unsigned int d = 0; d < src.size(); ++d) {
       src[d].update_ghost_values();
@@ -948,9 +715,9 @@ namespace Atmospheric_Flow {
   // Assemble cell term for the density update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_cell_term_rho_update(const MatrixFree<dim, Number>&               data,
                                     Vec&                                         dst,
                                     const Vec&                                   src,
@@ -976,9 +743,9 @@ namespace Atmospheric_Flow {
   // Assemble rhs cell term for the pressure
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_rhs_cell_term_pressure(const MatrixFree<dim, Number>&               data,
                                   Vec&                                         dst,
                                   const std::vector<Vec>&                      src,
@@ -1243,9 +1010,9 @@ namespace Atmospheric_Flow {
   // Assemble rhs face term for the pressure
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_rhs_face_term_pressure(const MatrixFree<dim, Number>&               data,
                                   Vec&                                         dst,
                                   const std::vector<Vec>&                      src,
@@ -1594,390 +1361,12 @@ namespace Atmospheric_Flow {
   }
 
 
-  // Assemble rhs boundary term for the pressure
-  //
-  template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
-  void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
-  assemble_rhs_boundary_term_pressure(const MatrixFree<dim, Number>&               data,
-                                      Vec&                                         dst,
-                                      const std::vector<Vec>&                      src,
-                                      const std::pair<unsigned int, unsigned int>& face_range) const {
-    if(HYPERBOLIC_stage == 1) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi(data, true, 1),
-                                                                       phi_pres_old(data, true, 1);
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_old(data, true, 0);
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_rho_old(data, true, 2);
-
-      /*--- Loop over all internal faces ---*/
-      for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(face);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi.reinit(face);
-
-        /*--- Loop over quadrature points ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus           = phi.get_normal_vector(q);
-
-          const auto& rho_old          = phi_rho_old.get_value(q);
-          const auto& u_old            = phi_u_old.get_value(q);
-          auto rho_old_D               = VectorizedArray<Number>();
-          auto u_old_D                 = Tensor<1, dim, VectorizedArray<Number>>();
-          const auto& point_vectorized = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point; /*--- The point returned by the 'quadrature_point' function is not an instance of Point
-                                    and so it is not ready to be directly used. We need to pay attention to the
-                                    vectorization ---*/
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_kinetic_old  = 0.5*(0.5*scalar_product(u_old, u_old)*rho_old*u_old +
-                                              0.5*scalar_product(u_old_D, u_old_D)*rho_old_D*u_old_D);
-
-          const auto& pres_old         = phi_pres_old.get_value(q);
-          auto pres_old_D              = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            pres_old_D = pres_exact.value(point);
-          }
-          const auto& E_old            = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old/rho_old
-                                       + 0.5*Ma*Ma*scalar_product(u_old, u_old);
-          const auto& E_old_D          = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old_D/rho_old_D
-                                       + 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D);
-          const auto& avg_enthalpy_old = 0.5*(((E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old))*rho_old + pres_old)*u_old +
-                                              ((E_old_D - 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D))*rho_old_D + pres_old_D)*u_old_D);
-
-          const auto& lambda_old       = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                  std::abs(scalar_product(u_old_D, n_plus)));
-          const auto& jump_rho_kin_old = rho_old*0.5*scalar_product(u_old, u_old) -
-                                         rho_old_D*0.5*scalar_product(u_old_D, u_old_D);
-          const auto& jump_rho_e_old   = rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) -
-                                         rho_old_D*(E_old_D - 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D));
-
-          phi.submit_value(-a21*dt*Ma*Ma*(scalar_product(avg_kinetic_old, n_plus) + 0.5*lambda_old*jump_rho_kin_old)
-                           -a21_tilde*dt*(scalar_product(avg_enthalpy_old, n_plus) + 0.5*lambda_old*jump_rho_e_old), q);
-        }
-        phi.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-    else if(HYPERBOLIC_stage == 2) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi(data, true, 1),
-                                                                       phi_pres_old(data, true, 1),
-                                                                       phi_pres_tmp_2(data, true, 1);
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_old(data, true, 0),
-                                                                       phi_u_tmp_2(data, true, 0);
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_rho_old(data, true, 2),
-                                                                       phi_rho_tmp_2(data, true, 2);
-
-      /*--- Loop over all internal faces ---*/
-      for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(face);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_tmp_2.reinit(face);
-        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_tmp_2.reinit(face);
-        phi_u_tmp_2.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_tmp_2.reinit(face);
-        phi_pres_tmp_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi.reinit(face);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus             = phi.get_normal_vector(q);
-
-          const auto& rho_old            = phi_rho_old.get_value(q);
-          const auto& u_old              = phi_u_old.get_value(q);
-          auto rho_old_D                 = VectorizedArray<Number>();
-          auto u_old_D                   = Tensor<1, dim, VectorizedArray<Number>>();
-          const auto& point_vectorized   = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_kinetic_old    = 0.5*(0.5*scalar_product(u_old, u_old)*rho_old*u_old +
-                                                0.5*scalar_product(u_old_D, u_old_D)*rho_old_D*u_old_D);
-
-          const auto& pres_old           = phi_pres_old.get_value(q);
-          auto pres_old_D                = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            pres_old_D = pres_exact.value(point);
-          }
-          const auto& E_old              = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old/rho_old
-                                         + 0.5*Ma*Ma*scalar_product(u_old, u_old);
-          const auto& E_old_D            = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old_D/rho_old_D
-                                         + 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D);
-          const auto& avg_enthalpy_old   = 0.5*(((E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old))*rho_old + pres_old)*u_old +
-                                                ((E_old_D - 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D))*rho_old_D + pres_old_D)*u_old_D);
-
-          const auto& lambda_old         = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                    std::abs(scalar_product(u_old_D, n_plus)));
-          const auto& jump_rho_kin_old   = rho_old*0.5*scalar_product(u_old, u_old) -
-                                           rho_old_D*0.5*scalar_product(u_old_D, u_old_D);
-          const auto& jump_rho_e_old     = rho_old*(E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old)) -
-                                           rho_old_D*(E_old_D - 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D));
-
-          const auto& rho_tmp_2          = phi_rho_tmp_2.get_value(q);
-          const auto& u_tmp_2            = phi_u_tmp_2.get_value(q);
-          auto rho_tmp_2_D               = VectorizedArray<Number>();
-          auto u_tmp_2_D                 = Tensor<1, dim, VectorizedArray<Number>>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_2_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_2_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_kinetic_tmp_2  = 0.5*(0.5*scalar_product(u_tmp_2, u_tmp_2)*rho_tmp_2*u_tmp_2 +
-                                                0.5*scalar_product(u_tmp_2_D, u_tmp_2_D)*rho_tmp_2_D*u_tmp_2_D);
-
-          const auto& pres_tmp_2         = phi_pres_tmp_2.get_value(q);
-          auto pres_tmp_2_D              = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            pres_tmp_2_D = pres_exact.value(point);
-          }
-          const auto& E_tmp_2            = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_2/rho_tmp_2
-                                         + 0.5*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2);
-          const auto& E_tmp_2_D          = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_2_D/rho_tmp_2_D
-                                         + 0.5*Ma*Ma*scalar_product(u_tmp_2_D, u_tmp_2_D);
-          const auto& avg_enthalpy_tmp_2 = 0.5*(((E_tmp_2 - 0.5*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2))*rho_tmp_2 + pres_tmp_2)*
-                                                u_tmp_2 +
-                                                ((E_tmp_2_D - 0.5*Ma*Ma*scalar_product(u_tmp_2_D, u_tmp_2_D))*rho_tmp_2_D + pres_tmp_2_D)*
-                                                u_tmp_2_D);
-
-          const auto& lambda_tmp_2       = std::max(std::abs(scalar_product(u_tmp_2, n_plus)),
-                                                    std::abs(scalar_product(u_tmp_2_D, n_plus)));
-          const auto& jump_rho_kin_tmp_2 = rho_tmp_2*0.5*scalar_product(u_tmp_2, u_tmp_2) -
-                                           rho_tmp_2_D*0.5*scalar_product(u_tmp_2_D, u_tmp_2_D);
-          const auto& jump_rho_e_tmp_2   = rho_tmp_2*(E_tmp_2 - 0.5*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2)) -
-                                           rho_tmp_2_D*(E_tmp_2_D - 0.5*Ma*Ma*scalar_product(u_tmp_2_D, u_tmp_2_D));
-
-          phi.submit_value(-a31*dt*Ma*Ma*(scalar_product(avg_kinetic_old, n_plus) + 0.5*lambda_old*jump_rho_kin_old)
-                           -a31_tilde*dt*(scalar_product(avg_enthalpy_old, n_plus) + 0.5*lambda_old*jump_rho_e_old)
-                           -a32*dt*Ma*Ma*(scalar_product(avg_kinetic_tmp_2, n_plus) + 0.5*lambda_tmp_2*jump_rho_kin_tmp_2)
-                           -a32_tilde*dt*(scalar_product(avg_enthalpy_tmp_2, n_plus) + 0.5*lambda_tmp_2*jump_rho_e_tmp_2), q);
-        }
-        phi.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-    else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi(data, true, 1),
-                                                                       phi_pres_old(data, true, 1),
-                                                                       phi_pres_tmp_2(data, true, 1),
-                                                                       phi_pres_tmp_3(data, true, 1);
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_u_old(data, true, 0),
-                                                                       phi_u_tmp_2(data, true, 0),
-                                                                       phi_u_tmp_3(data, true, 0);
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_rho_old(data, true, 2),
-                                                                       phi_rho_tmp_2(data, true, 2),
-                                                                       phi_rho_tmp_3(data, true, 2);
-
-      /*--- loop over all internal faces ---*/
-      for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(face);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_tmp_2.reinit(face);
-        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_tmp_2.reinit(face);
-        phi_u_tmp_2.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_tmp_2.reinit(face);
-        phi_pres_tmp_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_rho_tmp_3.reinit(face);
-        phi_rho_tmp_3.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_u_tmp_3.reinit(face);
-        phi_u_tmp_3.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_pres_tmp_3.reinit(face);
-        phi_pres_tmp_3.gather_evaluate(src[8], EvaluationFlags::values);
-
-        phi.reinit(face);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus             = phi.get_normal_vector(q);
-
-          const auto& rho_old            = phi_rho_old.get_value(q);
-          const auto& u_old              = phi_u_old.get_value(q);
-          auto rho_old_D                 = VectorizedArray<Number>();
-          auto u_old_D                   = Tensor<1, dim, VectorizedArray<Number>>();
-          const auto& point_vectorized   = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_kinetic_old    = 0.5*(0.5*scalar_product(u_old, u_old)*rho_old*u_old +
-                                                0.5*scalar_product(u_old_D, u_old_D)*rho_old_D*u_old_D);
-
-          const auto& pres_old           = phi_pres_old.get_value(q);
-          auto pres_old_D                = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            pres_old_D = pres_exact.value(point);
-          }
-          const auto& E_old              = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old/rho_old
-                                         + 0.5*Ma*Ma*scalar_product(u_old, u_old);
-          const auto& E_old_D            = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old_D/rho_old_D
-                                         + 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D);
-          const auto& avg_enthalpy_old   = 0.5*(((E_old - 0.5*Ma*Ma*scalar_product(u_old, u_old))*rho_old + pres_old)*u_old +
-                                                ((E_old_D - 0.5*Ma*Ma*scalar_product(u_old_D, u_old_D))*rho_old_D + pres_old_D)*u_old_D);
-
-          const auto& lambda_old         = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                    std::abs(scalar_product(u_old_D, n_plus)));
-          const auto& jump_rhoE_old      = rho_old*E_old - rho_old_D*E_old_D;
-
-          const auto& rho_tmp_2          = phi_rho_tmp_2.get_value(q);
-          const auto& u_tmp_2            = phi_u_tmp_2.get_value(q);
-          auto rho_tmp_2_D               = VectorizedArray<Number>();
-          auto u_tmp_2_D                 = Tensor<1, dim, VectorizedArray<Number>>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_2_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_2_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_kinetic_tmp_2  = 0.5*(0.5*scalar_product(u_tmp_2, u_tmp_2)*rho_tmp_2*u_tmp_2 +
-                                                0.5*scalar_product(u_tmp_2_D, u_tmp_2_D)*rho_tmp_2_D*u_tmp_2_D);
-
-          const auto& pres_tmp_2         = phi_pres_tmp_2.get_value(q);
-          auto pres_tmp_2_D              = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            pres_tmp_2_D = pres_exact.value(point);
-          }
-          const auto& E_tmp_2            = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_2/rho_tmp_2
-                                         + 0.5*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2);
-          const auto& E_tmp_2_D          = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_2_D/rho_tmp_2_D
-                                         + 0.5*Ma*Ma*scalar_product(u_tmp_2_D, u_tmp_2_D);
-          const auto& avg_enthalpy_tmp_2 = 0.5*(((E_tmp_2 - 0.5*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2))*rho_tmp_2 + pres_tmp_2)*
-                                                u_tmp_2 +
-                                                ((E_tmp_2_D - 0.5*Ma*Ma*scalar_product(u_tmp_2_D, u_tmp_2_D))*rho_tmp_2_D + pres_tmp_2_D)*
-                                                u_tmp_2_D);
-
-          const auto& lambda_tmp_2       = std::max(std::abs(scalar_product(u_tmp_2, n_plus)),
-                                                    std::abs(scalar_product(u_tmp_2_D, n_plus)));
-          const auto& jump_rhoE_tmp_2    = rho_tmp_2*E_tmp_2 - rho_tmp_2_D*E_tmp_2_D;
-
-          const auto& rho_tmp_3          = phi_rho_tmp_3.get_value(q);
-          const auto& u_tmp_3            = phi_u_tmp_3.get_value(q);
-          auto rho_tmp_3_D               = VectorizedArray<Number>();
-          auto u_tmp_3_D                 = Tensor<1, dim, VectorizedArray<Number>>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_3_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_3_D[d][v] = u_exact.value(point, d);
-            }
-          }
-          const auto& avg_kinetic_tmp_3  = 0.5*(0.5*scalar_product(u_tmp_3, u_tmp_3)*rho_tmp_3*u_tmp_3 +
-                                                0.5*scalar_product(u_tmp_3_D, u_tmp_3_D)*rho_tmp_3_D*u_tmp_3_D);
-
-          const auto& pres_tmp_3         = phi_pres_tmp_3.get_value(q);
-          auto pres_tmp_3_D              = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            pres_tmp_3_D = pres_exact.value(point);
-          }
-          const auto& E_tmp_3            = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_3/rho_tmp_3
-                                         + 0.5*Ma*Ma*scalar_product(u_tmp_3, u_tmp_3);
-          const auto& E_tmp_3_D          = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_3_D/rho_tmp_3_D
-                                         + 0.5*Ma*Ma*scalar_product(u_tmp_3_D, u_tmp_3_D);
-          const auto& avg_enthalpy_tmp_3 = 0.5*(((E_tmp_3 - 0.5*Ma*Ma*scalar_product(u_tmp_3, u_tmp_3))*rho_tmp_3 + pres_tmp_3)*
-                                                u_tmp_3 +
-                                                ((E_tmp_3_D - 0.5*Ma*Ma*scalar_product(u_tmp_3_D, u_tmp_3_D))*rho_tmp_3_D + pres_tmp_3_D)*
-                                                u_tmp_3_D);
-
-          const auto& lambda_tmp_3       = std::max(std::abs(scalar_product(u_tmp_3, n_plus)),
-                                                    std::abs(scalar_product(u_tmp_3_D, n_plus)));
-          const auto& jump_rhoE_tmp_3    = rho_tmp_3*E_tmp_3 - rho_tmp_3_D*E_tmp_3_D;
-
-          phi.submit_value(-b1*dt*Ma*Ma*scalar_product(avg_kinetic_old, n_plus)
-                           -b1*dt*scalar_product(avg_enthalpy_old, n_plus)
-                           -b1*dt*0.5*lambda_old*jump_rhoE_old
-                           -b2*dt*Ma*Ma*scalar_product(avg_kinetic_tmp_2, n_plus)
-                           -b2*dt*scalar_product(avg_enthalpy_tmp_2, n_plus)
-                           -b2*dt*0.5*lambda_tmp_2*jump_rhoE_tmp_2
-                           -b3*dt*Ma*Ma*scalar_product(avg_kinetic_tmp_3, n_plus)
-                           -b3*dt*scalar_product(avg_enthalpy_tmp_3, n_plus)
-                           -b3*dt*0.5*lambda_tmp_3*jump_rhoE_tmp_3, q);
-        }
-        phi.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-  }
-
-
   // Put together all the previous steps for pressure
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   vmult_rhs_pressure(Vec& dst, const std::vector<Vec>& src) const {
     for(unsigned int d = 0; d < src.size(); ++d) {
       src[d].update_ghost_values();
@@ -1995,9 +1384,9 @@ namespace Atmospheric_Flow {
   // Assemble cell term for the contribution due to internal energy
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
                                      Vec&                                         dst,
                                      const Vec&                                   src,
@@ -2022,9 +1411,9 @@ namespace Atmospheric_Flow {
   // Assemble cell term for the contribution due to enthalpy
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_cell_term_enthalpy(const MatrixFree<dim, Number>&               data,
                               Vec&                                         dst,
                               const Vec&                                   src,
@@ -2062,9 +1451,9 @@ namespace Atmospheric_Flow {
   // Assemble face term for the contribution due to enthalpy
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_face_term_enthalpy(const MatrixFree<dim, Number>&               data,
                               Vec&                                         dst,
                               const Vec&                                   src,
@@ -2118,75 +1507,12 @@ namespace Atmospheric_Flow {
   }
 
 
-  // Assemble boundary term for the contribution due to enthalpy
-  //
-  template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
-  void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
-  assemble_boundary_term_enthalpy(const MatrixFree<dim, Number>&               data,
-                                  Vec&                                         dst,
-                                  const Vec&                                   src,
-                                  const std::pair<unsigned int, unsigned int>& face_range) const {
-    FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi(data, true, 1),
-                                                                     phi_pres_fixed(data, true, 1);
-    FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_src(data, true, 0);
-
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
-    const double coeff = (HYPERBOLIC_stage == 1) ? a22_tilde : a33_tilde;
-
-    /*--- Loop over all faces ---*/
-    for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-      phi_pres_fixed.reinit(face);
-      phi_pres_fixed.gather_evaluate(pres_fixed, EvaluationFlags::values);
-
-      phi_src.reinit(face);
-      phi_src.gather_evaluate(src, EvaluationFlags::values);
-
-      phi.reinit(face);
-
-      /*--- Loop over all quadrature points ---*/
-      for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-        const auto& n_plus            = phi.get_normal_vector(q);
-
-        const auto& pres_fixed        = phi_pres_fixed.get_value(q);
-        auto pres_fixed_D             = VectorizedArray<Number>();
-        auto u_fixed_D                = Tensor<1, dim, VectorizedArray<Number>>();
-        const auto& point_vectorized  = phi.quadrature_point(q);
-        for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-          Point<dim> point; /*--- The point returned by the 'quadrature_point' function is not an instance of Point
-                                  and so it is not ready to be directly used. We need to pay attention to the
-                                  vectorization ---*/
-          for(unsigned int d = 0; d < dim; ++d) {
-            point[d] = point_vectorized[d][v];
-          }
-          pres_fixed_D = pres_exact.value(point);
-          for(unsigned int d = 0; d < dim; ++d) {
-            u_fixed_D[d][v] = u_exact.value(point, d);
-          }
-        }
-
-        const auto& avg_flux_enthalpy = 0.5*EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                        (pres_fixed*phi_src.get_value(q) + pres_fixed_D*u_fixed_D);
-
-        const auto& lambda_fixed      = std::max(std::abs(scalar_product(phi_src.get_value(q), n_plus)),
-                                                 std::abs(scalar_product(u_fixed_D, n_plus)));
-        const auto& jump_rho_e_fixed  = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_fixed - pres_fixed_D);
-
-        phi.submit_value(coeff*dt*(scalar_product(avg_flux_enthalpy, n_plus) + 0.5*lambda_fixed*jump_rho_e_fixed), q);
-      }
-      phi.integrate_scatter(EvaluationFlags::values, dst);
-    }
-  }
-
-
   // Assemble cell term for the pressure
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_cell_term_pressure(const MatrixFree<dim, Number>&               data,
                               Vec&                                         dst,
                               const Vec&                                   src,
@@ -2217,9 +1543,9 @@ namespace Atmospheric_Flow {
   // Assemble face term for the pressure
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_face_term_pressure(const MatrixFree<dim, Number>&               data,
                               Vec&                                         dst,
                               const Vec&                                   src,
@@ -2259,9 +1585,9 @@ namespace Atmospheric_Flow {
   // Assemble boundary term for the pressure
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_boundary_term_pressure(const MatrixFree<dim, Number>&               data,
                                   Vec&                                         dst,
                                   const Vec&                                   src,
@@ -2274,25 +1600,15 @@ namespace Atmospheric_Flow {
     /*--- Loop over all boundary faces ---*/
     for(unsigned int face = face_range.first; face < face_range.second; ++face) {
       phi_src.reinit(face);
-      phi_src.gather_evaluate(src, EvaluationFlags::values | EvaluationFlags::gradients);
+      phi_src.gather_evaluate(src, EvaluationFlags::values);
 
       phi.reinit(face);
 
       /*--- Loop over all quadrature points ---*/
       for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-        const auto& n_plus            = phi.get_normal_vector(q);
+        const auto& n_plus       = phi.get_normal_vector(q);
 
-        auto pres_fixed_D             = VectorizedArray<Number>();
-        const auto& point_vectorized  = phi.quadrature_point(q);
-        for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-          Point<dim> point; /*--- The point returned by the 'quadrature_point' function is not an instance of Point
-                                  and so it is not ready to be directly used. We need to pay attention to the
-                                  vectorization ---*/
-          for(unsigned int d = 0; d < dim; ++d) {
-            point[d] = point_vectorized[d][v];
-          }
-          pres_fixed_D = pres_exact.value(point);
-        }
+        const auto& pres_fixed_D = phi_src.get_value(q);
 
         phi.submit_value(coeff*dt/(Ma*Ma)*0.5*(phi_src.get_value(q) + pres_fixed_D)*n_plus, q);
       }
@@ -2304,9 +1620,9 @@ namespace Atmospheric_Flow {
   // Assemble rhs cell term for the velocity update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_rhs_cell_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
                                          Vec&                                         dst,
                                          const std::vector<Vec>&                      src,
@@ -2322,14 +1638,14 @@ namespace Atmospheric_Flow {
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
         phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
         phi_pres_old.reinit(cell);
         phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
 
         phi_rho_tmp_2.reinit(cell);
-        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
 
         phi.reinit(cell);
 
@@ -2480,23 +1796,23 @@ namespace Atmospheric_Flow {
       /*--- Loop over all cells ---*/
       for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
         phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
         phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
         phi_pres_old.reinit(cell);
         phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
 
         phi_rho_tmp_2.reinit(cell);
-        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
         phi_u_tmp_2.reinit(cell);
-        phi_u_tmp_2.gather_evaluate(src[4], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_u_tmp_2.gather_evaluate(src[4], EvaluationFlags::values);
         phi_pres_tmp_2.reinit(cell);
         phi_pres_tmp_2.gather_evaluate(src[5], EvaluationFlags::values);
 
         phi_rho_tmp_3.reinit(cell);
-        phi_rho_tmp_3.gather_evaluate(src[6], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_rho_tmp_3.gather_evaluate(src[6], EvaluationFlags::values);
         phi_u_tmp_3.reinit(cell);
-        phi_u_tmp_3.gather_evaluate(src[7], EvaluationFlags::values | EvaluationFlags::gradients);
+        phi_u_tmp_3.gather_evaluate(src[7], EvaluationFlags::values);
         phi_pres_tmp_3.reinit(cell);
         phi_pres_tmp_3.gather_evaluate(src[8], EvaluationFlags::values);
 
@@ -2573,9 +1889,9 @@ namespace Atmospheric_Flow {
   // Assemble rhs face term for the velocity update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_rhs_face_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
                                         Vec&                                         dst,
                                         const std::vector<Vec>&                      src,
@@ -2871,26 +2187,20 @@ namespace Atmospheric_Flow {
   // Assemble rhs boundary term for the velocity update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_rhs_boundary_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
-                                            Vec&                                         dst,
-                                            const std::vector<Vec>&                      src,
-                                            const std::pair<unsigned int, unsigned int>& face_range) const {
+                                             Vec&                                         dst,
+                                             const std::vector<Vec>&                      src,
+                                             const std::pair<unsigned int, unsigned int>& face_range) const {
     if(HYPERBOLIC_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0),
-                                                                       phi_u_old(data, true, 0);
+      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0);
       FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_pres_old(data, true, 1);
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_rho_old(data, true, 2);
 
-      /*--- Loop over all internal faces ---*/
+      /*--- Loop over all boundary faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
         phi_pres_old.reinit(face);
         phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
 
@@ -2898,65 +2208,29 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus                 = phi.get_normal_vector(q);
+          const auto& n_plus       = phi.get_normal_vector(q);
 
-          const auto& rho_old                = phi_rho_old.get_value(q);
-          const auto& u_old                  = phi_u_old.get_value(q);
-          const auto& pres_old               = phi_pres_old.get_value(q);
-          auto rho_old_D                     = VectorizedArray<Number>();
-          auto u_old_D                       = Tensor<1, dim, VectorizedArray<Number>>();
-          auto pres_old_D                    = VectorizedArray<Number>();
-          const auto& point_vectorized       = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point; /*--- The point returned by the 'quadrature_point' function is not an instance of Point
-                                    and so it is not ready to be directly used. We need to pay attention to the
-                                    vectorization ---*/
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-            pres_old_D = pres_exact.value(point);
-          }
-          const auto& avg_tensor_product_u_n = 0.5*(outer_product(rho_old*u_old, u_old) +
-                                                    outer_product(rho_old_D*u_old_D, u_old_D));
-          const auto& avg_pres_old           = 0.5*(pres_old + pres_old_D);
-          const auto& jump_rhou_old          = rho_old*u_old - rho_old_D*u_old_D;
-          const auto& lambda_old             = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                        std::abs(scalar_product(u_old_D, n_plus)));
+          const auto& pres_old     = phi_pres_old.get_value(q);
+          const auto& pres_old_D   = pres_old;
 
-          phi.submit_value(-a21*dt*avg_tensor_product_u_n*n_plus
-                           -a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
-                           -a21*dt*0.5*lambda_old*jump_rhou_old, q);
+          const auto& avg_pres_old = 0.5*(pres_old + pres_old_D);
+
+          phi.submit_value(-a21_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
     else if(HYPERBOLIC_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0),
-                                                                       phi_u_old(data, true, 0),
-                                                                       phi_u_tmp_2(data, true, 0);
+      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0);
       FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_pres_old(data, true, 1),
                                                                        phi_pres_tmp_2(data, true, 1);
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_rho_old(data, true, 2),
-                                                                       phi_rho_tmp_2(data, true, 2);
 
-      /*---Loop over all internal faces ---*/
+      /*--- Loop over all boundary faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
         phi_pres_old.reinit(face);
         phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
 
-        phi_rho_tmp_2.reinit(face);
-        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_tmp_2.reinit(face);
-        phi_u_tmp_2.gather_evaluate(src[4], EvaluationFlags::values);
         phi_pres_tmp_2.reinit(face);
         phi_pres_tmp_2.gather_evaluate(src[5], EvaluationFlags::values);
 
@@ -2964,100 +2238,39 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus                     = phi.get_normal_vector(q);
+          const auto& n_plus         = phi.get_normal_vector(q);
 
-          const auto& rho_old                    = phi_rho_old.get_value(q);
-          const auto& u_old                      = phi_u_old.get_value(q);
-          const auto& pres_old                   = phi_pres_old.get_value(q);
-          auto rho_old_D                         = VectorizedArray<Number>();
-          auto u_old_D                           = Tensor<1, dim, VectorizedArray<Number>>();
-          auto pres_old_D                        = VectorizedArray<Number>();
-          const auto& point_vectorized           = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-            pres_old_D = pres_exact.value(point);
-          }
-          const auto& avg_tensor_product_u_n     = 0.5*(outer_product(rho_old*u_old, u_old) +
-                                                        outer_product(rho_old_D*u_old_D, u_old_D));
-          const auto& avg_pres_old               = 0.5*(pres_old + pres_old_D);
-          const auto& jump_rhou_old              = rho_old*u_old - rho_old_D*u_old_D;
-          const auto& lambda_old                 = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                            std::abs(scalar_product(u_old_D, n_plus)));
+          const auto& pres_old       = phi_pres_old.get_value(q);
+          const auto& pres_old_D     = pres_old;
 
-          const auto& rho_tmp_2                  = phi_rho_tmp_2.get_value(q);
-          const auto& u_tmp_2                    = phi_u_tmp_2.get_value(q);
-          const auto& pres_tmp_2                 = phi_pres_tmp_2.get_value(q);
-          auto rho_tmp_2_D                       = VectorizedArray<Number>();
-          auto u_tmp_2_D                         = Tensor<1, dim, VectorizedArray<Number>>();
-          auto pres_tmp_2_D                      = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_2_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_2_D[d][v] = u_exact.value(point, d);
-            }
-            pres_tmp_2_D = pres_exact.value(point);
-          }
-          const auto& avg_tensor_product_u_tmp_2 = 0.5*(outer_product(rho_tmp_2*u_tmp_2, u_tmp_2) +
-                                                        outer_product(rho_tmp_2_D*u_tmp_2_D, u_tmp_2_D));
-          const auto& avg_pres_tmp_2             = 0.5*(pres_tmp_2 + pres_tmp_2_D);
-          const auto& jump_rhou_tmp_2            = rho_tmp_2*u_tmp_2 - rho_tmp_2_D*u_tmp_2_D;
-          const auto& lambda_tmp_2               = std::max(std::abs(scalar_product(u_tmp_2, n_plus)),
-                                                            std::abs(scalar_product(u_tmp_2_D, n_plus)));
+          const auto& avg_pres_old   = 0.5*(pres_old + pres_old_D);
 
-          phi.submit_value(-a31*dt*avg_tensor_product_u_n*n_plus
-                           -a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
-                           -a31*dt*0.5*lambda_old*jump_rhou_old
-                           -a32*dt*avg_tensor_product_u_tmp_2*n_plus
-                           -a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
-                           -a32*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2, q);
+          const auto& pres_tmp_2     = phi_pres_tmp_2.get_value(q);
+          const auto& pres_tmp_2_D   = pres_tmp_2;
+
+          const auto& avg_pres_tmp_2 = 0.5*(pres_tmp_2 + pres_tmp_2_D);
+
+          phi.submit_value(-a31_tilde*dt/(Ma*Ma)*avg_pres_old*n_plus
+                           -a32_tilde*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0),
-                                                                       phi_u_old(data, true, 0),
-                                                                       phi_u_tmp_2(data, true, 0),
-                                                                       phi_u_tmp_3(data, true, 0);
+      FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0);
       FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_pres_old(data, true, 1),
                                                                        phi_pres_tmp_2(data, true, 1),
                                                                        phi_pres_tmp_3(data, true, 1);
-      FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_rho_old(data, true, 2),
-                                                                       phi_rho_tmp_2(data, true, 2),
-                                                                       phi_rho_tmp_3(data, true, 2);
 
-      /*--- Loop over all internal faces ---*/
+      /*--- Loop over all boundary faces ---*/
       for(unsigned int face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old.reinit(face);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(face);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
         phi_pres_old.reinit(face);
         phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
 
-        phi_rho_tmp_2.reinit(face);
-        phi_rho_tmp_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_tmp_2.reinit(face);
-        phi_u_tmp_2.gather_evaluate(src[4], EvaluationFlags::values);
         phi_pres_tmp_2.reinit(face);
         phi_pres_tmp_2.gather_evaluate(src[5], EvaluationFlags::values);
 
-        phi_rho_tmp_3.reinit(face);
-        phi_rho_tmp_3.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_u_tmp_3.reinit(face);
-        phi_u_tmp_3.gather_evaluate(src[7], EvaluationFlags::values);
         phi_pres_tmp_3.reinit(face);
         phi_pres_tmp_3.gather_evaluate(src[8], EvaluationFlags::values);
 
@@ -3065,90 +2278,26 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_plus                     = phi.get_normal_vector(q);
+          const auto& n_plus         = phi.get_normal_vector(q);
 
-          const auto& rho_old                    = phi_rho_old.get_value(q);
-          const auto& u_old                      = phi_u_old.get_value(q);
-          const auto& pres_old                   = phi_pres_old.get_value(q);
-          auto rho_old_D                         = VectorizedArray<Number>();
-          auto u_old_D                           = Tensor<1, dim, VectorizedArray<Number>>();
-          auto pres_old_D                        = VectorizedArray<Number>();
-          const auto& point_vectorized           = phi.quadrature_point(q);
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_old_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_old_D[d][v] = u_exact.value(point, d);
-            }
-            pres_old_D = pres_exact.value(point);
-          }
-          const auto& avg_tensor_product_u_n     = 0.5*(outer_product(rho_old*u_old, u_old) +
-                                                        outer_product(rho_old_D*u_old_D, u_old_D));
-          const auto& avg_pres_old               = 0.5*(pres_old + pres_old_D);
-          const auto& jump_rhou_old              = rho_old*u_old - rho_old_D*u_old_D;
-          const auto& lambda_old                 = std::max(std::abs(scalar_product(u_old, n_plus)),
-                                                            std::abs(scalar_product(u_old_D, n_plus)));
+          const auto& pres_old       = phi_pres_old.get_value(q);
+          const auto& pres_old_D     = pres_old;
 
-          const auto& rho_tmp_2                  = phi_rho_tmp_2.get_value(q);
-          const auto& u_tmp_2                    = phi_u_tmp_2.get_value(q);
-          const auto& pres_tmp_2                 = phi_pres_tmp_2.get_value(q);
-          auto rho_tmp_2_D                       = VectorizedArray<Number>();
-          auto u_tmp_2_D                         = Tensor<1, dim, VectorizedArray<Number>>();
-          auto pres_tmp_2_D                      = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_2_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_2_D[d][v] = u_exact.value(point, d);
-            }
-            pres_tmp_2_D = pres_exact.value(point);
-          }
-          const auto& avg_tensor_product_u_tmp_2 = 0.5*(outer_product(rho_tmp_2*u_tmp_2, u_tmp_2) +
-                                                        outer_product(rho_tmp_2_D*u_tmp_2_D, u_tmp_2_D));
-          const auto& avg_pres_tmp_2             = 0.5*(pres_tmp_2 + pres_tmp_2_D);
-          const auto& jump_rhou_tmp_2            = rho_tmp_2*u_tmp_2 - rho_tmp_2_D*u_tmp_2_D;
-          const auto& lambda_tmp_2               = std::max(std::abs(scalar_product(u_tmp_2, n_plus)),
-                                                            std::abs(scalar_product(u_tmp_2_D, n_plus)));
+          const auto& avg_pres_old   = 0.5*(pres_old + pres_old_D);
 
-          const auto& rho_tmp_3                  = phi_rho_tmp_3.get_value(q);
-          const auto& u_tmp_3                    = phi_u_tmp_3.get_value(q);
-          const auto& pres_tmp_3                 = phi_pres_tmp_3.get_value(q);
-          auto rho_tmp_3_D                       = VectorizedArray<Number>();
-          auto u_tmp_3_D                         = Tensor<1, dim, VectorizedArray<Number>>();
-          auto pres_tmp_3_D                      = VectorizedArray<Number>();
-          for(unsigned int v = 0; v < VectorizedArray<Number>::size(); ++v) {
-            Point<dim> point;
-            for(unsigned int d = 0; d < dim; ++d) {
-              point[d] = point_vectorized[d][v];
-            }
-            rho_tmp_3_D = rho_exact.value(point);
-            for(unsigned int d = 0; d < dim; ++d) {
-              u_tmp_3_D[d][v] = u_exact.value(point, d);
-            }
-            pres_tmp_3_D = pres_exact.value(point);
-          }
-          const auto& avg_tensor_product_u_tmp_3 = 0.5*(outer_product(rho_tmp_3*u_tmp_3, u_tmp_3) +
-                                                        outer_product(rho_tmp_3_D*u_tmp_3_D, u_tmp_3_D));
-          const auto& avg_pres_tmp_3             = 0.5*(pres_tmp_3 + pres_tmp_3_D);
-          const auto& jump_rhou_tmp_3            = rho_tmp_3*u_tmp_3 - rho_tmp_3_D*u_tmp_3_D;
-          const auto& lambda_tmp_3               = std::max(std::abs(scalar_product(u_tmp_3, n_plus)),
-                                                            std::abs(scalar_product(u_tmp_3_D, n_plus)));
+          const auto& pres_tmp_2     = phi_pres_tmp_2.get_value(q);
+          const auto& pres_tmp_2_D   = pres_tmp_2;
 
-          phi.submit_value(-b1*dt*avg_tensor_product_u_n*n_plus
-                           -b1*dt/(Ma*Ma)*avg_pres_old*n_plus
-                           -b1*dt*0.5*lambda_old*jump_rhou_old
-                           -b2*dt*avg_tensor_product_u_tmp_2*n_plus
+          const auto& avg_pres_tmp_2 = 0.5*(pres_tmp_2 + pres_tmp_2_D);
+
+          const auto& pres_tmp_3     = phi_pres_tmp_3.get_value(q);
+          const auto& pres_tmp_3_D   = pres_tmp_3;
+
+          const auto& avg_pres_tmp_3 = 0.5*(pres_tmp_3 + pres_tmp_3_D);
+
+          phi.submit_value(-b1*dt/(Ma*Ma)*avg_pres_old*n_plus
                            -b2*dt/(Ma*Ma)*avg_pres_tmp_2*n_plus
-                           -b2*dt*0.5*lambda_tmp_2*jump_rhou_tmp_2
-                           -b3*dt*avg_tensor_product_u_tmp_3*n_plus
-                           -b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus
-                           -b3*dt*0.5*lambda_tmp_3*jump_rhou_tmp_3, q);
+                           -b3*dt/(Ma*Ma)*avg_pres_tmp_3*n_plus, q);
         }
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
@@ -3159,9 +2308,9 @@ namespace Atmospheric_Flow {
   // Put together all the previous steps for velocity update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   vmult_rhs_velocity_fixed(Vec& dst, const std::vector<Vec>& src) const {
     for(unsigned int d = 0; d < src.size(); ++d) {
       src[d].update_ghost_values();
@@ -3179,9 +2328,9 @@ namespace Atmospheric_Flow {
   // Assemble cell term for the velocity update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_cell_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
                                      Vec&                                         dst,
                                      const Vec&                                   src,
@@ -3211,9 +2360,9 @@ namespace Atmospheric_Flow {
   // Put together all previous steps
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   apply_add(Vec& dst, const Vec& src) const {
     AssertIndexRange(NS_stage, 7);
     Assert(NS_stage > 0, ExcInternalError());
@@ -3271,9 +2420,9 @@ namespace Atmospheric_Flow {
   // Application of pressure matrix
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   vmult_pressure(Vec& dst, const Vec& src) const {
     src.update_ghost_values();
 
@@ -3289,9 +2438,9 @@ namespace Atmospheric_Flow {
   // Application of enthalpy matrix
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   vmult_enthalpy(Vec& dst, const Vec& src) const {
     src.update_ghost_values();
 
@@ -3307,9 +2456,9 @@ namespace Atmospheric_Flow {
   // Assemble diagonal cell term for the rho projection
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_diagonal_cell_term_rho_update(const MatrixFree<dim, Number>&               data,
                                          Vec&                                         dst,
                                          const unsigned int&                          ,
@@ -3349,9 +2498,9 @@ namespace Atmospheric_Flow {
   // Assemble diagonal cell term for the velocity update
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_diagonal_cell_term_velocity_fixed(const MatrixFree<dim, Number>&               data,
                                              Vec&                                         dst,
                                              const unsigned int&                          ,
@@ -3400,9 +2549,9 @@ namespace Atmospheric_Flow {
   // Assemble diagonal cell term for the contribution due to internal energy
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   assemble_diagonal_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
                                               Vec&                                         dst,
                                               const unsigned int&                          ,
@@ -3440,9 +2589,9 @@ namespace Atmospheric_Flow {
   // Compute diagonal of various steps
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
-           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec, typename Number>
+           int n_q_points_1d_rho, int n_q_points_1d_T, int n_q_points_1d_u, typename Vec>
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
-                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec, Number>::
+                          n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   compute_diagonal() {
     this->inverse_diagonal_entries.reset(new DiagonalMatrix<Vec>());
     auto& inverse_diagonal = this->inverse_diagonal_entries->get_vector();

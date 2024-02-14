@@ -24,17 +24,19 @@ namespace EquationData {
   static const double Cp_Cv     = 1.4;   /*--- Specific heats ratio ---*/
   static const double R         = 287.0; /*--- Specific gas constant ---*/
 
-  static const double a         = 1.0;                /*--- Radius of the earth ---*/
+  static const double a         = 6.37122*1e6;        /*--- Radius of the earth ---*/
   static const double g         = 9.80616;            /*--- Acceleartion of gravity ---*/
   static const double T_bar     = 273.0;              /*--- Isothermal temperature ---*/
-  static const double p0        = 100000.0;           /*--- Pressure at surface, which conicides with the reference surface pressure ---*/
-  static const double Tf        = 2.0*numbers::PI;    /*--- Rotation period for solid-body rotation ---*/
+  static const double p0        = 100000.0;           /*--- Pressure at surface, which coincides with the reference surface pressure
+                                                            (not to be confused with reference pressure for adimensionalization)---*/
+
+  static const double Tf        = 86400.0;            /*--- Rotation period for solid-body rotation ---*/
   static const double Omega_sbr = 2.0*numbers::PI/Tf; /*--- Solid-body rotation rate ---*/
 
   static const double p_ref     = p0;              /*--- Reference pressure for adimensionalization ---*/
   static const double rho_ref   = p_ref/(R*T_bar); /*--- Reference density for adimensionalization ---*/
-  static const double u_ref     = a*Omega_sbr;     /*--- Reference velocity for adimensionalization ---*/
-  static const double L_ref     = a;               /*--- Reference length for adimensionalization ---*/
+  static const double u_ref     = 1.0;             /*--- Reference velocity for adimensionalization ---*/
+  static const double L_ref     = 1.0;             /*--- Reference length for adimensionalization ---*/
 
   static const unsigned int degree_mapping = 2; /*--- Degree for high order mapping (useful in particular for visualization) ---*/
 
