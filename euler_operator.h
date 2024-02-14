@@ -1,3 +1,7 @@
+/* This file is part of the Atmospheric_Flows/tree/Mesoscale repository and subject to the
+   LGPL license. See the LICENSE file in the top level directory of this
+   project for details. */
+
 /* Author: Giuseppe Orlando, 2023. */
 
 // @sect{Include files}
@@ -87,8 +91,8 @@ namespace Atmospheric_Flow {
     double       b2;
     double       b3;
 
-    unsigned int HYPERBOLIC_stage; /*--- Flag for the IMEX stage ---*/
-    mutable unsigned int NS_stage; /*--- Flag for the equation actually considered ---*/
+    unsigned int IMEX_stage;          /*--- Flag for the IMEX stage ---*/
+    mutable unsigned int Euler_stage; /*--- Flag for the equation actually considered ---*/
 
     virtual void apply_add(Vec& dst, const Vec& src) const override; /*--- Overriden function which actually assembles the
                                                                            bilinear forms ---*/
@@ -222,7 +226,7 @@ namespace Atmospheric_Flow {
                    a21(gamma), a22(0.0), a31(0.5), a32(0.5), a33(0.0),
                    a21_tilde(0.5*gamma), a22_tilde(0.5*gamma), a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
                    a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde), b2(a32_tilde), b3(a33_tilde),
-                   HYPERBOLIC_stage(1), NS_stage(1) {}
+                   IMEX_stage(1), Euler_stage(1) {}
 
 
   // Constructor with runtime parameters storage
@@ -238,7 +242,7 @@ namespace Atmospheric_Flow {
                                                         a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
                                                         a31_tilde(std::sqrt(2)/4.0), a32_tilde(std::sqrt(2)/4.0),
                                                         a33_tilde(1.0 - std::sqrt(2)/2.0), b1(a31_tilde),
-                                                        b2(a32_tilde), b3(a33_tilde), HYPERBOLIC_stage(1), NS_stage(1) {}
+                                                        b2(a32_tilde), b3(a33_tilde), IMEX_stage(1), Euler_stage(1) {}
 
 
   // Setter of time-step
@@ -285,11 +289,11 @@ namespace Atmospheric_Flow {
     AssertIndexRange(stage, 4);
     Assert(stage > 0, ExcInternalError());
 
-    HYPERBOLIC_stage = stage;
+    IMEX_stage = stage;
   }
 
 
-  // Setter of NS stage (this can be known only during the effective execution
+  // Setter of Euler stage (this can be known only during the effective execution
   // and so it has to be demanded to the class that really solves the problem)
   //
   template<int dim, int fe_degree_rho, int fe_degree_T, int fe_degree_u,
@@ -300,7 +304,7 @@ namespace Atmospheric_Flow {
     AssertIndexRange(stage, 7);
     Assert(stage > 0, ExcInternalError());
 
-    NS_stage = stage;
+    Euler_stage = stage;
   }
 
 
@@ -350,7 +354,7 @@ namespace Atmospheric_Flow {
                                     Vec&                                         dst,
                                     const std::vector<Vec>&                      src,
                                     const std::pair<unsigned int, unsigned int>& cell_range) const {
-    if(HYPERBOLIC_stage == 1) {
+    if(IMEX_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the old density and
       the old velocity. 'phi' will be used only to 'submit' the result.
       The second argument specifies which dof handler has to be used (in this implementation 0 stands for
@@ -387,7 +391,7 @@ namespace Atmospheric_Flow {
               The flag parameter specifies if we are testing against the test function and/or its gradient ---*/
       }
     }
-    else if(HYPERBOLIC_stage == 2) {
+    else if(IMEX_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi(data, 2),
                                                                    phi_rho_old(data, 2),
@@ -487,7 +491,7 @@ namespace Atmospheric_Flow {
                                     Vec&                                         dst,
                                     const std::vector<Vec>&                      src,
                                     const std::pair<unsigned int, unsigned int>& face_range) const {
-    if(HYPERBOLIC_stage == 1) {
+    if(IMEX_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities.
             'true' means that we are reading the information from 'inside', whereas 'false' from 'outside' ---*/
       FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_p(data, true, 2),
@@ -535,7 +539,7 @@ namespace Atmospheric_Flow {
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    else if(HYPERBOLIC_stage == 2) {
+    else if(IMEX_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation<dim, fe_degree_rho, n_q_points_1d_u, 1, Number> phi_p(data, true, 2),
                                                                        phi_m(data, false, 2),
@@ -763,7 +767,7 @@ namespace Atmospheric_Flow {
                                   Vec&                                         dst,
                                   const std::vector<Vec>&                      src,
                                   const std::pair<unsigned int, unsigned int>& cell_range) const {
-    if(HYPERBOLIC_stage == 1) {
+    if(IMEX_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi(data, 1),
                                                                    phi_pres_old(data, 1);
@@ -812,7 +816,7 @@ namespace Atmospheric_Flow {
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
     }
-    else if(HYPERBOLIC_stage == 2) {
+    else if(IMEX_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi(data, 1),
                                                                    phi_pres_old(data, 1),
@@ -977,7 +981,7 @@ namespace Atmospheric_Flow {
                                   Vec&                                         dst,
                                   const std::vector<Vec>&                      src,
                                   const std::pair<unsigned int, unsigned int>& face_range) const {
-    if(HYPERBOLIC_stage == 1) {
+    if(IMEX_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_p(data, true, 1),
                                                                        phi_m(data, false, 1),
@@ -1064,7 +1068,7 @@ namespace Atmospheric_Flow {
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    else if(HYPERBOLIC_stage == 2) {
+    else if(IMEX_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_p(data, true, 1),
                                                                        phi_m(data, false, 1),
@@ -1423,7 +1427,7 @@ namespace Atmospheric_Flow {
                                                                  phi_pres_fixed(data, 1);
     FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_src(data, 0);
 
-    const double coeff = (HYPERBOLIC_stage == 1) ? a22_tilde : a33_tilde;
+    const double coeff = (IMEX_stage == 1) ? a22_tilde : a33_tilde;
 
     /*--- Loop over all cells ---*/
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
@@ -1466,7 +1470,7 @@ namespace Atmospheric_Flow {
 
     /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
           to explicitly distinguish the two cases as done for the rhs. ---*/
-    const double coeff = (HYPERBOLIC_stage == 1) ? a22_tilde : a33_tilde;
+    const double coeff = (IMEX_stage == 1) ? a22_tilde : a33_tilde;
 
     /*--- Loop over all faces ---*/
     for(unsigned int face = face_range.first; face < face_range.second; ++face) {
@@ -1519,7 +1523,7 @@ namespace Atmospheric_Flow {
     FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, 0);
     FEEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_src(data, 1);
 
-    const double coeff = (HYPERBOLIC_stage == 1) ? a22_tilde : a33_tilde;
+    const double coeff = (IMEX_stage == 1) ? a22_tilde : a33_tilde;
 
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_src.reinit(cell);
@@ -1552,7 +1556,7 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_src_p(data, true, 1),
                                                                      phi_src_m(data, false, 1);
 
-    const double coeff = (HYPERBOLIC_stage == 1) ? a22_tilde : a33_tilde;
+    const double coeff = (IMEX_stage == 1) ? a22_tilde : a33_tilde;
 
     /*--- Loop over all internal faces ---*/
     for(unsigned int face = face_range.first; face < face_range.second; ++face) {
@@ -1593,7 +1597,7 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0);
     FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_src(data, true, 1);
 
-    const double coeff = (HYPERBOLIC_stage == 1) ? a22_tilde : a33_tilde;
+    const double coeff = (IMEX_stage == 1) ? a22_tilde : a33_tilde;
 
     /*--- Loop over all boundary faces ---*/
     for(unsigned int face = face_range.first; face < face_range.second; ++face) {
@@ -1634,7 +1638,7 @@ namespace Atmospheric_Flow {
     }
     e_k[dim - 1] = make_vectorized_array<Number>(1.0);
 
-    if(HYPERBOLIC_stage == 1) {
+    if(IMEX_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, 0),
                                                                    phi_u_old(data, 0);
@@ -1683,7 +1687,7 @@ namespace Atmospheric_Flow {
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
     }
-    else if(HYPERBOLIC_stage == 2) {
+    else if(IMEX_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, 0),
                                                                    phi_u_old(data, 0),
@@ -1850,7 +1854,7 @@ namespace Atmospheric_Flow {
                                         Vec&                                         dst,
                                         const std::vector<Vec>&                      src,
                                         const std::pair<unsigned int, unsigned int>& face_range) const {
-    if(HYPERBOLIC_stage == 1) {
+    if(IMEX_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_p(data, true, 0),
                                                                        phi_m(data, false, 0),
@@ -1910,7 +1914,7 @@ namespace Atmospheric_Flow {
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    else if(HYPERBOLIC_stage == 2) {
+    else if(IMEX_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi_p(data, true, 0),
                                                                        phi_m(data, false, 0),
@@ -2161,7 +2165,7 @@ namespace Atmospheric_Flow {
                                              Vec&                                         dst,
                                              const std::vector<Vec>&                      src,
                                              const std::pair<unsigned int, unsigned int>& face_range) const {
-    if(HYPERBOLIC_stage == 1) {
+    if(IMEX_stage == 1) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0);
       FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_pres_old(data, true, 1);
@@ -2188,7 +2192,7 @@ namespace Atmospheric_Flow {
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    else if(HYPERBOLIC_stage == 2) {
+    else if(IMEX_stage == 2) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_u, dim, Number> phi(data, true, 0);
       FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_u, 1, Number>   phi_pres_old(data, true, 1),
@@ -2335,14 +2339,14 @@ namespace Atmospheric_Flow {
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
                           n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   apply_add(Vec& dst, const Vec& src) const {
-    AssertIndexRange(NS_stage, 7);
-    Assert(NS_stage > 0, ExcInternalError());
+    AssertIndexRange(Euler_stage, 7);
+    Assert(Euler_stage > 0, ExcInternalError());
 
-    if(NS_stage == 1 || NS_stage == 4) {
+    if(Euler_stage == 1 || Euler_stage == 4) {
       this->data->cell_loop(&EULEROperator::assemble_cell_term_rho_update,
                             this, dst, src, false);
     }
-    else if(NS_stage == 2) {
+    else if(Euler_stage == 2) {
       this->data->cell_loop(&EULEROperator::assemble_cell_term_internal_energy,
                             this, dst, src, false);
 
@@ -2351,7 +2355,7 @@ namespace Atmospheric_Flow {
       this->data->initialize_dof_vector(tmp_1, 0);
       this->vmult_pressure(tmp_1, src);
 
-      NS_stage = 3;
+      Euler_stage = 3;
       const std::vector<unsigned int> tmp_reinit = {0};
       auto* tmp_matrix = const_cast<EULEROperator*>(this);
       Vec tmp_2;
@@ -2372,16 +2376,16 @@ namespace Atmospheric_Flow {
       this->vmult_enthalpy(tmp_3, tmp_2);
 
       dst.add(-1.0, tmp_3);
-      NS_stage = 2;
+      Euler_stage = 2;
       const std::vector<unsigned int> tmp = {1};
       tmp_matrix->initialize(tmp_matrix->get_matrix_free(), tmp, tmp);
       tmp_matrix->compute_diagonal();
     }
-    else if(NS_stage == 3 || NS_stage == 5) {
+    else if(Euler_stage == 3 || Euler_stage == 5) {
       this->data->cell_loop(&EULEROperator::assemble_cell_term_velocity_fixed,
                             this, dst, src, false);
     }
-    else if(NS_stage == 6) {
+    else if(Euler_stage == 6) {
       this->data->cell_loop(&EULEROperator::assemble_cell_term_internal_energy,
                             this, dst, src, false);
     }
@@ -2577,27 +2581,27 @@ namespace Atmospheric_Flow {
   void EULEROperator<dim, fe_degree_rho, fe_degree_T, fe_degree_u,
                           n_q_points_1d_rho, n_q_points_1d_T, n_q_points_1d_u, Vec>::
   compute_diagonal() {
-    AssertIndexRange(NS_stage, 7);
-    Assert(NS_stage > 0, ExcInternalError());
+    AssertIndexRange(Euler_stage, 7);
+    Assert(Euler_stage > 0, ExcInternalError());
 
     this->inverse_diagonal_entries.reset(new DiagonalMatrix<Vec>());
     auto& inverse_diagonal = this->inverse_diagonal_entries->get_vector();
 
     const unsigned int dummy = 0;
 
-    if(NS_stage == 1 || NS_stage == 4) {
+    if(Euler_stage == 1 || Euler_stage == 4) {
       this->data->initialize_dof_vector(inverse_diagonal, 2);
 
       this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_rho_update,
                             this, inverse_diagonal, dummy, false);
     }
-    else if(NS_stage == 2 || NS_stage == 6) {
+    else if(Euler_stage == 2 || Euler_stage == 6) {
       this->data->initialize_dof_vector(inverse_diagonal, 1);
 
       this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_internal_energy,
                             this, inverse_diagonal, dummy, false);
     }
-    else if(NS_stage == 3 || NS_stage == 5) {
+    else if(Euler_stage == 3 || Euler_stage == 5) {
       this->data->initialize_dof_vector(inverse_diagonal, 0);
 
       this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_velocity_fixed,

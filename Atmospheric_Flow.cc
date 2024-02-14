@@ -1,3 +1,7 @@
+/* This file is part of the Atmospheric_Flows/tree/Mesoscale repository and subject to the
+   LGPL license. See the LICENSE file in the top level directory of this
+   project for details. */
+
 /* Author: Giuseppe Orlando, 2023. */
 
 // @sect{Include files}
@@ -719,7 +723,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   euler_matrix.set_u_fixed(u_fixed); /*--- Set the current velocity for the fixed point loop to the operator ---*/
   if(IMEX_stage == 1) {
     euler_matrix.vmult_rhs_pressure(rhs_pres, {rho_old, u_old, pres_old,
-                                               rho_tmp_2, u_fixed});
+                                               rho_tmp_2, u_fixed, pres_fixed_old});
 
     euler_matrix.vmult_rhs_velocity_fixed(rhs_u, {rho_old, u_old, pres_old,
                                                   rho_tmp_2});
@@ -727,7 +731,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   else if(IMEX_stage == 2) {
     euler_matrix.vmult_rhs_pressure(rhs_pres, {rho_old, u_old, pres_old,
                                                rho_tmp_2, u_tmp_2, pres_tmp_2,
-                                               rho_tmp_3, u_fixed});
+                                               rho_tmp_3, u_fixed, pres_fixed_old});
 
     euler_matrix.vmult_rhs_velocity_fixed(rhs_u, {rho_old, u_old, pres_old,
                                                   rho_tmp_2, u_tmp_2, pres_tmp_2,

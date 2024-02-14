@@ -1,9 +1,14 @@
+/* This file is part of the Atmospheric_Flows/tree/Mesoscale repository and subject to the
+   LGPL license. See the LICENSE file in the top level directory of this
+   project for details. */
+
 /*--- Author: Giuseppe Orlando, 2023. ---*/
 
 // @sect{Include files}
 
 // We start by including the necessary deal.II header files and some C++
 // related ones.
+//
 #include <deal.II/base/point.h>
 #include <deal.II/base/function.h>
 
@@ -61,15 +66,14 @@ namespace EquationData {
   template<int dim>
   class Velocity: public Function<dim> {
   public:
-    Velocity(const double initial_time = 0.0);
+    Velocity(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value for a single component ---*/
 
     virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override;
+                              Vector<double>&   values) const override; /*--- Point value for the whole vector ---*/
   };
-
 
   // Constructor which simply relies on the 'Function' constructor.
   //
@@ -109,12 +113,11 @@ namespace EquationData {
   template<int dim>
   class Pressure: public Function<dim> {
   public:
-    Pressure(const double initial_time = 0.0);
+    Pressure(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value ---*/
   };
-
 
   // Constructor which again relies on the 'Function' constructor.
   //
@@ -145,16 +148,20 @@ namespace EquationData {
   template<int dim>
   class Density: public Function<dim> {
   public:
-    Density(const double initial_time = 0.0);
+    Density(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value ---*/
   };
 
-
+  // Constructor which again relies on the 'Function' constructor.
+  //
   template<int dim>
   Density<dim>::Density(const double initial_time): Function<dim>(1, initial_time) {}
 
+  // Evaluation depending on the spatial coordinates. The input argument 'component'
+  // will be unused but it has to be kept to override
+  //
   template<int dim>
   double Density<dim>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
@@ -180,25 +187,29 @@ namespace EquationData {
   template<int dim, unsigned int n_comp>
   class Rayleigh: public Function<dim> {
   public:
-    Rayleigh(const double initial_time = 0.0);
+    Rayleigh(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value for each component ---*/
 
     virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override;
+                              Vector<double>&   values) const override; /*--- Point value for the whole vector ---*/
 
   private:
     const double z_start; /*--- Starting coordinate of the damping layer ---*/
     const double z_max;   /*--- Ending coordinate of the damping layer ---*/
   };
 
-
+  // Constructor which again relies on the 'Function' constructor.
+  //
   template<int dim, unsigned int n_comp>
   Rayleigh<dim, n_comp>::Rayleigh(const double initial_time): Function<dim>(n_comp, initial_time),
                                                               z_start(EquationData::z_start/EquationData::L_ref),
                                                               z_max(EquationData::z_max/EquationData::L_ref) {}
 
+  // Evaluation depending on the spatial coordinates. The input argument 'component'
+  // will be unused but it has to be kept to override
+  //
   template<int dim, unsigned int n_comp>
   double Rayleigh<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
@@ -231,26 +242,29 @@ namespace EquationData {
   template<int dim, unsigned int n_comp>
   class Rayleigh_Aux: public Function<dim> {
   public:
-    Rayleigh_Aux(const double initial_time = 0.0);
+    Rayleigh_Aux(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value ---*/
 
     virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override;
+                              Vector<double>&   values) const override; /*--- Point value for the whole vector ---*/
 
   private:
     const double z_start; /*--- Starting coordinate of the damping layer ---*/
     const double z_max;   /*--- Ending coordinate of the damping layer ---*/
   };
 
-
+  // Constructor which again relies on the 'Function' constructor.
+  //
   template<int dim, unsigned int n_comp>
   Rayleigh_Aux<dim, n_comp>::Rayleigh_Aux(const double initial_time): Function<dim>(n_comp, initial_time),
                                                                       z_start(EquationData::z_start/EquationData::L_ref),
                                                                       z_max(EquationData::z_max/EquationData::L_ref) {}
 
-
+  // Evaluation depending on the spatial coordinates. The input argument 'component'
+  // will be unused but it has to be kept to override
+  //
   template<int dim, unsigned int n_comp>
   double Rayleigh_Aux<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
@@ -264,7 +278,9 @@ namespace EquationData {
                            std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start)));
   }
 
-
+  // We need a vector value instance to deal with the velocity or, more in general,
+  // if n_comp > 1.
+  //
   template<int dim, unsigned int n_comp>
   void Rayleigh_Aux<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
     Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
@@ -280,26 +296,29 @@ namespace EquationData {
   template<int dim, unsigned int n_comp>
   class Rayleigh_Right: public Function<dim> {
   public:
-    Rayleigh_Right(const double initial_time = 0.0);
+    Rayleigh_Right(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value ---*/
 
     virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override;
+                              Vector<double>&   values) const override; /*--- Point value for the whole vector ---*/
 
   private:
     const double x_start; /*--- Starting coordinate of the damping layer ---*/
     const double x_max;   /*--- Ending coordinate of the damping layer ---*/
   };
 
-
+  // Constructor which again relies on the 'Function' constructor.
+  //
   template<int dim, unsigned int n_comp>
   Rayleigh_Right<dim, n_comp>::Rayleigh_Right(const double initial_time): Function<dim>(n_comp, initial_time),
                                                                           x_start(EquationData::x_start_right/EquationData::L_ref),
                                                                           x_max(EquationData::x_max/EquationData::L_ref) {}
 
-
+  // Evaluation depending on the spatial coordinates. The input argument 'component'
+  // will be unused but it has to be kept to override
+  //
   template<int dim, unsigned int n_comp>
   double Rayleigh_Right<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
@@ -313,7 +332,9 @@ namespace EquationData {
                 std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start));
   }
 
-
+  // We need a vector value instance to deal with the velocity or, more in general,
+  // if n_comp > 1.
+  //
   template<int dim, unsigned int n_comp>
   void Rayleigh_Right<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
     Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
@@ -327,25 +348,29 @@ namespace EquationData {
   template<int dim, unsigned int n_comp>
   class Rayleigh_Aux_Right: public Function<dim> {
   public:
-    Rayleigh_Aux_Right(const double initial_time = 0.0);
+    Rayleigh_Aux_Right(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value ---*/
 
     virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override;
+                              Vector<double>&   values) const override; /*--- Point value for the whole vector ---*/
 
   private:
     const double x_start; /*--- Starting coordinate of the damping layer ---*/
     const double x_max;   /*--- Ending coordinate of the damping layer ---*/
   };
 
-
+  // Constructor which again relies on the 'Function' constructor.
+  //
   template<int dim, unsigned int n_comp>
   Rayleigh_Aux_Right<dim, n_comp>::Rayleigh_Aux_Right(const double initial_time): Function<dim>(n_comp, initial_time),
                                                                                   x_start(EquationData::x_start_right/EquationData::L_ref),
                                                                                   x_max(EquationData::x_max/EquationData::L_ref) {}
 
+  // Evaluation depending on the spatial coordinates. The input argument 'component'
+  // will be unused but it has to be kept to override
+  //
   template<int dim, unsigned int n_comp>
   double Rayleigh_Aux_Right<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
@@ -359,6 +384,9 @@ namespace EquationData {
                            std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start)));
   }
 
+  // We need a vector value instance to deal with the velocity or, more in general,
+  // if n_comp > 1.
+  //
   template<int dim, unsigned int n_comp>
   void Rayleigh_Aux_Right<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
     Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
@@ -374,25 +402,29 @@ namespace EquationData {
   template<int dim, unsigned int n_comp>
   class Rayleigh_Left: public Function<dim> {
   public:
-    Rayleigh_Left(const double initial_time = 0.0);
+    Rayleigh_Left(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value ---*/
 
     virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override;
+                              Vector<double>&   values) const override; /*--- Point value for the whole vector ---*/
 
   private:
     const double x_start; /*--- Starting coordinate of the damping layer ---*/
     const double x_min;   /*--- Ending coordinate of the damping layer ---*/
   };
 
-
+  // Constructor which again relies on the 'Function' constructor.
+  //
   template<int dim, unsigned int n_comp>
   Rayleigh_Left<dim, n_comp>::Rayleigh_Left(const double initial_time): Function<dim>(n_comp, initial_time),
                                                                         x_start(EquationData::x_start_left/EquationData::L_ref),
                                                                         x_min(0.0) {}
 
+  // Evaluation depending on the spatial coordinates. The input argument 'component'
+  // will be unused but it has to be kept to override
+  //
   template<int dim, unsigned int n_comp>
   double Rayleigh_Left<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
@@ -406,7 +438,9 @@ namespace EquationData {
                 std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start));
   }
 
-
+  // We need a vector value instance to deal with the velocity or, more in general,
+  // if n_comp > 1.
+  //
   template<int dim, unsigned int n_comp>
   void Rayleigh_Left<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
     Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
@@ -422,25 +456,29 @@ namespace EquationData {
   template<int dim, unsigned int n_comp>
   class Rayleigh_Aux_Left: public Function<dim> {
   public:
-    Rayleigh_Aux_Left(const double initial_time = 0.0);
+    Rayleigh_Aux_Left(const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override;
+                         const unsigned int component = 0) const override; /*--- Point value ---*/
 
     virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override;
+                              Vector<double>&   values) const override; /*--- Point value for the whole vector ---*/
 
   private:
     const double x_start; /*--- Starting coordinate of the damping layer ---*/
     const double x_min;   /*--- Ending coordinate of the damping layer ---*/
   };
 
-
+  // Constructor which again relies on the 'Function' constructor.
+  //
   template<int dim, unsigned int n_comp>
   Rayleigh_Aux_Left<dim, n_comp>::Rayleigh_Aux_Left(const double initial_time): Function<dim>(n_comp, initial_time),
                                                                                 x_start(EquationData::x_start_left/EquationData::L_ref),
                                                                                 x_min(0.0) {}
 
+  // Evaluation depending on the spatial coordinates. The input argument 'component'
+  // will be unused but it has to be kept to override
+  //
   template<int dim, unsigned int n_comp>
   double Rayleigh_Aux_Left<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
     (void)component;
@@ -454,6 +492,9 @@ namespace EquationData {
                            std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start)));
   }
 
+  // We need a vector value instance to deal with the velocity or, more in general,
+  // if n_comp > 1.
+  //
   template<int dim, unsigned int n_comp>
   void Rayleigh_Aux_Left<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
     Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
@@ -471,17 +512,19 @@ namespace EquationData {
   template <int dim>
   class PushForward : public Function<dim> {
   public:
+    /*--- Default constructor ---*/
     PushForward() : Function<dim>(dim, 0.0), z_max(EquationData::z_max/EquationData::L_ref) {}
 
-    virtual ~PushForward() {};
+    virtual ~PushForward() {}; /*--- Default destructor ---*/
 
-    virtual double value(const Point<dim>& p, const unsigned int component = 0) const;
+    virtual double value(const Point<dim>& p, const unsigned int component = 0) const; /*--- Point evaluation for each component ---*/
 
   private:
-    const double z_max;
+    const double z_max; /*--- Height of the domain ---*/
   };
 
-
+  // Evaluate for each component
+  //
   template <int dim>
   double PushForward<dim>::value(const Point<dim>& p, const unsigned int component) const {
     // x component
@@ -505,16 +548,19 @@ namespace EquationData {
   template <int dim>
   class PullBack : public Function<dim> {
   public:
+    /*--- Default constructor ---*/
     PullBack() : Function<dim>(dim, 0.0), z_max(EquationData::z_max/EquationData::L_ref) {}
 
-    virtual ~PullBack() {};
+    virtual ~PullBack() {}; /*--- Default destructor ---*/
 
-    virtual double value(const Point<dim>& p, const unsigned int component = 0) const;
+    virtual double value(const Point<dim>& p, const unsigned int component = 0) const; /*--- Point evaluation for each component ---*/
 
   private:
-    const double z_max;
+    const double z_max; /*--- Height of the domain ---*/
   };
 
+  // Evaluate for each component
+  //
   template <int dim>
   double PullBack<dim>::value(const Point<dim>& p, const unsigned int component) const {
     // x component

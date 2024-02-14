@@ -1,9 +1,14 @@
+/* This file is part of the Atmospheric_Flows/tree/Mesoscale repository and subject to the
+   LGPL license. See the LICENSE file in the top level directory of this
+   project for details. */
+
 /*--- Author: Giuseppe Orlando, 2023. ---*/
 
 // @sect{Include files}
 
 // We start by including the necessary deal.II header files and some C++
 // related ones.
+//
 #include <deal.II/base/parameter_handler.h>
 
 #include <fstream>
