@@ -1636,19 +1636,18 @@ namespace Atmospheric_Flow {
           const auto& rho_old   = phi_rho_old.get_value(q);
           const auto& u_old     = phi_u_old.get_value(q);
           const auto& pres_old  = phi_pres_old.get_value(q);
-          const auto& e_old     = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old/rho_old);
-          const auto& E_old     = e_old + 0.5*Ma*Ma*scalar_product(u_old, u_old);
 
           /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop ---*/
           const auto& rho_tmp_2 = phi_rho_tmp_2.get_value(q);
           const auto& u_fixed   = phi_u_fixed.get_value(q);
 
-          phi.submit_value(rho_old*E_old -
+          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*pres_old +
+                           rho_old*(0.5*Ma*Ma*scalar_product(u_old, u_old)) -
                            rho_tmp_2*(0.5*Ma*Ma*scalar_product(u_fixed, u_fixed)) -
                            a21_tilde*dt*(Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1]) -
                            a22_tilde*dt*(Ma*Ma/(Fr*Fr)*rho_tmp_2*u_fixed[dim - 1]), q);
           phi.submit_gradient(a21*dt*(0.5*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old) +
-                              a21_tilde*dt*((rho_old*e_old + pres_old)*u_old), q);
+                              a21_tilde*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*pres_old*u_old), q);
           /*--- The specific enthalpy is computed with the generic relation e + p/rho ---*/
         }
 
@@ -1696,28 +1695,26 @@ namespace Atmospheric_Flow {
           const auto& rho_old    = phi_rho_old.get_value(q);
           const auto& u_old      = phi_u_old.get_value(q);
           const auto& pres_old   = phi_pres_old.get_value(q);
-          const auto& e_old      = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old/rho_old);
-          const auto& E_old      = e_old + 0.5*Ma*Ma*scalar_product(u_old, u_old);
 
           /*--- Compute the quantities at the previous stage ---*/
           const auto& rho_tmp_2  = phi_rho_tmp_2.get_value(q);
           const auto& u_tmp_2    = phi_u_tmp_2.get_value(q);
           const auto& pres_tmp_2 = phi_pres_tmp_2.get_value(q);
-          const auto& e_tmp_2    = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_2/rho_tmp_2);
 
           /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop ---*/
           const auto& rho_tmp_3  = phi_rho_tmp_3.get_value(q);
           const auto& u_fixed    = phi_u_fixed.get_value(q);
 
-          phi.submit_value(rho_old*E_old -
+          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*pres_old +
+                           rho_old*(0.5*Ma*Ma*scalar_product(u_old, u_old)) -
                            rho_tmp_3*(0.5*Ma*Ma*scalar_product(u_fixed, u_fixed)) -
                            a31_tilde*dt*(Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1]) -
                            a32_tilde*dt*(Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1]) -
                            a33_tilde*dt*(Ma*Ma/(Fr*Fr)*rho_tmp_3*u_fixed[dim - 1]), q);
           phi.submit_gradient(a31*dt*(0.5*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old) +
-                              a31_tilde*dt*((rho_old*e_old + pres_old)*u_old) +
+                              a31_tilde*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*pres_old*u_old) +
                               a32*dt*(0.5*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2)*rho_tmp_2*u_tmp_2) +
-                              a32_tilde*dt*((rho_tmp_2*e_tmp_2 + pres_tmp_2)*u_tmp_2), q);
+                              a32_tilde*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*pres_tmp_2*u_tmp_2), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -1774,36 +1771,33 @@ namespace Atmospheric_Flow {
           const auto& rho_old    = phi_rho_old.get_value(q);
           const auto& u_old      = phi_u_old.get_value(q);
           const auto& pres_old   = phi_pres_old.get_value(q);
-          const auto& e_old      = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old/rho_old);
-          const auto& E_old      = e_old + 0.5*Ma*Ma*scalar_product(u_old, u_old);
 
           /*--- Compute the quantities at the second stage ---*/
           const auto& rho_tmp_2  = phi_rho_tmp_2.get_value(q);
           const auto& u_tmp_2    = phi_u_tmp_2.get_value(q);
           const auto& pres_tmp_2 = phi_pres_tmp_2.get_value(q);
-          const auto& e_tmp_2    = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_2/rho_tmp_2);
 
           /*--- Compute the quantities at the final stage ---*/
           const auto& rho_tmp_3  = phi_rho_tmp_3.get_value(q);
           const auto& u_tmp_3    = phi_u_tmp_3.get_value(q);
           const auto& pres_tmp_3 = phi_pres_tmp_3.get_value(q);
-          const auto& e_tmp_3    = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_3/rho_tmp_3);
 
           /*--- Assign to rhs the contribution of the (already updated) kinetic energy ---*/
           const auto& rho_curr   = phi_rho_curr.get_value(q);
           const auto& u_curr     = phi_u_curr.get_value(q);
 
-          phi.submit_value(rho_old*E_old -
+          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*pres_old +
+                           rho_old*(0.5*Ma*Ma*scalar_product(u_old, u_old)) -
                            rho_curr*(0.5*Ma*Ma*scalar_product(u_curr, u_curr)) -
                            b1*dt*(Ma*Ma/(Fr*Fr)*rho_old*u_old[dim - 1]) -
                            b2*dt*(Ma*Ma/(Fr*Fr)*rho_tmp_2*u_tmp_2[dim - 1]) -
                            b3*dt*(Ma*Ma/(Fr*Fr)*rho_tmp_3*u_tmp_3[dim - 1]), q);
           phi.submit_gradient(b1*dt*(0.5*Ma*Ma*scalar_product(u_old, u_old)*rho_old*u_old) +
-                              b1*dt*((rho_old*e_old + pres_old)*u_old) +
+                              b1*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*pres_old*u_old) +
                               b2*dt*(0.5*Ma*Ma*scalar_product(u_tmp_2, u_tmp_2)*rho_tmp_2*u_tmp_2) +
-                              b2*dt*((rho_tmp_2*e_tmp_2 + pres_tmp_2)*u_tmp_2) +
+                              b2*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*pres_tmp_2*u_tmp_2) +
                               b3*dt*(0.5*Ma*Ma*scalar_product(u_tmp_3, u_tmp_3)*rho_tmp_3*u_tmp_3) +
-                              b3*dt*((rho_tmp_3*e_tmp_3 + pres_tmp_3)*u_tmp_3), q);
+                              b3*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*pres_tmp_3*u_tmp_3), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -1877,15 +1871,13 @@ namespace Atmospheric_Flow {
 
           const auto& pres_old_p       = phi_pres_old_p.get_value(q);
           const auto& pres_old_m       = phi_pres_old_m.get_value(q);
-          const auto& e_old_p          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_p/rho_old_p);
-          const auto& e_old_m          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_m/rho_old_m);
-          const auto& avg_enthalpy_old = 0.5*((rho_old_p*e_old_p + pres_old_p)*u_old_p +
-                                              (rho_old_m*e_old_m + pres_old_m)*u_old_m);
+          const auto& avg_enthalpy_old = 0.5*EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
+                                         (pres_old_p*u_old_p + pres_old_m*u_old_m);
 
           const auto& lambda_old       = compute_lambda(u_old_p, u_old_m, n_plus);
           const auto& jump_rho_kin_old = rho_old_p*(0.5*scalar_product(u_old_p, u_old_p)) -
                                          rho_old_m*(0.5*scalar_product(u_old_m, u_old_m));
-          const auto& jump_rho_e_old   = rho_old_p*e_old_p - rho_old_m*e_old_m;
+          const auto& jump_rho_e_old   = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_p - pres_old_m);
 
           /*--- Compute the quantities at the current stage ---*/
           const auto& u_fixed_p        = phi_u_fixed_p.get_value(q);
@@ -1983,15 +1975,13 @@ namespace Atmospheric_Flow {
 
           const auto& pres_old_p         = phi_pres_old_p.get_value(q);
           const auto& pres_old_m         = phi_pres_old_m.get_value(q);
-          const auto& e_old_p            = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_p/rho_old_p);
-          const auto& e_old_m            = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_m/rho_old_m);
-          const auto& avg_enthalpy_old   = 0.5*((rho_old_p*e_old_p + pres_old_p)*u_old_p +
-                                                (rho_old_m*e_old_m + pres_old_m)*u_old_m);
+          const auto& avg_enthalpy_old   = 0.5*EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
+                                           (pres_old_p*u_old_p + pres_old_m*u_old_m);
 
           const auto& lambda_old         = compute_lambda(u_old_p, u_old_m, n_plus);
           const auto& jump_rho_kin_old   = rho_old_p*(0.5*scalar_product(u_old_p, u_old_p)) -
                                            rho_old_m*(0.5*scalar_product(u_old_m, u_old_m));
-          const auto& jump_rho_e_old     = rho_old_p*e_old_p - rho_old_m*e_old_m;
+          const auto& jump_rho_e_old     = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_p - pres_old_m);
 
           /*--- Compute the quantities at the previous stage ---*/
           const auto& rho_tmp_2_p        = phi_rho_tmp_2_p.get_value(q);
@@ -2003,15 +1993,13 @@ namespace Atmospheric_Flow {
 
           const auto& pres_tmp_2_p       = phi_pres_tmp_2_p.get_value(q);
           const auto& pres_tmp_2_m       = phi_pres_tmp_2_m.get_value(q);
-          const auto& e_tmp_2_p          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_2_p/rho_tmp_2_p);
-          const auto& e_tmp_2_m          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_2_m/rho_tmp_2_m);
-          const auto& avg_enthalpy_tmp_2 = 0.5*((rho_tmp_2_p*e_tmp_2_p + pres_tmp_2_p)*u_tmp_2_p +
-                                                (rho_tmp_2_m*e_tmp_2_m + pres_tmp_2_m)*u_tmp_2_m);
+          const auto& avg_enthalpy_tmp_2 = 0.5*EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
+                                           (pres_tmp_2_p*u_tmp_2_p + pres_tmp_2_m*u_tmp_2_m);
 
           const auto& lambda_tmp_2       = compute_lambda(u_tmp_2_p, u_tmp_2_m, n_plus);
           const auto& jump_rho_kin_tmp_2 = rho_tmp_2_p*(0.5*scalar_product(u_tmp_2_p, u_tmp_2_p)) -
                                            rho_tmp_2_m*(0.5*scalar_product(u_tmp_2_m, u_tmp_2_m));
-          const auto& jump_rho_e_tmp_2   = rho_tmp_2_p*e_tmp_2_p - rho_tmp_2_m*e_tmp_2_m;
+          const auto& jump_rho_e_tmp_2   = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_2_p - pres_tmp_2_m);
 
           /*--- Compute the quantities at the current stage ---*/
           const auto& u_fixed_p          = phi_u_fixed_p.get_value(q);
@@ -2119,15 +2107,15 @@ namespace Atmospheric_Flow {
 
           const auto& pres_old_p         = phi_pres_old_p.get_value(q);
           const auto& pres_old_m         = phi_pres_old_m.get_value(q);
-          const auto& e_old_p            = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_p/rho_old_p);
-          const auto& E_old_p            = e_old_p + 0.5*Ma*Ma*scalar_product(u_old_p, u_old_p);
-          const auto& e_old_m            = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_old_m/rho_old_m);
-          const auto& E_old_m            = e_old_m + 0.5*Ma*Ma*scalar_product(u_old_m, u_old_m);
-          const auto& avg_enthalpy_old   = 0.5*((e_old_p*rho_old_p + pres_old_p)*u_old_p +
-                                                (e_old_m*rho_old_m + pres_old_m)*u_old_m);
+          const auto& avg_enthalpy_old   = 0.5*EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
+                                           (pres_old_p*u_old_p + pres_old_m*u_old_m);
 
           const auto& lambda_old         = compute_lambda(u_old_p, u_old_m, n_plus);
-          const auto& jump_rhoE_old      = rho_old_p*E_old_p - rho_old_m*E_old_m;
+          const auto& rhoE_old_p         = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old_p
+                                         + rho_old_p*(0.5*Ma*Ma*scalar_product(u_old_p, u_old_p));
+          const auto& rhoE_old_m         = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old_m
+                                         + rho_old_m*(0.5*Ma*Ma*scalar_product(u_old_m, u_old_m));
+          const auto& jump_rhoE_old      = rhoE_old_p - rhoE_old_m;
 
           /*--- Compute the quantities at the second stage ---*/
           const auto& rho_tmp_2_p        = phi_rho_tmp_2_p.get_value(q);
@@ -2139,15 +2127,15 @@ namespace Atmospheric_Flow {
 
           const auto& pres_tmp_2_p       = phi_pres_tmp_2_p.get_value(q);
           const auto& pres_tmp_2_m       = phi_pres_tmp_2_m.get_value(q);
-          const auto& e_tmp_2_p          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_2_p/rho_tmp_2_p);
-          const auto& E_tmp_2_p          = e_tmp_2_p + 0.5*Ma*Ma*scalar_product(u_tmp_2_p, u_tmp_2_p);
-          const auto& e_tmp_2_m          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_2_m/rho_tmp_2_m);
-          const auto& E_tmp_2_m          = e_tmp_2_m + 0.5*Ma*Ma*scalar_product(u_tmp_2_m, u_tmp_2_m);
-          const auto& avg_enthalpy_tmp_2 = 0.5*((e_tmp_2_p*rho_tmp_2_p + pres_tmp_2_p)*u_tmp_2_p +
-                                                (e_tmp_2_m*rho_tmp_2_m + pres_tmp_2_m)*u_tmp_2_m);
+          const auto& avg_enthalpy_tmp_2 = 0.5*EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
+                                           (pres_tmp_2_p*u_tmp_2_p + pres_tmp_2_m*u_tmp_2_m);
 
           const auto& lambda_tmp_2       = compute_lambda(u_tmp_2_p, u_tmp_2_m, n_plus);
-          const auto& jump_rhoE_tmp_2    = rho_tmp_2_p*E_tmp_2_p - rho_tmp_2_m*E_tmp_2_m;
+          const auto& rhoE_tmp_2_p       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_2_p
+                                         + rho_tmp_2_p*(0.5*Ma*Ma*scalar_product(u_tmp_2_p, u_tmp_2_p));
+          const auto& rhoE_tmp_2_m       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_2_m
+                                         + rho_tmp_2_m*(0.5*Ma*Ma*scalar_product(u_tmp_2_m, u_tmp_2_m));
+          const auto& jump_rhoE_tmp_2    = rhoE_tmp_2_p - rhoE_tmp_2_m;
 
           /*--- Compute the quantities at the final stage ---*/
           const auto& rho_tmp_3_p        = phi_rho_tmp_3_p.get_value(q);
@@ -2159,15 +2147,15 @@ namespace Atmospheric_Flow {
 
           const auto& pres_tmp_3_p       = phi_pres_tmp_3_p.get_value(q);
           const auto& pres_tmp_3_m       = phi_pres_tmp_3_m.get_value(q);
-          const auto& e_tmp_3_p          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_3_p/rho_tmp_3_p);
-          const auto& E_tmp_3_p          = e_tmp_3_p + 0.5*Ma*Ma*scalar_product(u_tmp_3_p, u_tmp_3_p);
-          const auto& e_tmp_3_m          = 1.0/(EquationData::Cp_Cv - 1.0)*(pres_tmp_3_m/rho_tmp_3_m);
-          const auto& E_tmp_3_m          = e_tmp_3_m + 0.5*Ma*Ma*scalar_product(u_tmp_3_m, u_tmp_3_m);
-          const auto& avg_enthalpy_tmp_3 = 0.5*((e_tmp_3_p*rho_tmp_3_p + pres_tmp_3_p)*u_tmp_3_p +
-                                                (e_tmp_3_m*rho_tmp_3_m + pres_tmp_3_m)*u_tmp_3_m);
+          const auto& avg_enthalpy_tmp_3 = 0.5*EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
+                                           (pres_tmp_3_p*u_tmp_3_p + pres_tmp_3_m*u_tmp_3_m);
 
           const auto& lambda_tmp_3       = compute_lambda(u_tmp_3_p, u_tmp_3_m, n_plus);
-          const auto& jump_rhoE_tmp_3    = rho_tmp_3_p*E_tmp_3_p - rho_tmp_3_m*E_tmp_3_m;
+          const auto& rhoE_tmp_3_p       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_3_p
+                                         + rho_tmp_3_p*(0.5*Ma*Ma*scalar_product(u_tmp_3_p, u_tmp_3_p));
+          const auto& rhoE_tmp_3_m       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_tmp_2_m
+                                         + rho_tmp_3_m*(0.5*Ma*Ma*scalar_product(u_tmp_3_m, u_tmp_3_m));
+          const auto& jump_rhoE_tmp_3    = rhoE_tmp_3_p - rhoE_tmp_3_m;
 
           phi_p.submit_value(-b1*dt*(Ma*Ma*scalar_product(avg_kinetic_old, n_plus))
                              -b1*dt*scalar_product(avg_enthalpy_old, n_plus)
