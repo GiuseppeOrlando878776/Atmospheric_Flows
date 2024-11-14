@@ -121,6 +121,9 @@ protected:
                                              tmp_2,
                                              tmp_3; /*--- Auxiliary vectors for the Schur complement ---*/
 
+  /*--- Variables for the potential temperature ---*/
+  LinearAlgebra::distributed::Vector<double> theta_old;
+
   /*--- Background fields ---*/
   LinearAlgebra::distributed::Vector<double> rho_bar;
   LinearAlgebra::distributed::Vector<double> u_bar;
@@ -150,7 +153,7 @@ protected:
   void output_results(const unsigned int step); /*--- Function to save the results ---*/
 
 private:
-  void perform_fixed_point_loop(); /*--- Auxiliary function for the fixed point loop ---*/
+  unsigned int perform_fixed_point_loop(); /*--- Auxiliary function for the fixed point loop ---*/
 
   /*--- Damping layers functions for all the unknowns ---*/
   LinearAlgebra::distributed::Vector<double> dt_tau_rho;
@@ -174,24 +177,8 @@ private:
   LinearAlgebra::distributed::Vector<double> dt_tau_u_aux_left;
   LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_left;
 
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_aux_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_aux_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_right_y;
-
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_aux_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_aux_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_left_y;
-
   /*--- Manifold and fields handling data structures ---*/
-  EquationData::PushForward<dim>  push_forward;
-  EquationData::PullBack<dim>     pull_back;
-  FunctionManifold<dim, dim, dim> manifold;
+  EquationData::TREX_Manifold<dim> manifold;
 
   EquationData::Density<dim>  rho_init;
   EquationData::Velocity<dim> u_init;
@@ -211,16 +198,6 @@ private:
   EquationData::Rayleigh_Aux_Left<dim, 1>   dt_tau_aux_left;
   EquationData::Rayleigh_Left<dim, dim>     dt_tau_vel_left;
   EquationData::Rayleigh_Aux_Left<dim, dim> dt_tau_vel_aux_left;
-
-  EquationData::Rayleigh_RightY<dim, 1>       dt_tau_right_y;
-  EquationData::Rayleigh_Aux_RightY<dim, 1>   dt_tau_aux_right_y;
-  EquationData::Rayleigh_RightY<dim, dim>     dt_tau_vel_right_y;
-  EquationData::Rayleigh_Aux_RightY<dim, dim> dt_tau_vel_aux_right_y;
-
-  EquationData::Rayleigh_LeftY<dim, 1>       dt_tau_left_y;
-  EquationData::Rayleigh_Aux_LeftY<dim, 1>   dt_tau_aux_left_y;
-  EquationData::Rayleigh_LeftY<dim, dim>     dt_tau_vel_left_y;
-  EquationData::Rayleigh_Aux_LeftY<dim, dim> dt_tau_vel_aux_left_y;
 
   /*--- Auxiliary structures for the matrix-free and for the multigrid ---*/
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
@@ -276,9 +253,9 @@ private:
 
   double compute_max_celerity(); /*--- Compute maximum celerity for acoustic Courant number ---*/
 
-  std::pair<std::pair<double, double>, double> compute_max_Cu_x_y_z(); /*--- Get maximum Courant numbers along x, y, and z ---*/
+  std::pair<double, double> compute_max_Cu_x_z(); /*--- Get maximum Courant numbers along x and z ---*/
 
-  std::pair<std::pair<double, double>, double> compute_max_C_x_y_z(); /*--- Get maximum acoustic Courant numbers along x ,y, and z ---*/
+  std::pair<double, double> compute_max_C_x_z(); /*--- Get maximum acoustic Courant numbers along x and z ---*/
 };
 
 
@@ -311,12 +288,10 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   quadrature_density(EquationData::degree_rho + 1),
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_pressure(EquationData::degree_p + 1),
-  push_forward(),
-  pull_back(),
-  manifold(push_forward, pull_back),
-  rho_init(data.initial_time),
-  u_init(data.initial_time),
-  pres_init(data.initial_time),
+  manifold("./" + data.dir + "/TREX_profile.dat"),
+  rho_init("./" + data.dir + "/theta_profile.dat", data.initial_time),
+  u_init("./" + data.dir + "/ux_profile.dat", data.initial_time),
+  pres_init("./" + data.dir + "/theta_profile.dat", data.initial_time),
   dt_tau(data.initial_time),
   dt_tau_aux(data.initial_time),
   dt_tau_vel(data.initial_time),
@@ -329,14 +304,6 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dt_tau_aux_left(data.initial_time),
   dt_tau_vel_left(data.initial_time),
   dt_tau_vel_aux_left(data.initial_time),
-  dt_tau_right_y(data.initial_time),
-  dt_tau_aux_right_y(data.initial_time),
-  dt_tau_vel_right_y(data.initial_time),
-  dt_tau_vel_aux_right_y(data.initial_time),
-  dt_tau_left_y(data.initial_time),
-  dt_tau_aux_left_y(data.initial_time),
-  dt_tau_vel_left_y(data.initial_time),
-  dt_tau_vel_aux_left_y(data.initial_time),
   euler_matrix(data),
   max_its(data.max_iterations),
   eps(data.eps),
@@ -387,18 +354,15 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
   Point<dim> lower_left;
   lower_left[0] = 0.0;
   lower_left[1] = 0.0;
-  lower_left[2] = 0.0;
   Point<dim> upper_right;
   upper_right[0] = EquationData::x_max/EquationData::L_ref;
-  upper_right[1] = EquationData::y_max/EquationData::L_ref;
-  upper_right[2] = EquationData::z_max/EquationData::L_ref;
+  upper_right[1] = EquationData::z_max/EquationData::L_ref;
 
-  GridGenerator::subdivided_hyper_rectangle(triangulation, {15, 10, 4}, lower_left, upper_right, true);
+  GridGenerator::subdivided_hyper_rectangle(triangulation, {100, 15}, lower_left, upper_right, true);
 
   /*--- Consider periodic conditions along the horizontal direction ---*/
   std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator>> periodic_faces;
   GridTools::collect_periodic_faces(triangulation, 0, 1, 0, periodic_faces);
-  GridTools::collect_periodic_faces(triangulation, 2, 3, 1, periodic_faces);
   triangulation.add_periodicity(periodic_faces);
 
   /*--- Build the proper triangulation ---*/
@@ -407,30 +371,6 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
   }
   else {
     triangulation.refine_global(n_refines);
-
-    for(const auto& cell: triangulation.active_cell_iterators()) {
-      if(cell->center()[2] < 7000.0/EquationData::L_ref &&
-         cell->center()[0] > EquationData::x_start_left/EquationData::L_ref &&
-         cell->center()[0] < EquationData::x_start_right/EquationData::L_ref &&
-         cell->center()[1] > EquationData::y_start_left/EquationData::L_ref &&
-         cell->center()[1] < EquationData::y_start_right/EquationData::L_ref) {
-        cell->set_refine_flag();
-      }
-    }
-    triangulation.prepare_coarsening_and_refinement();
-    triangulation.execute_coarsening_and_refinement();
-
-    for(const auto& cell: triangulation.active_cell_iterators()) {
-      if(cell->center()[2] < 2000.0/EquationData::L_ref &&
-         cell->center()[0] > EquationData::x_start_left/EquationData::L_ref &&
-         cell->center()[0] < EquationData::x_start_right/EquationData::L_ref &&
-         cell->center()[1] > EquationData::y_start_left/EquationData::L_ref &&
-         cell->center()[1] < EquationData::y_start_right/EquationData::L_ref) {
-        cell->set_refine_flag();
-      }
-    }
-    triangulation.prepare_coarsening_and_refinement();
-    triangulation.execute_coarsening_and_refinement();
   }
 
   /*--- Apply the mapping to build the physical domain ---*/
@@ -530,6 +470,9 @@ void EulerSolver<dim>::setup_dofs() {
   matrix_free_storage->initialize_dof_vector(tmp_3, 0);
   tmp_3 = 0;
 
+  /*--- Initialize the variables related to the potential temperature ---*/
+  matrix_free_storage->initialize_dof_vector(theta_old, 1);
+
   /*--- Initialize the variables related to the damping layers ---*/
   matrix_free_storage->initialize_dof_vector(dt_tau_u, 0);
   matrix_free_storage->initialize_dof_vector(dt_tau_pres, 1);
@@ -570,32 +513,6 @@ void EulerSolver<dim>::setup_dofs() {
   VectorTools::interpolate(mapping, dof_handler_pressure, dt_tau_aux_left, dt_tau_pres_aux_left);
   VectorTools::interpolate(mapping, dof_handler_density, dt_tau_aux_left, dt_tau_rho_aux_left);
 
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_right_y, 0);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_right_y, 1);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_right_y, 2);
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_aux_right_y, 0);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_aux_right_y, 1);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_aux_right_y, 2);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_right_y, dt_tau_u_right_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_right_y, dt_tau_pres_right_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_right_y, dt_tau_rho_right_y);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_aux_right_y, dt_tau_u_aux_right_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_aux_right_y, dt_tau_pres_aux_right_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_aux_right_y, dt_tau_rho_aux_right_y);
-
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_left_y, 0);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_left_y, 1);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_left_y, 2);
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_aux_left_y, 0);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_aux_left_y, 1);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_aux_left_y, 2);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_left_y, dt_tau_u_left_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_left_y, dt_tau_pres_left_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_left_y, dt_tau_rho_left_y);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_aux_left_y, dt_tau_u_aux_left_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_aux_left_y, dt_tau_pres_aux_left_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_aux_left_y, dt_tau_rho_aux_left_y);
-
   matrix_free_storage->initialize_dof_vector(u_bar, 0);
   matrix_free_storage->initialize_dof_vector(pres_bar, 1);
   matrix_free_storage->initialize_dof_vector(rho_bar, 2);
@@ -614,14 +531,6 @@ void EulerSolver<dim>::setup_dofs() {
   dt_tau_u_left.scale(u_bar);
   dt_tau_pres_left.scale(pres_bar);
   dt_tau_rho_left.scale(rho_bar);
-
-  dt_tau_u_right_y.scale(u_bar);
-  dt_tau_pres_right_y.scale(pres_bar);
-  dt_tau_rho_right_y.scale(rho_bar);
-
-  dt_tau_u_left_y.scale(u_bar);
-  dt_tau_pres_left_y.scale(pres_bar);
-  dt_tau_rho_left_y.scale(rho_bar);
 
   /*--- Initialize the auxiliary variable to check the error and stop the fixed point loop ---*/
   Vector<double> error_per_cell_tmp(triangulation.n_active_cells());
@@ -680,6 +589,19 @@ void EulerSolver<dim>::initialize() {
     VectorTools::interpolate(mapping, dof_handler_density, rho_init, rho_old);
     VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u_old);
     VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_old);
+  }
+
+  /*--- Initialize the potentail temperature ---*/
+  for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
+      cell->get_dof_indices(dof_indices);
+      for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+        const double T  = pres_old(dof_indices[idx])/rho_old(dof_indices[idx]);
+        const double Pi = std::pow(pres_old(dof_indices[idx]), (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv);
+        theta_old(dof_indices[idx]) = T/Pi;
+      }
+    }
   }
 }
 
@@ -1082,6 +1004,9 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   pres_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, pres_old, "p", {DataComponentInterpretation::component_is_scalar});
 
+  theta_old.update_ghost_values();
+  data_out.add_data_vector(dof_handler_pressure, theta_old, "theta", {DataComponentInterpretation::component_is_scalar});
+
   /*--- Save background state ---*/
   rho_bar.update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_bar, "rho_bar", {DataComponentInterpretation::component_is_scalar});
@@ -1138,6 +1063,7 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   rho_old.zero_out_ghost_values();
   u_old.zero_out_ghost_values();
   pres_old.zero_out_ghost_values();
+  theta_old.zero_out_ghost_values();
 }
 
 
@@ -1247,15 +1173,14 @@ double EulerSolver<dim>::compute_max_celerity() {
   return Utilities::MPI::max(max_local_celerity, MPI_COMM_WORLD);
 }
 
-// The following function is used in determining the maximum advective Courant numbers along the directions
+// The following function is used in determining the maximum advective Courant numbers along the two directions
 //
 template<int dim>
-std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_Cu_x_y_z() {
+std::pair<double, double> EulerSolver<dim>::compute_max_Cu_x_z() {
   FEValues<dim>               fe_values(mapping, fe_velocity, quadrature_velocity, update_values);
   std::vector<Vector<double>> solution_values_velocity(quadrature_velocity.size(), Vector<double>(dim));
 
   double max_Cu_x = std::numeric_limits<double>::min();
-  double max_Cu_y = std::numeric_limits<double>::min();
   double max_Cu_z = std::numeric_limits<double>::min();
 
   /*--- Loop over all cells ---*/
@@ -1267,28 +1192,24 @@ std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_Cu_x_
       for(unsigned int q = 0; q < quadrature_pressure.size(); ++q) {
         max_Cu_x = std::max(max_Cu_x,
                             EquationData::degree_u*std::abs(solution_values_velocity[q](0))*dt/cell->extent_in_direction(0));
-        max_Cu_y = std::max(max_Cu_y,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](1))*dt/cell->extent_in_direction(1));
         max_Cu_z = std::max(max_Cu_z,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](2))*dt/cell->extent_in_direction(2));
+                            EquationData::degree_u*std::abs(solution_values_velocity[q](1))*dt/cell->extent_in_direction(1));
       }
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD), Utilities::MPI::max(max_Cu_y, MPI_COMM_WORLD)),
-                        Utilities::MPI::max(max_Cu_z, MPI_COMM_WORLD));
+  return std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD), Utilities::MPI::max(max_Cu_z, MPI_COMM_WORLD));
 }
 
-// The following function is used in determining the maximum Courant number along the directions
+// The following function is used in determining the maximum Courant number along the two directions
 //
 template<int dim>
-std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_C_x_y_z() {
+std::pair<double, double> EulerSolver<dim>::compute_max_C_x_z() {
   FEValues<dim> fe_values(mapping, fe_pressure, quadrature_pressure, update_values);
   std::vector<double> solution_values_pressure(quadrature_pressure.size()),
                       solution_values_density(quadrature_pressure.size());
 
   double max_C_x = std::numeric_limits<double>::min();
-  double max_C_y = std::numeric_limits<double>::min();
   double max_C_z = std::numeric_limits<double>::min();
 
   /*--- Loop over all cells ---*/
@@ -1301,22 +1222,21 @@ std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_C_x_y
       for(unsigned int q = 0; q < quadrature_pressure.size(); ++q) {
         double local_celerity = std::sqrt(EquationData::Cp_Cv*solution_values_pressure[q]/solution_values_density[q]);
         max_C_x = std::max(max_C_x, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(0));
-        max_C_y = std::max(max_C_x, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(1));
-        max_C_z = std::max(max_C_z, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(2));
+        max_C_z = std::max(max_C_z, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(1));
       }
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD), Utilities::MPI::max(max_C_y, MPI_COMM_WORLD)),
-                        Utilities::MPI::max(max_C_z, MPI_COMM_WORLD));
+  return std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD), Utilities::MPI::max(max_C_z, MPI_COMM_WORLD));
 }
 
 
 // Auxiliary routine for the fixed point loop
 //
 template<int dim>
-void EulerSolver<dim>::perform_fixed_point_loop() {
-  for(unsigned int iter = 0; iter < 100; ++iter) {
+unsigned int EulerSolver<dim>::perform_fixed_point_loop() {
+  unsigned int iter;
+  for(iter = 0; iter < 100; ++iter) {
     dpres_fixed.equ(1.0, pres_fixed),
     pressure_fixed_point();
     update_velocity();
@@ -1332,6 +1252,8 @@ void EulerSolver<dim>::perform_fixed_point_loop() {
     if(error < 1e-6)
       break; /*--- The fixed point loop is stopped whenever the relative error in infinity norm is below 10^-6 ---*/
   }
+
+  return iter;
 }
 
 
@@ -1365,6 +1287,7 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
   mg_transfer.build(dof_handler_density);
 
   /*--- Time loop ---*/
+  double tot_fixed_point_iters = 0.0;
   while(std::abs(T - time) > 1e-10) {
     time += dt;
     n++;
@@ -1391,7 +1314,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     }
     pres_fixed.equ(1.0, pres_old);
     u_fixed.equ(1.0, u_old);
-    perform_fixed_point_loop();
+    unsigned int iter = perform_fixed_point_loop();
+    tot_fixed_point_iters += (iter + 1);
     /*--- Assign the fields after the fixed point loop ---*/
     pres_tmp_2.equ(1.0, pres_fixed);
     u_tmp_2.equ(1.0, u_fixed);
@@ -1417,7 +1341,8 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     }
     pres_fixed.equ(1.0, pres_tmp_2);
     u_fixed.equ(1.0, u_tmp_2);
-    perform_fixed_point_loop();
+    iter = perform_fixed_point_loop();
+    tot_fixed_point_iters += (iter + 1);
     /*--- Assign the fields after the fixed point loop ---*/
     pres_tmp_3.equ(1.0, pres_fixed);
     u_tmp_3.equ(1.0, u_fixed);
@@ -1445,6 +1370,19 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
 
     verbose_cout << "  Update pressure" << std::endl;
     update_pressure();
+
+    /*--- Compute potential temperature from density and pressure ---*/
+    for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
+      if(cell->is_locally_owned()) {
+        std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
+        cell->get_dof_indices(dof_indices);
+        for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+          const double T  = pres_old(dof_indices[idx])/rho_curr(dof_indices[idx]);
+          const double Pi = std::pow(pres_old(dof_indices[idx]), (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv);
+          theta_old(dof_indices[idx]) = T/Pi;
+        }
+      }
+    }
 
     /*--- Update before applying damping layer ---*/
     rho_old.equ(1.0, rho_curr);
@@ -1474,44 +1412,28 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     pres_old.add(1.0, dt_tau_pres_left);
     pres_old.scale(dt_tau_pres_aux_left);
 
-    /*--- Apply the damping layer for the right y lateral part ---*/
-    rho_old.add(1.0, dt_tau_rho_right_y);
-    rho_old.scale(dt_tau_rho_aux_right_y);
-    u_old.add(1.0, dt_tau_u_right_y);
-    u_old.scale(dt_tau_u_aux_right_y);
-    pres_old.add(1.0, dt_tau_pres_right_y);
-    pres_old.scale(dt_tau_pres_aux_right_y);
-
-    /*--- Apply the damping layer for the left y lateral part ---*/
-    rho_old.add(1.0, dt_tau_rho_left_y);
-    rho_old.scale(dt_tau_rho_aux_left_y);
-    u_old.add(1.0, dt_tau_u_left_y);
-    u_old.scale(dt_tau_u_aux_left_y);
-    pres_old.add(1.0, dt_tau_pres_left_y);
-    pres_old.scale(dt_tau_pres_aux_left_y);
-
     /*--- Compute auxilairy post-processing data ---*/
     const double max_celerity = compute_max_celerity();
     pcout<< "Maximum celerity = " << 1.0/Ma*max_celerity << std::endl;
     pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
-    const auto max_C_x_y_z = compute_max_C_x_y_z();
-    pcout << "CFL_c_x = " << max_C_x_y_z.first.first << std::endl;
-    pcout << "CFL_c_y = " << max_C_x_y_z.first.second << std::endl;
-    pcout << "CFL_c_z = " << max_C_x_y_z.second << std::endl;
+    const auto max_C_x_z = compute_max_C_x_z();
+    pcout << "CFL_c_x = " << max_C_x_z.first << std::endl;
+    pcout << "CFL_c_z = " << max_C_x_z.second << std::endl;
     const double max_velocity = get_max_velocity();
     pcout<< "Maximum velocity = " << max_velocity << std::endl;
     pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
-    const auto max_Cu_x_y_z = compute_max_Cu_x_y_z();
-    pcout << "CFL_u_x = " << max_Cu_x_y_z.first.first << std::endl;
-    pcout << "CFL_u_y = " << max_Cu_x_y_z.first.second << std::endl;
-    pcout << "CFL_u_z = " << max_Cu_x_y_z.second << std::endl;
+    const auto max_Cu_x_z = compute_max_Cu_x_z();
+    pcout << "CFL_u_x = " << max_Cu_x_z.first << std::endl;
+    pcout << "CFL_u_z = " << max_Cu_x_z.second << std::endl;
 
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {
       verbose_cout << "Plotting Solution final" << std::endl;
       output_results(n);
+      pcout << "average u = " << VectorTools::compute_mean_value(mapping, dof_handler_velocity, quadrature_velocity, u_old, 0) << std::endl;
+      pcout << "average w = " << VectorTools::compute_mean_value(mapping, dof_handler_velocity, quadrature_velocity, u_old, 1) << std::endl;
     }
 
     if(time + dt > T && T - time > 1e-10) {
@@ -1525,9 +1447,14 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
   }
 
   /*--- Save the final results if not previously done ---*/
+  pcout << "Average fixed point iterations: "
+        << static_cast<double>(tot_fixed_point_iters)/((EquationData::n_stages - 1)*n)
+        << std::endl;
   if(n % output_interval != 0) {
     verbose_cout << "Plotting Solution final" << std::endl;
     output_results(n);
+    pcout << "average u = " << VectorTools::compute_mean_value(mapping, dof_handler_velocity, quadrature_velocity, u_old, 0) << std::endl;
+    pcout << "average w = " << VectorTools::compute_mean_value(mapping, dof_handler_velocity, quadrature_velocity, u_old, 1) << std::endl;
   }
 }
 
@@ -1547,7 +1474,7 @@ int main(int argc, char *argv[]) {
     const auto& curr_rank = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
     deallog.depth_console(data.verbose && curr_rank == 0 ? 2 : 0);
 
-    EulerSolver<3> test(data);
+    EulerSolver<2> test(data);
     test.run(data.verbose, data.output_interval);
 
     if(curr_rank == 0)

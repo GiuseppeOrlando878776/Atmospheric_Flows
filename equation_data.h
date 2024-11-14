@@ -35,30 +35,20 @@ namespace EquationData {
   static const double R     = 287.0; /*--- Specific gas constant ---*/
 
   static const double g = 9.81; /*--- Acceleration of gravity ---*/
-  static const double N = 0.01; /*--- Buoyancy frequency ---*/
 
-  static const double h  = 400.0;   /*--- Hill height ---*/
-  static const double xc = 30000.0; /*--- x-Center of the hill ---*/
-  static const double yc = 20000.0; /*--- x-Center of the hill ---*/
-  static const double ac = 1000.0;  /*--- Width of the hill ---*/
+  static const double x_max = 400000.0; /*--- Extension along horizontal direction ---*/
+  static const double z_max = 26000.0;  /*--- Extension along vertical direction ---*/
 
-  static const double x_max = 60000.0; /*--- Extension along horizontal direction ---*/
-  static const double y_max = 40000.0; /*--- Extension along y direction ---*/
-  static const double z_max = 16000.0; /*--- Extension along vertical direction ---*/
+  static const double z_start       = 20000.0;  /*--- Start of Rayleigh damping for top boundary ---*/
+  static const double x_start_left  = 50000.0;  /*--- Start of Rayleigh damping for left boundary ---*/
+  static const double x_start_right = 350000.0; /*--- Start of Rayleigh damping for right boundary ---*/
 
-  static const double z_start       = 10000.0; /*--- Start of Rayleigh damping for top boundary ---*/
-  static const double x_start_left  = 20000.0; /*--- Start of Rayleigh damping for left boundary ---*/
-  static const double x_start_right = 40000.0; /*--- Start of Rayleigh damping for right boundary ---*/
-  static const double y_start_left  = 10000.0; /*--- Start of Rayleigh damping for left boundary ---*/
-  static const double y_start_right = 30000.0; /*--- Start of Rayleigh damping for right boundary ---*/
+  static const double L_ref = 1000.0;   /*--- Reference length ---*/
+  static const double u_ref = 20.0;     /*--- Reference velocity ---*/
+  static const double p_ref = 100000.0; /*--- Reference pressure ---*/
+  static const double T_ref = 273.0;    /*--- Reference temperature ---*/
 
-  static const double L_ref   = 1000.0;          /*--- Reference length ---*/
-  static const double u_ref   = 10.0;            /*--- Reference velocity ---*/
-  static const double p_ref   = 100000.0;        /*--- Reference pressure ---*/
-  static const double T_ref   = 293.15;          /*--- Reference temperature ---*/
-  static const double rho_ref = p_ref/(R*T_ref); /*--- Reference density ---*/
-
-  static const unsigned int degree_mapping          = 2;                                                             /*--- Mapping degree ---*/
+  static const unsigned int degree_mapping          = 1;                                                             /*--- Mapping degree ---*/
   static const unsigned int extra_quadrature_degree = (degree_mapping == 1) ? 0 : my_ceil(0.5*(degree_mapping - 2)); /*--- Extra accuracy
                                                                                                                            for quadratures ---*/
 
@@ -67,19 +57,55 @@ namespace EquationData {
   template<int dim>
   class Velocity: public Function<dim> {
   public:
-    Velocity(const double initial_time = 0.0); /*--- Class constructor ---*/
+    Velocity(const std::string& velocity_profile, const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override; /*--- Evaluation for each component ---*/
 
     virtual void vector_value(const Point<dim>& p,
                               Vector<double>&   values) const override; /*--- Vector evaluation of the velocity ---*/
+
+  private:
+    /*--- Auxiliary vectors to store the velocity profile ---*/
+    std::vector<double> z_coords;
+    std::vector<double> u;
   };
 
-  // Constructor which relies on the 'Function' constructor.
+  // Constructor which relies on the 'Function' constructor. Moreover it reads
+  // the data for the T-REX profile
   //
   template<int dim>
-  Velocity<dim>::Velocity(const double initial_time): Function<dim>(dim, initial_time) {}
+  Velocity<dim>::Velocity(const std::string& velocity_profile, const double initial_time): Function<dim>(dim, initial_time)
+  {
+    /*--- Auxiliary variables to read each line, the words as a vector of strings and each value ---*/
+    std::vector<std::string> row;
+    std::string line, word;
+
+    /*--- Open the file and read data ---*/
+    std::ifstream input_data;
+
+    input_data.open(velocity_profile, std::ios::in);
+
+    /*--- Read line by line ---*/
+    while(std::getline(input_data, line)) {
+      row.clear();
+
+      if(!line.empty()) {
+        std::istringstream iss(line);
+        /*--- Read each value, which is separated by a comma ---*/
+        while(std::getline(iss, word, ',')) {
+          row.push_back(word);
+        }
+
+        /*--- Convert strings to double and save data ---*/
+        z_coords.push_back(std::stod(row[0]));
+        u.push_back(std::stod(row[1]));
+      }
+    }
+
+    /*--- Close the file ---*/
+    input_data.close();
+  }
 
   // Specify the value for each spatial component. This function is overriden.
   //
@@ -88,7 +114,37 @@ namespace EquationData {
     AssertIndexRange(component, dim);
 
     if(component == 0) {
-      return 1.0;
+      /*--- Perform a binary search and the linear interpolation ---*/
+      double u_interpolated = 0.0;
+      if(p[1]*EquationData::L_ref <= z_coords[0]) {
+        u_interpolated = u[0];
+      }
+      else if(p[1]*EquationData::L_ref >= z_coords.back()) {
+        u_interpolated = u.back();
+      }
+      else {
+        /*--- Perform binary search to find out the interval of our coordinate ---*/
+        unsigned int low  = 0;
+        unsigned int high = u.size();
+        unsigned int mid  = static_cast<unsigned int>((low + high)/2.0);
+        while(p[1]*EquationData::L_ref < z_coords[mid] ||
+              p[1]*EquationData::L_ref >= z_coords[mid + 1]) {
+          if(p[1]*EquationData::L_ref < z_coords[mid]) {
+            high = mid;
+          }
+          else {
+            low = mid;
+          }
+          mid = static_cast<unsigned int>((low + high)/2.0);
+        }
+
+        /*--- Apply linear interpolation ---*/
+        u_interpolated = u[mid]
+                       + (u[mid + 1] - u[mid])/(z_coords[mid + 1] - z_coords[mid])*
+                         (p[1]*EquationData::L_ref - z_coords[mid]);
+      }
+
+      return u_interpolated/EquationData::u_ref;
     }
     else {
       return 0.0;
@@ -113,16 +169,52 @@ namespace EquationData {
   template<int dim>
   class Pressure: public Function<dim> {
   public:
-    Pressure(const double initial_time = 0.0); /*--- Class constructor ---*/
+    Pressure(const std::string& theta_profile, const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override; /*--- Evalution of the pressure ---*/
+
+  private:
+    /*--- Auxiliary vectors to store the potential temperature profile to compute the pressure ---*/
+    std::vector<double> z_coords;
+    std::vector<double> theta;
   };
 
-  // Constructor which again relies on the 'Function' constructor.
+  // Constructor which again relies on the 'Function' constructor. Moreover it reads
+  // the data for the T-REX profile
   //
   template<int dim>
-  Pressure<dim>::Pressure(const double initial_time): Function<dim>(1, initial_time) {}
+  Pressure<dim>::Pressure(const std::string& theta_profile, const double initial_time): Function<dim>(1, initial_time)
+  {
+    /*--- Auxiliary variables to read each line, the words as a vector of strings and each value ---*/
+    std::vector<std::string> row;
+    std::string line, word;
+
+    /*--- Open the file and read data ---*/
+    std::ifstream input_data;
+
+    input_data.open(theta_profile, std::ios::in);
+
+    /*--- Read line by line ---*/
+    while(std::getline(input_data, line)) {
+      row.clear();
+
+      if(!line.empty()) {
+        std::istringstream iss(line);
+        /*--- Read each value, which is separated by a comma ---*/
+        while(std::getline(iss, word, ',')) {
+          row.push_back(word);
+        }
+
+        /*--- Convert strings to double and save data ---*/
+        z_coords.push_back(std::stod(row[0]));
+        theta.push_back(std::stod(row[1]));
+      }
+    }
+
+    /*--- Close the file ---*/
+    input_data.close();
+  }
 
   // Evaluation depending on the spatial coordinates. The input argument 'component'
   // will be unused but it has to be kept to override
@@ -132,31 +224,118 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    const double Gamma  = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
+    const double Gamma = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
+    const double Cp    = EquationData::R/Gamma;
 
-    const double pi_bar = 1.0 - EquationData::g*EquationData::g/(EquationData::N*EquationData::N)*Gamma*EquationData::rho_ref/EquationData::p_ref*
-                                (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[2]*EquationData::L_ref));
+    /*--- Apply binary search and hydrostatic balance p(z) = p0 (1 - \frac{g}{Cp} \int_0^z \frac{ds}{\theta(s)})^(gamma/(gamma - 1)}
+          on the piecewise linear profile to compute the pressure ---*/
+    double pres_interpolated = 0.0;
+    if(p[1]*EquationData::L_ref <= z_coords[0]) {
+      pres_interpolated = 1.0;
+    }
+    else if(p[1]*EquationData::L_ref >= z_coords.back()) {
+      /*--- Compute \int_{0}^{L} 1/theta(s)ds ---*/
+      double int_theta_m1 = 0.0;
+      for(unsigned int j = 0; j < theta.size() - 1; ++j) {
+        const double dz     = z_coords[j + 1] - z_coords[j];
+        const double dtheta = theta[j + 1] - theta[j];
 
-    return std::pow(pi_bar, 1.0/Gamma);
+        int_theta_m1 += dz/dtheta*std::log(dtheta/theta[j] + 1.0);
+      }
+
+      pres_interpolated = std::pow(1.0 - EquationData::g/Cp*int_theta_m1, 1.0/Gamma);
+    }
+    else {
+      /*--- Perform binary search to find out the interval of our coordinate ---*/
+      unsigned int low  = 0;
+      unsigned int high = theta.size();
+      unsigned int mid  = static_cast<unsigned int>((low + high)/2.0);
+      while(p[1]*EquationData::L_ref < z_coords[mid] || p[1]*EquationData::L_ref >= z_coords[mid + 1]) {
+        if(p[1]*EquationData::L_ref < z_coords[mid]) {
+          high = mid;
+        }
+        else {
+          low = mid;
+        }
+        mid = static_cast<unsigned int>((low + high)/2.0);
+      }
+
+      /*--- Compute \int_{0}^{z} 1/theta(s)ds. Since this is a global contribution,
+            we first need to some the contributions of the previous intervals ---*/
+      double int_theta_m1 = 0.0;
+      for(unsigned int j = 0; j < mid; ++j) {
+        const double dz     = z_coords[j + 1] - z_coords[j];
+        const double dtheta = theta[j + 1] - theta[j];
+
+        const double curr_int_theta_m1 = dz/dtheta*std::log(dtheta/theta[j] + 1.0);
+
+        int_theta_m1 += curr_int_theta_m1;
+      }
+      /*--- Add contribution of the found interval ---*/
+      const double dz     = z_coords[mid + 1] - z_coords[mid];
+      const double dtheta = theta[mid + 1] - theta[mid];
+      int_theta_m1 += dz/dtheta*std::log(dtheta/(theta[mid]*dz)*(p[1]*EquationData::L_ref - z_coords[mid]) + 1.0);
+
+      /*--- Compute the pressure ---*/
+      pres_interpolated = std::pow(1.0 - EquationData::g/Cp*int_theta_m1, 1.0/Gamma);
+    }
+
+    return pres_interpolated;
   }
 
 
   /* We do the same for the density. Notice that in order to
-     get a dimensional version one should multiply the result by rho_ref
+     get a dimensional version one should multiply the result by p_ref
   */
   template<int dim>
   class Density: public Function<dim> {
   public:
-    Density(const double initial_time = 0.0); /*--- Class constructor ---*/
+    Density(const std::string& theta_profile, const double initial_time = 0.0); /*--- Class constructor ---*/
 
     virtual double value(const Point<dim>&  p,
                          const unsigned int component = 0) const override; /*--- Evaluation of the density ---*/
+
+  private:
+    /*--- Auxiliary vectors to store the potential temperature profile to compute the density ---*/
+    std::vector<double> z_coords;
+    std::vector<double> theta;
   };
 
-  // Constructor which again relies on the 'Function' constructor.
+  // Constructor which again relies on the 'Function' constructor. Moreover it reads
+  // the data for the T-REX profile
   //
   template<int dim>
-  Density<dim>::Density(const double initial_time): Function<dim>(1, initial_time) {}
+  Density<dim>::Density(const std::string& theta_profile, const double initial_time): Function<dim>(1, initial_time)
+  {
+    /*--- Auxiliary variables to read each line, the words as a vector of strings and each value ---*/
+    std::vector<std::string> row;
+    std::string line, word;
+
+    /*--- Open the file and read data ---*/
+    std::ifstream input_data;
+
+    input_data.open(theta_profile, std::ios::in);
+
+    /*--- Read line by line ---*/
+    while(std::getline(input_data, line)) {
+      row.clear();
+
+      if(!line.empty()) {
+        std::istringstream iss(line);
+        /*--- Read each value, which is separated by a comma ---*/
+        while(std::getline(iss, word, ',')) {
+          row.push_back(word);
+        }
+
+        /*--- Convert strings to double and save data ---*/
+        z_coords.push_back(std::stod(row[0]));
+        theta.push_back(std::stod(row[1]));
+      }
+    }
+
+    /*--- Close the file ---*/
+    input_data.close();
+  }
 
   // Evaluation depending on the spatial coordinates. The input argument 'component'
   // will be unused but it has to be kept to override
@@ -166,15 +345,69 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    const double Gamma     = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
+    const double Gamma = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
+    const double Cp    = EquationData::R/Gamma;
 
-    const double pi_bar    = 1.0
-                           - EquationData::g*EquationData::g/(EquationData::N*EquationData::N)*Gamma*EquationData::rho_ref/EquationData::p_ref*
-                             (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[2]*EquationData::L_ref));
+    /*--- Perform a binary search and the linear interpolation ---*/
+    double rho_interpolated = 0.0;
+    if(p[1]*EquationData::L_ref <= z_coords[0]) {
+      rho_interpolated = EquationData::T_ref/theta[0];
+    }
+    else if(p[1]*EquationData::L_ref >= z_coords.back()) {
+      /*--- Compute \int_{0}^{L} 1/theta(s)ds ---*/
+      double int_theta_m1 = 0.0;
+      for(unsigned int j = 0; j < theta.size() - 1; ++j) {
+        const double dz     = z_coords[j + 1] - z_coords[j];
+        const double dtheta = theta[j + 1] - theta[j];
 
-    const double theta_bar = EquationData::T_ref*std::exp(EquationData::N*EquationData::N/EquationData::g*p[2]*EquationData::L_ref);
+        int_theta_m1 += dz/dtheta*std::log(dtheta/theta[j] + 1.0);
+      }
 
-    return EquationData::T_ref/theta_bar*std::pow(pi_bar, 1.0/(EquationData::Cp_Cv - 1.0));
+      rho_interpolated = EquationData::T_ref/theta.back()*std::pow(1.0 - EquationData::g/Cp*int_theta_m1, 1.0/(EquationData::Cp_Cv - 1.0));
+    }
+    else {
+      /*--- Perform binary search to find out the interval of our coordinate ---*/
+      unsigned int low  = 0;
+      unsigned int high = theta.size();
+      unsigned int mid  = static_cast<unsigned int>((low + high)/2.0);
+      while(p[1]*EquationData::L_ref < z_coords[mid] ||
+            p[1]*EquationData::L_ref >= z_coords[mid + 1]) {
+        if(p[1]*EquationData::L_ref < z_coords[mid]) {
+          high = mid;
+        }
+        else {
+          low = mid;
+        }
+        mid = static_cast<unsigned int>((low + high)/2.0);
+      }
+
+      /*--- Apply linear interpolation for the potential temperature ---*/
+      const double theta_interpolated = theta[mid]
+                                      + (theta[mid + 1] - theta[mid])/(z_coords[mid + 1] - z_coords[mid])*
+                                        (p[1]*EquationData::L_ref - z_coords[mid]);
+
+      /*--- Compute \int_{0}^{z} 1/theta(s)ds. Since this is a global contribution,
+            we first need to some the contributions of the previous intervals ---*/
+      double int_theta_m1 = 0.0;
+      for(unsigned int j = 0; j < mid; ++j) {
+        const double dz     = z_coords[j + 1] - z_coords[j];
+        const double dtheta = theta[j + 1] - theta[j];
+
+        const double curr_int_theta_m1 = dz/dtheta*std::log(dtheta/theta[j] + 1.0);
+
+        int_theta_m1 += curr_int_theta_m1;
+      }
+      /*--- Add contribution of the found interval ---*/
+      const double dz     = z_coords[mid + 1] - z_coords[mid];
+      const double dtheta = theta[mid + 1] - theta[mid];
+      int_theta_m1 += dz/dtheta*std::log(dtheta/(theta[mid]*dz)*(p[1]*EquationData::L_ref - z_coords[mid]) + 1.0);
+
+      /*--- Compute the density ---*/
+      rho_interpolated = EquationData::T_ref/theta_interpolated*
+                         std::pow(1.0 - EquationData::g/Cp*int_theta_m1, 1.0/(EquationData::Cp_Cv - 1.0));
+    }
+
+    return rho_interpolated;
   }
 
 
@@ -214,12 +447,12 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, n_comp);
 
-    if(p[2] < z_start) {
+    if(p[1] < z_start) {
       return 0.0;
     }
 
-    return 1.2*std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start))*
-               std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start)); /*--- Rayleigh profile expression ---*/
+    return 0.15*std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start))*
+                std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start)); /*--- Rayleigh profile expression ---*/
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -269,12 +502,12 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, n_comp);
 
-    if(p[2] < z_start) {
+    if(p[1] < z_start) {
       return 1.0;
     }
 
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start))*
-                          std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start)));
+    return 1.0/(1.0 + 0.15*std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start))*
+                           std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start)));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -327,8 +560,8 @@ namespace EquationData {
       return 0.0;
     }
 
-    return 1.2*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start))*
-               std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start));
+    return 0.15*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start))*
+                std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -379,8 +612,8 @@ namespace EquationData {
       return 1.0;
     }
 
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start))*
-                          std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start)));
+    return 1.0/(1.0 + 0.15*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start))*
+                           std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_max - x_start)));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -433,8 +666,8 @@ namespace EquationData {
       return 0.0;
     }
 
-    return 1.2*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start))*
-               std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start));
+    return 0.15*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start))*
+                std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -487,8 +720,8 @@ namespace EquationData {
       return 1.0;
     }
 
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start))*
-                          std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start)));
+    return 1.0/(1.0 + 0.15*std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start))*
+                           std::sin(0.5*numbers::PI*(p[0] - x_start)/(x_min - x_start)));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -504,302 +737,154 @@ namespace EquationData {
   }
 
 
-  /* We do the same for the Rayleigh damping profile along the right y lateral boundary.
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_RightY: public Function<dim> {
-  public:
-    Rayleigh_RightY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_max;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_RightY<dim, n_comp>::Rayleigh_RightY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                            y_start(EquationData::y_start_right/EquationData::L_ref),
-                                                                            y_max(EquationData::y_max/EquationData::L_ref) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_RightY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] < y_start) {
-      return 0.0;
-    }
-
-    return 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start))*
-               std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_RightY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-    for(unsigned int i = 0; i < n_comp; ++i)
-      values[i] = value(p, i);
-  }
-
-
-  /* We create an auxiliary class for the term (1/(1 + dt*tau)) in order to avoid loop.
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_Aux_RightY: public Function<dim> {
-  public:
-    Rayleigh_Aux_RightY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_max;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_Aux_RightY<dim, n_comp>::Rayleigh_Aux_RightY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                                    y_start(EquationData::y_start_right/EquationData::L_ref),
-                                                                                    y_max(EquationData::y_max/EquationData::L_ref) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_Aux_RightY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] < y_start) {
-      return 1.0;
-    }
-
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start))*
-                          std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start)));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_Aux_RightY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-
-    for(unsigned int i = 0; i < n_comp; ++i) {
-      values[i] = value(p, i);
-    }
-  }
-
-
-  /* We do the same for the Rayleigh damping profile along the left y lateral boundary
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_LeftY: public Function<dim> {
-  public:
-    Rayleigh_LeftY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_min;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_LeftY<dim, n_comp>::Rayleigh_LeftY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                          y_start(EquationData::y_start_left/EquationData::L_ref),
-                                                                          y_min(0.0) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_LeftY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] > y_start) {
-      return 0.0;
-    }
-
-    return 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start))*
-               std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_LeftY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-
-    for(unsigned int i = 0; i < n_comp; ++i) {
-      values[i] = value(p, i);
-    }
-  }
-
-
-  /* We create an auxiliary class for the term (1/(1 + dt*tau)) in order to avoid loop.
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_Aux_LeftY: public Function<dim> {
-  public:
-    Rayleigh_Aux_LeftY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_min;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_Aux_LeftY<dim, n_comp>::Rayleigh_Aux_LeftY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                                  y_start(EquationData::y_start_left/EquationData::L_ref),
-                                                                                  y_min(0.0) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_Aux_LeftY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] > y_start) {
-      return 1.0;
-    }
-
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start))*
-                          std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start)));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_Aux_LeftY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-
-    for(unsigned int i = 0; i < n_comp; ++i) {
-      values[i] = value(p, i);
-    }
-  }
-
-
   /* Now we can focus on mappings from reference element to the physical one
-     using the Gal-Chen. Notice that lenghts are in kilometers because of
+     using the Gal-Chen. Notice that lenghts are in kilometers becasue of
      the non-dimensional version (the characteristic length is assumed 1 km).
+     For this purpose, since we are not using anymore an analytical function,
+     I prefer creating my own manifold starting from ChartManifold
   */
-  template <int dim>
-  class PushForward : public Function<dim> {
+  template<int dim, int spacedim = dim, int chartdim = dim>
+  class TREX_Manifold: public ChartManifold<dim, spacedim, chartdim> {
   public:
-    PushForward() : Function<dim>(dim, 0.0), z_max(EquationData::z_max/EquationData::L_ref) {}
+    TREX_Manifold(const std::string& profile_input_file); /*--- Class constructor ---*/
 
-    virtual ~PushForward() {};
+    virtual Point<spacedim> push_forward(const Point<chartdim>& chart_point) const override; /*--- Map between reference and physical ---*/
 
-    virtual double value(const Point<dim>& p, const unsigned int component = 0) const;
+    virtual Point<chartdim> pull_back(const Point<spacedim>& space_point) const override; /*--- Inverse map ---*/
+
+    virtual std::unique_ptr<Manifold<dim, spacedim>> clone() const override; /*--- Pure virtual function to be overriden ---*/
 
   private:
-    const double z_max;
+    const double z_max; /*--- Non-dimensional height of the domain ---*/
+
+    /*--- Auxiliary vectors to store the profile data ---*/
+    std::vector<double> x_coords;
+    std::vector<double> heights_coords;
   };
 
-  // Mapping from reference to physical
+  // Class constructor. We also read the (x,h(x)) coordinates
   //
-  template <int dim>
-  double PushForward<dim>::value(const Point<dim>& p, const unsigned int component) const {
-    // x component
-    if(component == 0) {
-      return p[0];
-    }
-    // y component
-    else if(component == 1) {
-      return p[1];
-    }
-    // z component
-    else if(component == 2) {
-      double hX = EquationData::h/std::pow(1.0 +
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac*
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac +
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac*
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac, 1.5);
-      hX /= EquationData::L_ref;
+  template<int dim, int spacedim, int chartdim>
+  TREX_Manifold<dim, spacedim, chartdim>::TREX_Manifold(const std::string& profile_input_file) : ChartManifold<dim, spacedim, chartdim>(),
+                                                                                                 z_max(EquationData::z_max/EquationData::L_ref)
+  {
+    /*--- Auxiliary variables to read each line, the words as a vector of strings and each value ---*/
+    std::vector<std::string> row;
+    std::string line, word;
 
-      return p[2] + ((z_max - p[2])/z_max)*hX;
+    /*--- Open the file and read data ---*/
+    std::ifstream input_data;
+
+    input_data.open(profile_input_file, std::ios::in);
+
+    /*--- Read line by line ---*/
+    while(std::getline(input_data, line)) {
+      row.clear();
+
+      if(!line.empty()) {
+        std::istringstream iss(line);
+        /*--- Read each value, which is separated by a comma ---*/
+        while(std::getline(iss, word, ',')) {
+          row.push_back(word);
+        }
+
+        /*--- Convert strings to double and save data ---*/
+        x_coords.push_back(std::stod(row[0]));
+        heights_coords.push_back(std::stod(row[1]));
+      }
     }
+
+    /*--- Close the file ---*/
+    input_data.close();
   }
 
-
-  /* We compute now the inverse mapping (from physical to reference).
-     Notice that lenghts are in kilometers becasue of the non-dimensional version.
-  */
-  template <int dim>
-  class PullBack : public Function<dim> {
-  public:
-    PullBack() : Function<dim>(dim, 0.0), z_max(EquationData::z_max/EquationData::L_ref) {}
-
-    virtual ~PullBack() {};
-
-    virtual double value(const Point<dim>& p, const unsigned int component = 0) const;
-
-  private:
-    const double z_max;
-  };
-
-  // Mapping from physical to reference
+  // Mapping between reference and physical element
   //
-  template <int dim>
-  double PullBack<dim>::value(const Point<dim>& p, const unsigned int component) const {
-    // x component
-    if(component == 0) {
-      return p[0];
+  template<int dim, int spacedim, int chartdim>
+  Point<spacedim> TREX_Manifold<dim, spacedim, chartdim>::push_forward(const Point<chartdim>& chart_point) const {
+    /*--- Compute interpolated value with a binary search ---*/
+    double hX;
+    if(chart_point[0] <= x_coords[0]) {
+      hX = heights_coords[0];
     }
-    // y component
-    else if(component == 1) {
-      return p[1];
+    else if(chart_point[0] >= x_coords.back()) {
+      hX = heights_coords.back();
     }
-    // z component
-    else if(component == 2) {
-      double hx = EquationData::h/std::pow(1.0 +
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac*
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac +
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac*
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac, 1.5);
-      hx /= EquationData::L_ref;
+    else {
+      /*--- Perform a binary search to verify in which interval we are ---*/
+      unsigned int low  = 0;
+      unsigned int high = heights_coords.size();
+      unsigned int mid  = static_cast<unsigned int>((low + high)/2.0);
+      while(chart_point[0] < x_coords[mid] || chart_point[0] >= x_coords[mid + 1]) {
+        if(chart_point[0] < x_coords[mid]) {
+          high = mid;
+        }
+        else {
+          low = mid;
+        }
+        mid = static_cast<unsigned int>((low + high)/2.0);
+      }
 
-      return z_max*(p[2] - hx)/(z_max - hx);
+      /*--- Apply spline interpolation ---*/
+      hX = heights_coords[mid]
+         + (heights_coords[mid + 1] - heights_coords[mid])/(x_coords[mid + 1] - x_coords[mid])*
+           (chart_point[0] - x_coords[mid]);
     }
+
+    Point<spacedim> res;
+
+    res[0] = chart_point[0];
+    res[1] = chart_point[1] + ((z_max - chart_point[1])/z_max)*hX;
+
+    return res;
+  }
+
+  // Inverse mapping (from physical to reference)
+  //
+  template<int dim, int spacedim, int chartdim>
+  Point<chartdim> TREX_Manifold<dim, spacedim, chartdim>::pull_back(const Point<spacedim>& space_point) const {
+    /*--- Compute interpolated value with a binary search ---*/
+    double hx;
+    if(space_point[0] <= x_coords[0]) {
+      hx = heights_coords[0];
+    }
+    else if(space_point[0] >= x_coords.back()) {
+      hx = heights_coords.back();
+    }
+    else {
+      /*--- Perform a binary search to verify in which interval we are ---*/
+      unsigned int low  = 0;
+      unsigned int high = heights_coords.size();
+      unsigned int mid  = static_cast<unsigned int>((low + high)/2.0);
+      while(space_point[0] < x_coords[mid] || space_point[0] >= x_coords[mid + 1]) {
+        if(space_point[0] < x_coords[mid]) {
+          high = mid;
+        }
+        else {
+          low = mid;
+        }
+        mid = static_cast<unsigned int>((low + high)/2.0);
+      }
+
+      /*--- Apply spline interpolation ---*/
+      hx = heights_coords[mid]
+         + (heights_coords[mid + 1] - heights_coords[mid])/(x_coords[mid + 1] - x_coords[mid])*
+           (space_point[0] - x_coords[mid]);
+    }
+
+    Point<chartdim> res;
+
+    res[0] = space_point[0];
+    res[1] = z_max*(space_point[1] - hx)/(z_max - hx);
+
+    return res;
+  }
+
+  // Clone function necessary because pure virtual function
+  //
+  template<int dim, int spacedim, int chartdim>
+  std::unique_ptr<Manifold<dim, spacedim>> TREX_Manifold<dim, spacedim, chartdim>::clone() const {
+    return std::make_unique<TREX_Manifold<dim, spacedim, chartdim>>(*this);
   }
 
 } // namespace EquationData

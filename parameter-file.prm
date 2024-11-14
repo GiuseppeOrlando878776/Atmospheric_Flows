@@ -1,34 +1,34 @@
 subsection Physical data
   # In this subsection we declare the physical data
   set initial_time = 0.0
-  set final_time   = 36.0
-  set Mach         = 0.03447578013
-  set Froude       = 0.10096375546
+  set final_time   = 288.0
+  set Mach         = 0.07145090332
+  set Froude       = 0.20192751093
 end
 
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.02
+  set dt = 0.03
 end
 
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
   # we set the number of global refines the triangulation must have
-  set n_of_refines = 0
+  set n_of_refines = 2
 end
 
 subsection Data solve
   # In this section we declare the parameters that are going to control the solver
   set max_iterations = 30000 # maximal number of iterations
-  set eps            = 1e-8  # stopping criterion
+  set eps            = 1e-12 # stopping criterion
 end
 
 # The directory where results are saved
-set saving directory = 3D_MELVIN_NONHYDROSTATIC_NON_CONFORMING
+set saving directory = TREX_DEGREE_2_FIXED_POINT_1em6_DOUBLE_DT
 
 #The output frequency
-set output_interval = 180
+set output_interval = 960
 
 #Finally we set the verbosity level
 set verbose = true
