@@ -154,6 +154,8 @@ private:
                                         const unsigned int curr_Euler_stage,
                                         const std::vector<unsigned int> tmp); /*--- Auxiliary function to compute the multigrid preconditioner ---*/
 
+  void precompute_rhs_pressure(); /*--- Auxiliary function to compute the rhs of the pressure equation ---*/
+
   unsigned int perform_fixed_point_loop(); /*--- Auxiliary function for the fixed point loop ---*/
 
   /*--- Damping layers functions for all the unknowns ---*/
@@ -661,7 +663,7 @@ void EulerSolver<dim>::compute_multigrid_preconditioner(const DoFHandler<dim>& d
     additional_data_mg.mapping_update_flags_boundary_faces = update_default;
     additional_data_mg.mg_level                            = level;
 
-    std::shared_ptr<MatrixFree<dim, float>> mg_mf_storage_level(new MatrixFree<dim, float>());
+    std::shared_ptr<MatrixFree<dim, float>> mg_mf_storage_level(new MatrixFree<dim, float>()); /*--- This has to be redefined to avoid issues ---*/
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, tmp, tmp);
     mg_matrices_euler[level].set_Euler_stage(curr_Euler_stage);
@@ -787,13 +789,12 @@ void EulerSolver<dim>::pressure_fixed_point() {
   TimerOutput::Scope t(time_table, "Fixed point pressure");
 
   /*--- Compute the rhs ---*/
-  euler_matrix.set_pres_fixed(pres_fixed); /*--- Set the current pressure for the fixed point loop to the operator ---*/
   if(IMEX_stage == 2) {
     euler_matrix.vmult_rhs_energy(rhs_pres, {rho_old, u_old, pres_old,
                                              rho_tmp_2, u_fixed, pres_fixed});
 
     euler_matrix.vmult_rhs_momentum(rhs_u, {rho_old, u_old, pres_old,
-                                            rho_tmp_2});
+                                            rho_tmp_2}); /*--- This has to be recomputed to avoid issues ---*/
   }
   else if(IMEX_stage == 3) {
     euler_matrix.vmult_rhs_energy(rhs_pres, {rho_old, u_old, pres_old,
@@ -802,28 +803,11 @@ void EulerSolver<dim>::pressure_fixed_point() {
 
     euler_matrix.vmult_rhs_momentum(rhs_u, {rho_old, u_old, pres_old,
                                             rho_tmp_2, u_tmp_2, pres_tmp_2,
-                                            rho_tmp_3});
+                                            rho_tmp_3}); /*--- This has to be recomputed to avoid issues ---*/
   }
 
-  SolverControl solver_control_schur(max_its, 1e-12*rhs_u.l2_norm());
-  SolverCG<LinearAlgebra::distributed::Vector<double>> cg_schur(solver_control_schur);
-
-  const std::vector<unsigned int> tmp_reinit = {0};
-  euler_matrix.initialize(matrix_free_storage, tmp_reinit, tmp_reinit);
-  euler_matrix.set_Euler_stage(3);
-
-  // Set MultiGrid for velocity matrix
-  compute_multigrid_preconditioner(dof_handler_velocity, 3, tmp_reinit);
-
-  Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
-  PreconditionMG<dim,
-                 LinearAlgebra::distributed::Vector<float>,
-                 MGTransferMatrixFree<dim, float>> preconditioner(dof_handler_velocity, mg, mg_transfer);
-
-  // Solve to compute first contribution to rhs
-  cg_schur.solve(euler_matrix, tmp_1, rhs_u, preconditioner);
-
   // Perform matrix-vector multiplication with enthalpy matrix
+  euler_matrix.set_pres_fixed(pres_fixed); // Set the current pressure for the fixed point loop to the operator
   euler_matrix.vmult_enthalpy(tmp_2, tmp_1);
 
   // Conclude computation of rhs for pressure fixed point
@@ -852,10 +836,48 @@ void EulerSolver<dim>::pressure_fixed_point() {
   gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
 }
 
+// Auxiliary routine to compute the rhs of the pressure equation
+// (contribution that does not change during the fixed point loop)
+//
+template<int dim>
+void EulerSolver<dim>::precompute_rhs_pressure() {
+  if(IMEX_stage == 2) {
+    euler_matrix.vmult_rhs_momentum(rhs_u, {rho_old, u_old, pres_old,
+                                            rho_tmp_2});
+  }
+  else if(IMEX_stage == 3) {
+    euler_matrix.vmult_rhs_momentum(rhs_u, {rho_old, u_old, pres_old,
+                                            rho_tmp_2, u_tmp_2, pres_tmp_2,
+                                            rho_tmp_3});
+  }
+
+  SolverControl solver_control_schur(max_its, 1e-12*rhs_u.l2_norm());
+  SolverCG<LinearAlgebra::distributed::Vector<double>> cg_schur(solver_control_schur);
+
+  const std::vector<unsigned int> tmp_reinit = {0};
+  euler_matrix.initialize(matrix_free_storage, tmp_reinit, tmp_reinit);
+  euler_matrix.set_Euler_stage(3);
+
+  /*--- Set MultiGrid for velocity matrix --*/
+  compute_multigrid_preconditioner(dof_handler_velocity, 3, tmp_reinit);
+
+  Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
+  PreconditionMG<dim,
+                 LinearAlgebra::distributed::Vector<float>,
+                 MGTransferMatrixFree<dim, float>> preconditioner(dof_handler_velocity, mg, mg_transfer);
+
+  /*--- Solve to compute first contribution to rhs --*/
+  cg_schur.solve(euler_matrix, tmp_1, rhs_u, preconditioner);
+}
+
 // Auxiliary routine for the fixed point loop
 //
 template<int dim>
 unsigned int EulerSolver<dim>::perform_fixed_point_loop() {
+  /*--- Compute the contribution to the rhs that never changes ---*/
+  precompute_rhs_pressure();
+
+  /*--- Perform the fixed point loop ---*/
   unsigned int iter;
   for(iter = 0; iter < 100; ++iter) {
     dpres_fixed.equ(1.0, pres_fixed),
