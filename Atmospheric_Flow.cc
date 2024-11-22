@@ -230,6 +230,19 @@ private:
                 2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree,
                 LinearAlgebra::distributed::Vector<double>> euler_matrix;
 
+  using SmootherType = PreconditionChebyshev<EULEROperator<dim,
+                                                           EquationData::degree_u,
+                                                           EquationData::degree_rho,
+                                                           EquationData::degree_p,
+                                                           2*EquationData::degree_u + 1,
+                                                           2*EquationData::degree_rho + 1 + EquationData::extra_quadrature_degree,
+                                                           LinearAlgebra::distributed::Vector<float>>,
+                                              LinearAlgebra::distributed::Vector<float>>;
+  MGTransferMatrixFree<dim, float> mg_transfer;
+  mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<float>> mg_smoother;
+  MGCoarseGridApplySmoother<LinearAlgebra::distributed::Vector<float>> mg_coarse;
+  mg::Matrix<LinearAlgebra::distributed::Vector<float>> mg_matrix;
+  MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
   MGLevelObject<EULEROperator<dim, EquationData::degree_u, EquationData::degree_rho, EquationData::degree_p,
                               2*EquationData::degree_u + 1,
                               2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree,
@@ -624,6 +637,7 @@ void EulerSolver<dim>::setup_dofs() {
     mg_matrices_euler[level].set_Mach(Ma);
     mg_matrices_euler[level].set_Froude(Fr);
   }
+  smoother_data.resize(0, triangulation.n_global_levels() - 1);
 }
 
 // @sect{ <code>EulerSolver::initialize</code> }
@@ -690,19 +704,6 @@ void EulerSolver<dim>::update_density() {
   SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
 
   /*--- Compute multigrid preconditioner for density ---*/
-  MGTransferMatrixFree<dim, float> mg_transfer;
-  mg_transfer.build(dof_handler_density);
-  using SmootherType = PreconditionChebyshev<EULEROperator<dim,
-                                                           EquationData::degree_u,
-                                                           EquationData::degree_rho,
-                                                           EquationData::degree_p,
-                                                           2*EquationData::degree_u + 1,
-                                                           2*EquationData::degree_rho + 1 + EquationData::extra_quadrature_degree,
-                                                           LinearAlgebra::distributed::Vector<float>>,
-                                             LinearAlgebra::distributed::Vector<float>>;
-  mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<float>> mg_smoother;
-  MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
-  smoother_data.resize(0, triangulation.n_global_levels() - 1);
   for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
     typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
     additional_data_mg.tasks_parallel_scheme               = MatrixFree<dim, float>::AdditionalData::none;
@@ -729,11 +730,18 @@ void EulerSolver<dim>::update_density() {
     mg_matrices_euler[level].compute_diagonal();
     smoother_data[level].preconditioner = mg_matrices_euler[level].get_matrix_diagonal_inverse();
   }
+
+  mg_smoother.clear();
   mg_smoother.initialize(mg_matrices_euler, smoother_data);
 
-  MGCoarseGridApplySmoother<LinearAlgebra::distributed::Vector<float>> mg_coarse;
   mg_coarse.initialize(mg_smoother);
-  mg::Matrix<LinearAlgebra::distributed::Vector<float>> mg_matrix(mg_matrices_euler);
+
+  mg_matrix.reset();
+  mg_matrix.initialize(mg_matrices_euler);
+
+  mg_transfer.clear();
+  mg_transfer.build(dof_handler_density);
+
   Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
   PreconditionMG<dim,
                  LinearAlgebra::distributed::Vector<float>,
@@ -792,19 +800,6 @@ void EulerSolver<dim>::pressure_fixed_point() {
   euler_matrix.set_Euler_stage(3);
 
   /*--- Set MultiGrid for velocity matrix ---*/
-  MGTransferMatrixFree<dim, float> mg_transfer;
-  mg_transfer.build(dof_handler_velocity);
-  using SmootherType = PreconditionChebyshev<EULEROperator<dim,
-                                                           EquationData::degree_u,
-                                                           EquationData::degree_rho,
-                                                           EquationData::degree_p,
-                                                           2*EquationData::degree_u + 1,
-                                                           2*EquationData::degree_rho + 1 + EquationData::extra_quadrature_degree,
-                                                           LinearAlgebra::distributed::Vector<float>>,
-                                              LinearAlgebra::distributed::Vector<float>>;
-  mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<float>> mg_smoother;
-  MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
-  smoother_data.resize(0, triangulation.n_global_levels() - 1);
   for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
     typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
     additional_data_mg.tasks_parallel_scheme               = MatrixFree<dim, float>::AdditionalData::none;
@@ -831,11 +826,18 @@ void EulerSolver<dim>::pressure_fixed_point() {
     mg_matrices_euler[level].compute_diagonal();
     smoother_data[level].preconditioner = mg_matrices_euler[level].get_matrix_diagonal_inverse();
   }
+
+  mg_smoother.clear();
   mg_smoother.initialize(mg_matrices_euler, smoother_data);
 
-  MGCoarseGridApplySmoother<LinearAlgebra::distributed::Vector<float>> mg_coarse;
   mg_coarse.initialize(mg_smoother);
-  mg::Matrix<LinearAlgebra::distributed::Vector<float>> mg_matrix(mg_matrices_euler);
+
+  mg_matrix.reset();
+  mg_matrix.initialize(mg_matrices_euler);
+
+  mg_transfer.clear();
+  mg_transfer.build(dof_handler_velocity);
+
   Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
   PreconditionMG<dim,
                  LinearAlgebra::distributed::Vector<float>,
@@ -901,19 +903,6 @@ void EulerSolver<dim>::update_velocity() {
   SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
 
   /*--- Compute MultiGrid for velocity matrix ---*/
-  MGTransferMatrixFree<dim, float> mg_transfer;
-  mg_transfer.build(dof_handler_velocity);
-  using SmootherType = PreconditionChebyshev<EULEROperator<dim,
-                                                           EquationData::degree_u,
-                                                           EquationData::degree_rho,
-                                                           EquationData::degree_p,
-                                                           2*EquationData::degree_u + 1,
-                                                           2*EquationData::degree_rho + 1 + EquationData::extra_quadrature_degree,
-                                                           LinearAlgebra::distributed::Vector<float>>,
-                                              LinearAlgebra::distributed::Vector<float>>;
-  mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<float>> mg_smoother;
-  MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
-  smoother_data.resize(0, triangulation.n_global_levels() - 1);
   for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
     typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
     additional_data_mg.tasks_parallel_scheme               = MatrixFree<dim, float>::AdditionalData::none;
@@ -940,11 +929,18 @@ void EulerSolver<dim>::update_velocity() {
     mg_matrices_euler[level].compute_diagonal();
     smoother_data[level].preconditioner = mg_matrices_euler[level].get_matrix_diagonal_inverse();
   }
+
+  mg_smoother.clear();
   mg_smoother.initialize(mg_matrices_euler, smoother_data);
 
-  MGCoarseGridApplySmoother<LinearAlgebra::distributed::Vector<float>> mg_coarse;
   mg_coarse.initialize(mg_smoother);
-  mg::Matrix<LinearAlgebra::distributed::Vector<float>> mg_matrix(mg_matrices_euler);
+
+  mg_matrix.reset();
+  mg_matrix.initialize(mg_matrices_euler);
+
+  mg_transfer.clear();
+  mg_transfer.build(dof_handler_velocity);
+
   Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
   PreconditionMG<dim,
                  LinearAlgebra::distributed::Vector<float>,
@@ -982,19 +978,6 @@ void EulerSolver<dim>::update_pressure() {
   SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
 
   /*--- Compute multigrid preconditioner for pressure ---*/
-  MGTransferMatrixFree<dim, float> mg_transfer;
-  mg_transfer.build(dof_handler_pressure);
-  using SmootherType = PreconditionChebyshev<EULEROperator<dim,
-                                                           EquationData::degree_u,
-                                                           EquationData::degree_rho,
-                                                           EquationData::degree_p,
-                                                           2*EquationData::degree_u + 1,
-                                                           2*EquationData::degree_rho + 1 + EquationData::extra_quadrature_degree,
-                                                           LinearAlgebra::distributed::Vector<float>>,
-                                             LinearAlgebra::distributed::Vector<float>>;
-  mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<float>> mg_smoother;
-  MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
-  smoother_data.resize(0, triangulation.n_global_levels() - 1);
   for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
     typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
     additional_data_mg.tasks_parallel_scheme               = MatrixFree<dim, float>::AdditionalData::none;
@@ -1021,11 +1004,18 @@ void EulerSolver<dim>::update_pressure() {
     mg_matrices_euler[level].compute_diagonal();
     smoother_data[level].preconditioner = mg_matrices_euler[level].get_matrix_diagonal_inverse();
   }
+
+  mg_smoother.clear();
   mg_smoother.initialize(mg_matrices_euler, smoother_data);
 
-  MGCoarseGridApplySmoother<LinearAlgebra::distributed::Vector<float>> mg_coarse;
   mg_coarse.initialize(mg_smoother);
-  mg::Matrix<LinearAlgebra::distributed::Vector<float>> mg_matrix(mg_matrices_euler);
+
+  mg_matrix.reset();
+  mg_matrix.initialize(mg_matrices_euler);
+
+  mg_transfer.clear();
+  mg_transfer.build(dof_handler_pressure);
+
   Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
   PreconditionMG<dim,
                  LinearAlgebra::distributed::Vector<float>,
@@ -1339,9 +1329,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
   else {
     output_results(0);
   }
-
-  MGTransferMatrixFree<dim, float> mg_transfer;
-  mg_transfer.build(dof_handler_density);
 
   /*--- Time loop ---*/
   double tot_fixed_point_iters = 0.0;
