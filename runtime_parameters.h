@@ -37,8 +37,9 @@ namespace RunTimeParameters {
 
     unsigned int n_global_refines; /*--- Number of global refinements for the initial coarse mesh ---*/
 
-    unsigned int max_iterations; /*--- Maximum number of iterations for the linear solver ---*/
-    double       eps;            /*--- Tolerance for the linear solver ---*/
+    unsigned int max_iterations;  /*--- Maximum number of iterations for the linear solver ---*/
+    double       eps;             /*--- Tolerance for the linear solver ---*/
+    double       eps_fixed_point; /*--- Tolerance for the fixed point loop ---*/
 
     bool         verbose;          /*--- Choose if being verboe or not ---*/
     unsigned int output_interval; /*--- Set how often save the fields ---*/
@@ -70,6 +71,7 @@ namespace RunTimeParameters {
                                 n_global_refines(0),
                                 max_iterations(1000),
                                 eps(1e-12),
+                                eps_fixed_point(1e-10),
                                 verbose(true),
                                 output_interval(15),
                                 restart(false),
@@ -82,19 +84,19 @@ namespace RunTimeParameters {
       prm.declare_entry("initial_time",
                         "0.0",
                         Patterns::Double(0.0),
-                        " The initial time of the simulation. ");
+                        "The initial time of the simulation.");
       prm.declare_entry("final_time",
                         "1.0",
                         Patterns::Double(0.0),
-                        " The final time of the simulation. ");
+                        "The final time of the simulation.");
       prm.declare_entry("Mach",
                         "1.0",
                         Patterns::Double(0.0),
-                        " The Mach number. ");
+                        " The Mach number.");
       prm.declare_entry("Froude",
                         "1.0",
                         Patterns::Double(0.0),
-                        " The Froude number. ");
+                        "The Froude number.");
     }
     prm.leave_subsection();
 
@@ -103,11 +105,11 @@ namespace RunTimeParameters {
       prm.declare_entry("dt",
                         "5e-4",
                         Patterns::Double(0.0),
-                        " The time step size. ");
+                        "The time step size.");
       prm.declare_entry("time_restart",
                         "5e-4",
                         Patterns::Double(0.0),
-                        " The time of restart. ");
+                        "The time of restart.");
     }
     prm.leave_subsection();
 
@@ -116,7 +118,7 @@ namespace RunTimeParameters {
       prm.declare_entry("n_of_refines",
                         "3",
                         Patterns::Integer(0, 15),
-                        " The number of global refinements we want for the mesh. ");
+                        "The number of global refinements we want for the mesh.");
     }
     prm.leave_subsection();
 
@@ -125,47 +127,51 @@ namespace RunTimeParameters {
       prm.declare_entry("max_iterations",
                         "1000",
                         Patterns::Integer(1, 30000),
-                        " The maximal number of iterations GMRES must make. ");
+                        "The maximal number of iterations linear solvers must make.");
       prm.declare_entry("eps",
                         "1e-12",
                         Patterns::Double(0.0),
-                        " The stopping criterion. ");
+                        "The residual for the linear systems.");
+      prm.declare_entry("eps_fixed_point",
+                        "1e-10",
+                        Patterns::Double(0.0),
+                        "Tolerance for the fixed point loop.");
       prm.declare_entry("step_restart",
                         "0",
                          Patterns::Integer(0, 100000000),
-                         " The step at which restart occurs");
+                         "The step at which restart occurs.");
     }
     prm.leave_subsection();
 
     prm.declare_entry("verbose",
                       "true",
                       Patterns::Bool(),
-                      " This indicates whether the output of the solution "
-                      "process should be verbose. ");
+                      "This indicates whether the output of the solution "
+                      "process should be verbose.");
 
     prm.declare_entry("output_interval",
                       "1",
                       Patterns::Integer(1),
-                      " This indicates between how many time steps we print "
-                      "the solution. ");
+                      "This indicates between how many time steps we print "
+                      "the solution.");
 
     prm.declare_entry("saving directory", "SimTest");
 
     prm.declare_entry("restart",
                       "false",
                       Patterns::Bool(),
-                      " This indicates whether we are in presence of a "
-                      "restart or not. ");
+                      "This indicates whether we are in presence of a "
+                      "restart or not.");
     prm.declare_entry("save_for_restart",
                       "false",
                       Patterns::Bool(),
-                      " This indicates whether we want to save for possible "
-                      "restart or not. ");
+                      "This indicates whether we want to save for possible "
+                      "restart or not.");
     prm.declare_entry("as_initial_conditions",
                       "false",
                       Patterns::Bool(),
-                      " This indicates whether restart is used as initial condition "
-                      "or to continue the simulation. ");
+                      "This indicates whether restart is used as initial condition "
+                      "or to continue the simulation.");
   }
 
   // Function to read all declared parameters in the constructor

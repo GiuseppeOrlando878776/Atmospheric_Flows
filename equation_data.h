@@ -26,6 +26,17 @@ namespace EquationData {
 
   static const unsigned int n_stages = 3; /*--- Number of stages of the IMEX scheme ---*/
 
+  static const unsigned int n_vars = 3; /*--- Number of variables for which we solve a linear system ---*/
+
+  /*--- Define axuliary indices related to the dof hadlers order and to linear systems under consideration ---*/
+  static const unsigned int RHO_INDEX_SYSTEM = 1;
+  static const unsigned int P_INDEX_SYSTEM = 2;
+  static const unsigned int U_INDEX_SYSTEM = 3;
+
+  static const unsigned int U_INDEX_DOF = 0;
+  static const unsigned int P_INDEX_DOF = 1;
+  static const unsigned int RHO_INDEX_DOF = 2;
+
   /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/
   static const unsigned int degree_p   = 4;
   static const unsigned int degree_rho = 4;

@@ -20,12 +20,13 @@ end
 
 subsection Data solve
   # In this section we declare the parameters that are going to control the solver
-  set max_iterations = 30000 # maximal number of iterations
-  set eps            = 1e-8  # stopping criterion
+  set max_iterations  = 30000 # maximal number of iterations
+  set eps             = 1e-8  # residual linear system
+  set eps_fixed_point = 1e-6  # tolerance fixed point
 end
 
 # The directory where results are saved
-set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM_NEW_PRECON
+set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM
 
 #The output frequency
 set output_interval = 180
