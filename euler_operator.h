@@ -742,8 +742,8 @@ namespace Atmospheric_Flow {
                      &EULEROperator::assemble_rhs_face_term_density,
                      &EULEROperator::assemble_rhs_boundary_term_density,
                      this, dst, src, true,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values);
   }
 
   // Assemble cell term for the density update
@@ -1460,8 +1460,8 @@ namespace Atmospheric_Flow {
                      &EULEROperator::assemble_rhs_face_term_momentum,
                      &EULEROperator::assemble_rhs_boundary_term_momentum,
                      this, dst, src, true,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values);
   }
 
   // Assemble cell term for the velocity update
@@ -2211,8 +2211,8 @@ namespace Atmospheric_Flow {
                      &EULEROperator::assemble_rhs_face_term_energy,
                      &EULEROperator::assemble_rhs_boundary_term_energy,
                      this, dst, src, true,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values);
   }
 
   // Assemble cell term for the contribution due to internal energy
@@ -2411,8 +2411,8 @@ namespace Atmospheric_Flow {
                      &EULEROperator::assemble_face_term_pressure,
                      &EULEROperator::assemble_boundary_term_pressure,
                      this, dst, src, true,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values);
   }
 
 
@@ -2429,8 +2429,8 @@ namespace Atmospheric_Flow {
                      &EULEROperator::assemble_face_term_enthalpy,
                      &EULEROperator::assemble_boundary_term_enthalpy,
                      this, dst, src, true,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified,
-                     MatrixFree<dim, Number>::DataAccessOnFaces::unspecified);
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values,
+                     MatrixFree<dim, Number>::DataAccessOnFaces::values);
   }
 
 

@@ -440,7 +440,7 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
                               },
                               triangulation);
 
-  triangulation.set_all_manifold_ids_on_boundary(2, 111);
+  triangulation.set_all_manifold_ids_on_boundary(4, 111);
   triangulation.set_manifold(111, manifold);
 }
 
@@ -765,6 +765,7 @@ void EulerSolver<dim>::update_density() {
 
   /*--- Compute multigrid preconditioner for density ---*/
   compute_multigrid_preconditioner(dof_handler_density, index_dof_handler);
+
   Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
   PreconditionMG<dim,
                  LinearAlgebra::distributed::Vector<float>,
