@@ -1,7 +1,7 @@
 subsection Physical data
   # In this subsection we declare the physical data
   set initial_time = 0.0
-  set final_time   = 36.0
+  set final_time   = 2.0
   set Mach         = 0.03447578013
   set Froude       = 0.10096375546
 end
@@ -9,13 +9,13 @@ end
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.04
+  set dt = 0.02
 end
 
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
   # we set the number of global refines the triangulation must have
-  set n_of_refines = 2
+  set n_of_refines = 3
 end
 
 subsection Data solve
