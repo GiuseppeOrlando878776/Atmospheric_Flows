@@ -46,27 +46,23 @@ namespace EquationData {
   static const double R     = 287.0; /*--- Specific gas constant ---*/
 
   static const double g = 9.81; /*--- Acceleration of gravity ---*/
-  static const double N = 0.01; /*--- Buoyancy frequency ---*/
+  static const double N = 0.02; /*--- Buoyancy frequency ---*/
 
-  static const double h  = 400.0;   /*--- Hill height ---*/
-  static const double xc = 30000.0; /*--- x-Center of the hill ---*/
-  static const double yc = 20000.0; /*--- x-Center of the hill ---*/
+  static const double h  = 450.0;   /*--- Hill height ---*/
+  static const double xc = 20000.0; /*--- Center of the hill ---*/
   static const double ac = 1000.0;  /*--- Width of the hill ---*/
 
-  static const double x_max = 60000.0; /*--- Extension along horizontal direction ---*/
-  static const double y_max = 40000.0; /*--- Extension along y direction ---*/
-  static const double z_max = 16000.0; /*--- Extension along vertical direction ---*/
+  static const double x_max = 40000.0; /*--- Extension along horizontal direction ---*/
+  static const double z_max = 20000.0; /*--- Extension along vertical direction ---*/
 
-  static const double z_start       = 10000.0; /*--- Start of Rayleigh damping for top boundary ---*/
-  static const double x_start_left  = 20000.0; /*--- Start of Rayleigh damping for left boundary ---*/
-  static const double x_start_right = 40000.0; /*--- Start of Rayleigh damping for right boundary ---*/
-  static const double y_start_left  = 10000.0; /*--- Start of Rayleigh damping for left boundary ---*/
-  static const double y_start_right = 30000.0; /*--- Start of Rayleigh damping for right boundary ---*/
+  static const double z_start       = 9000.0;  /*--- Start of Rayleigh damping for top boundary ---*/
+  static const double x_start_left  = 10000.0; /*--- Start of Rayleigh damping for left boundary ---*/
+  static const double x_start_right = 30000.0; /*--- Start of Rayleigh damping for right boundary ---*/
 
   static const double L_ref   = 1000.0;          /*--- Reference length ---*/
-  static const double u_ref   = 10.0;            /*--- Reference velocity ---*/
+  static const double u_ref   = 13.28;           /*--- Reference velocity ---*/
   static const double p_ref   = 100000.0;        /*--- Reference pressure ---*/
-  static const double T_ref   = 293.15;          /*--- Reference temperature ---*/
+  static const double T_ref   = 273.0;
   static const double rho_ref = p_ref/(R*T_ref); /*--- Reference density ---*/
 
   static const unsigned int degree_mapping          = 2;                                                             /*--- Mapping degree ---*/
@@ -146,7 +142,7 @@ namespace EquationData {
     const double Gamma  = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
 
     const double pi_bar = 1.0 - EquationData::g*EquationData::g/(EquationData::N*EquationData::N)*Gamma*EquationData::rho_ref/EquationData::p_ref*
-                                (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[2]*EquationData::L_ref));
+                                (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref));
 
     return std::pow(pi_bar, 1.0/Gamma);
   }
@@ -181,9 +177,9 @@ namespace EquationData {
 
     const double pi_bar    = 1.0
                            - EquationData::g*EquationData::g/(EquationData::N*EquationData::N)*Gamma*EquationData::rho_ref/EquationData::p_ref*
-                             (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[2]*EquationData::L_ref));
+                             (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref));
 
-    const double theta_bar = EquationData::T_ref*std::exp(EquationData::N*EquationData::N/EquationData::g*p[2]*EquationData::L_ref);
+    const double theta_bar = EquationData::T_ref*std::exp(EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref);
 
     return EquationData::T_ref/theta_bar*std::pow(pi_bar, 1.0/(EquationData::Cp_Cv - 1.0));
   }
@@ -225,12 +221,12 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, n_comp);
 
-    if(p[2] < z_start) {
+    if(p[1] < z_start) {
       return 0.0;
     }
 
-    return 1.2*std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start))*
-               std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start)); /*--- Rayleigh profile expression ---*/
+    return 1.2*std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start))*
+               std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start)); /*--- Rayleigh profile expression ---*/
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -280,12 +276,12 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, n_comp);
 
-    if(p[2] < z_start) {
+    if(p[1] < z_start) {
       return 1.0;
     }
 
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start))*
-                          std::sin(0.5*numbers::PI*(p[2] - z_start)/(z_max - z_start)));
+    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start))*
+                          std::sin(0.5*numbers::PI*(p[1] - z_start)/(z_max - z_start)));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -515,220 +511,6 @@ namespace EquationData {
   }
 
 
-  /* We do the same for the Rayleigh damping profile along the right y lateral boundary.
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_RightY: public Function<dim> {
-  public:
-    Rayleigh_RightY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_max;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_RightY<dim, n_comp>::Rayleigh_RightY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                            y_start(EquationData::y_start_right/EquationData::L_ref),
-                                                                            y_max(EquationData::y_max/EquationData::L_ref) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_RightY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] < y_start) {
-      return 0.0;
-    }
-
-    return 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start))*
-               std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_RightY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-    for(unsigned int i = 0; i < n_comp; ++i)
-      values[i] = value(p, i);
-  }
-
-
-  /* We create an auxiliary class for the term (1/(1 + dt*tau)) in order to avoid loop.
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_Aux_RightY: public Function<dim> {
-  public:
-    Rayleigh_Aux_RightY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_max;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_Aux_RightY<dim, n_comp>::Rayleigh_Aux_RightY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                                    y_start(EquationData::y_start_right/EquationData::L_ref),
-                                                                                    y_max(EquationData::y_max/EquationData::L_ref) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_Aux_RightY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] < y_start) {
-      return 1.0;
-    }
-
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start))*
-                          std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_max - y_start)));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_Aux_RightY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-
-    for(unsigned int i = 0; i < n_comp; ++i) {
-      values[i] = value(p, i);
-    }
-  }
-
-
-  /* We do the same for the Rayleigh damping profile along the left y lateral boundary
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_LeftY: public Function<dim> {
-  public:
-    Rayleigh_LeftY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_min;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_LeftY<dim, n_comp>::Rayleigh_LeftY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                          y_start(EquationData::y_start_left/EquationData::L_ref),
-                                                                          y_min(0.0) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_LeftY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] > y_start) {
-      return 0.0;
-    }
-
-    return 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start))*
-               std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_LeftY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-
-    for(unsigned int i = 0; i < n_comp; ++i) {
-      values[i] = value(p, i);
-    }
-  }
-
-
-  /* We create an auxiliary class for the term (1/(1 + dt*tau)) in order to avoid loop.
-  */
-  template<int dim, unsigned int n_comp>
-  class Rayleigh_Aux_LeftY: public Function<dim> {
-  public:
-    Rayleigh_Aux_LeftY(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Damping profile evaluation ---*/
-
-    virtual void vector_value(const Point<dim>& p,
-                              Vector<double>&   values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
-
-  private:
-    const double y_start; /*--- Starting coordinate of the damping layer ---*/
-    const double y_min;   /*--- Ending coordinate of the damping layer ---*/
-  };
-
-  // Class constructor, which simply calls the parent class constructor
-  // and then initialize some data
-  //
-  template<int dim, unsigned int n_comp>
-  Rayleigh_Aux_LeftY<dim, n_comp>::Rayleigh_Aux_LeftY(const double initial_time): Function<dim>(n_comp, initial_time),
-                                                                                  y_start(EquationData::y_start_left/EquationData::L_ref),
-                                                                                  y_min(0.0) {}
-
-  // Evaluation of Rayleigh damping profile
-  //
-  template<int dim, unsigned int n_comp>
-  double Rayleigh_Aux_LeftY<dim, n_comp>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, n_comp);
-
-    if(p[1] > y_start) {
-      return 1.0;
-    }
-
-    return 1.0/(1.0 + 1.2*std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start))*
-                          std::sin(0.5*numbers::PI*(p[1] - y_start)/(y_min - y_start)));
-  }
-
-  // We need a vector value instance to deal with the velocity or, more in general,
-  // if n_comp > 1.
-  //
-  template<int dim, unsigned int n_comp>
-  void Rayleigh_Aux_LeftY<dim, n_comp>::vector_value(const Point<dim>& p, Vector<double>& values) const {
-    Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), dim));
-
-    for(unsigned int i = 0; i < n_comp; ++i) {
-      values[i] = value(p, i);
-    }
-  }
-
-
   /* Now we can focus on mappings from reference element to the physical one
      using the Gal-Chen. Notice that lenghts are in kilometers because of
      the non-dimensional version (the characteristic length is assumed 1 km).
@@ -754,20 +536,13 @@ namespace EquationData {
     if(component == 0) {
       return p[0];
     }
-    // y component
-    else if(component == 1) {
-      return p[1];
-    }
     // z component
-    else if(component == 2) {
-      double hX = EquationData::h/std::pow(1.0 +
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac*
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac +
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac*
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac, 1.5);
+    else if(component == 1) {
+      double hX = EquationData::h/(1.0 + (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac*
+                                         (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac);
       hX /= EquationData::L_ref;
 
-      return p[2] + ((z_max - p[2])/z_max)*hX;
+      return p[1] + ((z_max - p[1])/z_max)*hX;
     }
   }
 
@@ -796,20 +571,13 @@ namespace EquationData {
     if(component == 0) {
       return p[0];
     }
-    // y component
-    else if(component == 1) {
-      return p[1];
-    }
     // z component
-    else if(component == 2) {
-      double hx = EquationData::h/std::pow(1.0 +
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac*
-                                           (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac +
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac*
-                                           (p[1]*EquationData::L_ref - EquationData::yc)/EquationData::ac, 1.5);
+    else if(component == 1) {
+      double hx = EquationData::h/(1.0 + (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac*
+                                         (p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac);
       hx /= EquationData::L_ref;
 
-      return z_max*(p[2] - hx)/(z_max - hx);
+      return z_max*(p[1] - hx)/(z_max - hx);
     }
   }
 
