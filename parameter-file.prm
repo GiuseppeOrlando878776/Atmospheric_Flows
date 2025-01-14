@@ -22,7 +22,6 @@ end
 subsection Data solve
   # In this section we declare the parameters that are going to control the solver
   set max_iterations  = 30000 # maximal number of iterations
-  set eps             = 1e-8  # residual linear system
   set eps_fixed_point = 1e-6  # tolerance fixed point
 end
 

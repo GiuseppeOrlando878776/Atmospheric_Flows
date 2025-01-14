@@ -179,11 +179,6 @@ namespace Atmospheric_Flow {
                                             const Vec&                                   src,
                                             const std::pair<unsigned int, unsigned int>& cell_range) const;
 
-    void assemble_inverse_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
-                                                    Vec&                                         dst,
-                                                    const Vec&                                   src,
-                                                    const std::pair<unsigned int, unsigned int>& cell_range) const;
-
     /*--- Assembler function for the 'C' matrix. ---*/
     void assemble_cell_term_enthalpy(const MatrixFree<dim, Number>&               data,
                                      Vec&                                         dst,
@@ -2234,10 +2229,10 @@ namespace Atmospheric_Flow {
            int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
   void EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary, Vec>::
-  assemble_inverse_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
-                                             Vec&                                         dst,
-                                             const Vec&                                   src,
-                                             const std::pair<unsigned int, unsigned int>& cell_range) const {
+  assemble_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
+                                     Vec&                                         dst,
+                                     const Vec&                                   src,
+                                     const std::pair<unsigned int, unsigned int>& cell_range) const {
     FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 2);
 
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, fe_degree_p, 1, Number> inverse(phi);
@@ -2260,32 +2255,6 @@ namespace Atmospheric_Flow {
                     phi.begin_dof_values());
 
       phi.set_dof_values(dst);
-    }
-  }
-
-  // Assemble cell term for the contribution due to internal energy
-  //
-  template<int dim, int fe_degree_u, int fe_degree_rho, int fe_degree_p,
-           int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
-  void EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
-                     n_q_points_1d, n_q_points_1d_boundary, Vec>::
-  assemble_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
-                                     Vec&                                         dst,
-                                     const Vec&                                   src,
-                                     const std::pair<unsigned int, unsigned int>& cell_range) const {
-    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 2);
-
-    for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-      phi.reinit(cell);
-      phi.gather_evaluate(src, EvaluationFlags::values);
-
-      for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-        /*--- For an ideal gas the part associated to the internal energy for a pressure based
-              is just a modification of the mass matrix ---*/
-        phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
-      }
-
-      phi.integrate_scatter(EvaluationFlags::values, dst);
     }
   }
 
@@ -2400,37 +2369,8 @@ namespace Atmospheric_Flow {
                             this, dst, src, false);
     }
     else if(Euler_stage == EquationData::P_INDEX_SYSTEM) {
-      if(IMEX_stage <= EquationData::n_stages) {
-        this->data->cell_loop(&EULEROperator::assemble_cell_term_internal_energy,
-                              this, dst, src, false);
-
-        /*--- Implementation of the Schur complement operations ---*/
-        Vec tmp_1;
-        this->data->initialize_dof_vector(tmp_1, EquationData::U_INDEX_DOF);
-        this->vmult_pressure(tmp_1, src);
-
-        Euler_stage = EquationData::U_INDEX_SYSTEM;
-        const std::vector<unsigned int> index_dof_handler_reinit = {EquationData::U_INDEX_DOF};
-        auto* tmp_matrix = const_cast<EULEROperator*>(this);
-        Vec tmp_2;
-        this->data->initialize_dof_vector(tmp_2, EquationData::U_INDEX_DOF);
-        tmp_matrix->initialize(tmp_matrix->get_matrix_free(), index_dof_handler_reinit, index_dof_handler_reinit);
-        this->vmult(tmp_2, tmp_1);
-
-        Vec tmp_3;
-        this->data->initialize_dof_vector(tmp_3, EquationData::P_INDEX_DOF);
-        this->vmult_enthalpy(tmp_3, tmp_2);
-
-        dst.add(-1.0, tmp_3);
-        Euler_stage = EquationData::P_INDEX_SYSTEM;
-        const std::vector<unsigned int> index_dof_handler = {EquationData::P_INDEX_DOF};
-        tmp_matrix->initialize(tmp_matrix->get_matrix_free(), index_dof_handler, index_dof_handler);
-        tmp_matrix->compute_diagonal();
-      }
-      else {
-        this->data->cell_loop(&EULEROperator::assemble_inverse_cell_term_internal_energy,
-                              this, dst, src, false);
-      }
+      this->data->cell_loop(&EULEROperator::assemble_cell_term_internal_energy,
+                            this, dst, src, false);
     }
     else if(Euler_stage == EquationData::U_INDEX_SYSTEM) {
       this->data->cell_loop(&EULEROperator::assemble_cell_term_velocity,

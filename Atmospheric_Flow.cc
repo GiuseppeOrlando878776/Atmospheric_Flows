@@ -147,8 +147,6 @@ protected:
   void output_results(const unsigned int step); /*--- Function to save the results ---*/
 
 private:
-  void precompute_rhs_pressure(); /*--- Auxiliary function to compute the rhs of the pressure equation ---*/
-
   unsigned int perform_fixed_point_loop(); /*--- Auxiliary function for the fixed point loop ---*/
 
   /*--- Fields handling initial data structures ---*/
@@ -176,7 +174,6 @@ private:
   std::vector<QGauss<1>> quadratures; /*--- Auxiliary container for the quadrature in matrix-free ---*/
 
   unsigned int max_its;         /*--- Auxiliary variable for the maximum number of iterations of linear solvers ---*/
-  double       eps;             /*--- Auxiliary variable for the tolerance of linear solvers ---*/
   double       eps_fixed_point; /*--- Auxiliary variable for the tolerance of linear solvers ---*/
 
   unsigned int n_refines; /*-- Number of initial global refinements ---*/
@@ -264,7 +261,6 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handlers(EquationData::n_vars),
   constraints(EquationData::n_vars),
   max_its(data.max_iterations),
-  eps(data.eps),
   eps_fixed_point(data.eps_fixed_point),
   n_refines(data.n_global_refines),
   saving_dir(data.dir),
@@ -543,10 +539,6 @@ template<int dim>
 void EulerSolver<dim>::pressure_fixed_point() {
   TimerOutput::Scope t(time_table, "Fixed point pressure");
 
-  const std::vector<unsigned int> index_dof_handler = {EquationData::P_INDEX_DOF};
-  euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
-  euler_matrix.set_Euler_stage(EquationData::P_INDEX_SYSTEM);
-
   /*--- Compute the rhs ---*/
   if(IMEX_stage == 2) {
     euler_matrix.vmult_rhs_energy(rhs_pres, {rho_old, u_old, pres_old,
@@ -565,6 +557,16 @@ void EulerSolver<dim>::pressure_fixed_point() {
                                             rho_s_3}); /*--- This has to be recomputed to avoid issues ---*/
   }
 
+  const std::vector<unsigned int> index_dof_handler_Schur = {EquationData::U_INDEX_DOF};
+  euler_matrix.initialize(matrix_free_storage, index_dof_handler_Schur, index_dof_handler_Schur);
+  euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
+
+  /*--- Solve to compute first contribution to rhs --*/
+  euler_matrix.vmult_pressure(tmp_3, pres_fixed);
+  tmp_3 *= -1.0;
+  tmp_3.add(1.0, rhs_u);
+  euler_matrix.vmult(tmp_1, tmp_3);
+
   // Perform matrix-vector multiplication with enthalpy matrix (which changes over time)
   euler_matrix.set_pres_fixed(pres_fixed); // Set the current pressure for the fixed point loop to the operator
   euler_matrix.vmult_enthalpy(tmp_2, tmp_1);
@@ -572,59 +574,23 @@ void EulerSolver<dim>::pressure_fixed_point() {
   // Conclude computation of rhs for pressure fixed point
   rhs_pres.add(-1.0, tmp_2);
 
-  /*--- Solve the system for the pressure ---*/
-  SolverControl solver_control(max_its, eps*rhs_pres.l2_norm());
-  SolverGMRES<LinearAlgebra::distributed::Vector<double>> gmres(solver_control);
-
-  /*--- Jacobi preconditioner for this system ---*/
-  PreconditionJacobi<EULEROperator<dim,
-                                   EquationData::degree_u,
-                                   EquationData::degree_rho,
-                                   EquationData::degree_p,
-                                   2*EquationData::degree_u + 1,
-                                   2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree,
-                                   LinearAlgebra::distributed::Vector<double>>> preconditioner_Jacobi;
-  euler_matrix.compute_diagonal();
-  preconditioner_Jacobi.initialize(euler_matrix);
-
-  /*--- Solve the linear system ---*/
-  gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
-}
-
-// Auxiliary routine to compute the rhs of the pressure equation
-// (contribution that does not change during the fixed point loop)
-//
-template<int dim>
-void EulerSolver<dim>::precompute_rhs_pressure() {
-  if(IMEX_stage == 2) {
-    euler_matrix.vmult_rhs_momentum(rhs_u, {rho_old, u_old, pres_old,
-                                            rho_s_2});
-  }
-  else if(IMEX_stage == 3) {
-    euler_matrix.vmult_rhs_momentum(rhs_u, {rho_old, u_old, pres_old,
-                                            rho_s_2, u_s_2, pres_s_2,
-                                            rho_s_3});
-  }
-
-  const std::vector<unsigned int> index_dof_handler = {EquationData::U_INDEX_DOF};
+  /*--- Solve the linear system (direct inverse application) ---*/
+  const std::vector<unsigned int> index_dof_handler = {EquationData::P_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
-  euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
+  euler_matrix.set_Euler_stage(EquationData::P_INDEX_SYSTEM);
 
-  /*--- Solve to compute first contribution to rhs --*/
-  euler_matrix.vmult(tmp_1, rhs_u);
+  euler_matrix.vmult(pres_fixed, rhs_pres);
 }
 
 // Auxiliary routine for the fixed point loop
 //
 template<int dim>
 unsigned int EulerSolver<dim>::perform_fixed_point_loop() {
-  /*--- Compute the contribution to the rhs that never changes ---*/
-  precompute_rhs_pressure();
-
   /*--- Perform the fixed point loop ---*/
   unsigned int iter;
   for(iter = 0; iter < 100; ++iter) {
-    dpres_fixed.equ(1.0, pres_fixed),
+    pcout << "Iteration number " << iter + 1 << std::endl;
+    dpres_fixed.equ(1.0, pres_fixed);
     pressure_fixed_point();
     update_velocity();
 
