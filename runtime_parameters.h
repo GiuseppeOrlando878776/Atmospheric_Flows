@@ -35,7 +35,7 @@ namespace RunTimeParameters {
     double Froude; /*--- The Froude number ---*/
     double dt;     /*--- The time-step ---*/
 
-    unsigned int n_global_refines; /*--- Number of global refinements for the initial coarse mesh ---*/
+    unsigned int n_global_refines;    /*--- Number of global refinements for the initial coarse mesh ---*/
     unsigned int max_loc_refinements; /*--- Maximum number of refinements allowed ---*/
     unsigned int min_loc_refinements; /*--- Minimum number of refinements allowed ---*/
 
@@ -43,7 +43,7 @@ namespace RunTimeParameters {
     double       eps;             /*--- Tolerance for the linear solver ---*/
     double       eps_fixed_point; /*--- Tolerance for the fixed point loop ---*/
 
-    bool         verbose;          /*--- Choose if being verboe or not ---*/
+    bool         verbose;         /*--- Choose if being verboe or not ---*/
     unsigned int output_interval; /*--- Set how often save the fields ---*/
 
     std::string  dir; /*--- Directory where the data are saved. This has to be created before launching the code

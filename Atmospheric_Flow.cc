@@ -20,7 +20,6 @@
 #include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/tria_accessor.h>
 #include <deal.II/grid/tria_iterator.h>
-#include <deal.II/grid/manifold_lib.h>
 
 #include <deal.II/dofs/dof_handler.h>
 #include <deal.II/dofs/dof_accessor.h>
@@ -81,8 +80,7 @@ protected:
   DoFHandler<dim> dof_handler_pressure;
 
   /*--- Auxiliary mapping for curved boundary ---*/
-  MappingQ<dim>  mapping;
-  MappingQ1<dim> mapping_mg;
+  MappingQ<dim> mapping;
 
   /*--- Auxiliary quadratures for all the variables ---*/
   QGaussLobatto<dim> quadrature_density;
@@ -116,10 +114,14 @@ protected:
                                              tmp_2,
                                              tmp_3; /*--- Auxiliary vectors for the Schur complement ---*/
 
+  /*--- Variables for the potential temperature ---*/
+  LinearAlgebra::distributed::Vector<double> theta_old;
+
   /*--- Background fields ---*/
   LinearAlgebra::distributed::Vector<double> rho_bar;
   LinearAlgebra::distributed::Vector<double> u_bar;
   LinearAlgebra::distributed::Vector<double> pres_bar;
+  LinearAlgebra::distributed::Vector<double> theta_bar;
 
   DeclException2(ExcInvalidTimeStep,
                  double,
@@ -149,75 +151,12 @@ private:
 
   unsigned int perform_fixed_point_loop(); /*--- Auxiliary function for the fixed point loop ---*/
 
-  /*--- Damping layers functions for all the unknowns ---*/
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres;
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_aux;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_aux;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux;
-
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_right;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_right;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_right;
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_aux_right;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_aux_right;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_right;
-
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_left;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_left;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_left;
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_aux_left;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_aux_left;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_left;
-
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_aux_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_aux_right_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_right_y;
-
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_rho_aux_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_u_aux_left_y;
-  LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_left_y;
-
-  /*--- Manifold and fields handling data structures ---*/
-  EquationData::PushForward<dim>  push_forward;
-  EquationData::PullBack<dim>     pull_back;
-  FunctionManifold<dim, dim, dim> manifold;
-
+  /*--- Fields handling initial data structures ---*/
   EquationData::Density<dim>  rho_init;
   EquationData::Velocity<dim> u_init;
   EquationData::Pressure<dim> pres_init;
 
-  EquationData::Rayleigh<dim, 1>       dt_tau;
-  EquationData::Rayleigh_Aux<dim, 1>   dt_tau_aux;
-  EquationData::Rayleigh<dim, dim>     dt_tau_vel;
-  EquationData::Rayleigh_Aux<dim, dim> dt_tau_vel_aux;
-
-  EquationData::Rayleigh_Right<dim, 1>       dt_tau_right;
-  EquationData::Rayleigh_Aux_Right<dim, 1>   dt_tau_aux_right;
-  EquationData::Rayleigh_Right<dim, dim>     dt_tau_vel_right;
-  EquationData::Rayleigh_Aux_Right<dim, dim> dt_tau_vel_aux_right;
-
-  EquationData::Rayleigh_Left<dim, 1>       dt_tau_left;
-  EquationData::Rayleigh_Aux_Left<dim, 1>   dt_tau_aux_left;
-  EquationData::Rayleigh_Left<dim, dim>     dt_tau_vel_left;
-  EquationData::Rayleigh_Aux_Left<dim, dim> dt_tau_vel_aux_left;
-
-  EquationData::Rayleigh_RightY<dim, 1>       dt_tau_right_y;
-  EquationData::Rayleigh_Aux_RightY<dim, 1>   dt_tau_aux_right_y;
-  EquationData::Rayleigh_RightY<dim, dim>     dt_tau_vel_right_y;
-  EquationData::Rayleigh_Aux_RightY<dim, dim> dt_tau_vel_aux_right_y;
-
-  EquationData::Rayleigh_LeftY<dim, 1>       dt_tau_left_y;
-  EquationData::Rayleigh_Aux_LeftY<dim, 1>   dt_tau_aux_left_y;
-  EquationData::Rayleigh_LeftY<dim, dim>     dt_tau_vel_left_y;
-  EquationData::Rayleigh_Aux_LeftY<dim, dim> dt_tau_vel_aux_left_y;
+  EquationData::Density_Bar<dim> rho_bar_init;
 
   /*--- Auxiliary structures for the matrix-free and for the multigrid ---*/
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
@@ -269,9 +208,23 @@ private:
 
   double compute_max_celerity(); /*--- Compute maximum celerity for acoustic Courant number ---*/
 
-  std::pair<std::pair<double, double>, double> compute_max_Cu_x_y_z(); /*--- Get maximum Courant numbers along x, y, and z ---*/
+  std::pair<double, double> compute_max_Cu_x_z(); /*--- Get maximum Courant numbers along x and z ---*/
 
-  std::pair<std::pair<double, double>, double> compute_max_C_x_y_z(); /*--- Get maximum acoustic Courant numbers along x ,y, and z ---*/
+  std::pair<double, double> compute_max_C_x_z(); /*--- Get maximum acoustic Courant numbers along x and z ---*/
+
+  void postprocess_integral_quantities(const double time); /*--- Auxiliary function to compute integral quantities ---*/
+
+  /*--- Initial integral quantities to compute relative variations ---*/
+  double rho0_integral,
+         rhoE0_integral,
+         s0_integral,
+         eta0_integral;
+
+  /*--- Stream to save integral quantities ---*/
+  std::ofstream output_integral_rho,
+                output_integral_rhoE,
+                output_integral_s,
+                output_integral_eta;
 };
 
 
@@ -300,36 +253,13 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_velocity(triangulation),
   dof_handler_pressure(triangulation),
   mapping(EquationData::degree_mapping, true),
-  mapping_mg(),
   quadrature_density(EquationData::degree_rho + 1),
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_pressure(EquationData::degree_p + 1),
-  push_forward(),
-  pull_back(),
-  manifold(push_forward, pull_back),
   rho_init(data.initial_time),
   u_init(data.initial_time),
   pres_init(data.initial_time),
-  dt_tau(data.initial_time),
-  dt_tau_aux(data.initial_time),
-  dt_tau_vel(data.initial_time),
-  dt_tau_vel_aux(data.initial_time),
-  dt_tau_right(data.initial_time),
-  dt_tau_aux_right(data.initial_time),
-  dt_tau_vel_right(data.initial_time),
-  dt_tau_vel_aux_right(data.initial_time),
-  dt_tau_left(data.initial_time),
-  dt_tau_aux_left(data.initial_time),
-  dt_tau_vel_left(data.initial_time),
-  dt_tau_vel_aux_left(data.initial_time),
-  dt_tau_right_y(data.initial_time),
-  dt_tau_aux_right_y(data.initial_time),
-  dt_tau_vel_right_y(data.initial_time),
-  dt_tau_vel_aux_right_y(data.initial_time),
-  dt_tau_left_y(data.initial_time),
-  dt_tau_aux_left_y(data.initial_time),
-  dt_tau_vel_left_y(data.initial_time),
-  dt_tau_vel_aux_left_y(data.initial_time),
+  rho_bar_init(data.initial_time),
   euler_matrix(data),
   dof_handlers(EquationData::n_vars),
   constraints(EquationData::n_vars),
@@ -347,7 +277,11 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   time_out("./" + data.dir + "/time_analysis_" +
            Utilities::int_to_string(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)) + "proc.dat"),
   ptime_out(time_out, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
-  time_table(ptime_out, TimerOutput::summary, TimerOutput::cpu_and_wall_times) {
+  time_table(ptime_out, TimerOutput::summary, TimerOutput::cpu_and_wall_times),
+  output_integral_rho("./" + data.dir + "/analysis_rho.dat", std::ofstream::out),
+  output_integral_rhoE("./" + data.dir + "/analysis_rhoE.dat", std::ofstream::out),
+  output_integral_s("./" + data.dir + "/analysis_s.dat", std::ofstream::out),
+  output_integral_eta("./" + data.dir + "/analysis_eta.dat", std::ofstream::out) {
     AssertThrow(!((dt <= 0.0) || (dt > 0.5*T)), ExcInvalidTimeStep(dt, 0.5*T));
 
     matrix_free_storage = std::make_shared<MatrixFree<dim, double>>();
@@ -380,18 +314,15 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
   Point<dim> lower_left;
   lower_left[0] = 0.0;
   lower_left[1] = 0.0;
-  lower_left[2] = 0.0;
   Point<dim> upper_right;
   upper_right[0] = EquationData::x_max/EquationData::L_ref;
-  upper_right[1] = EquationData::y_max/EquationData::L_ref;
-  upper_right[2] = EquationData::z_max/EquationData::L_ref;
+  upper_right[1] = EquationData::z_max/EquationData::L_ref;
 
-  GridGenerator::subdivided_hyper_rectangle(triangulation, {15, 10, 4}, lower_left, upper_right, true);
+  GridGenerator::subdivided_hyper_rectangle(triangulation, {150, 5}, lower_left, upper_right, true);
 
   /*--- Consider periodic conditions along the horizontal direction ---*/
   std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator>> periodic_faces;
   GridTools::collect_periodic_faces(triangulation, 0, 1, 0, periodic_faces);
-  GridTools::collect_periodic_faces(triangulation, 2, 3, 1, periodic_faces);
   triangulation.add_periodicity(periodic_faces);
 
   /*--- Build the proper triangulation ---*/
@@ -401,15 +332,6 @@ void EulerSolver<dim>::create_triangulation(const unsigned int n_refines) {
   else {
     triangulation.refine_global(n_refines);
   }
-
-  /*--- Apply the mapping to build the physical domain ---*/
-  GridTools::transform([this](const Point<dim>& chart_point) {
-                                return manifold.push_forward(chart_point);
-                              },
-                              triangulation);
-
-  triangulation.set_all_manifold_ids_on_boundary(4, 111);
-  triangulation.set_manifold(111, manifold);
 }
 
 // After creating the triangulation, it creates the mesh dependent
@@ -500,98 +422,28 @@ void EulerSolver<dim>::setup_dofs() {
   matrix_free_storage->initialize_dof_vector(tmp_3, EquationData::U_INDEX_DOF);
   tmp_3 = 0;
 
-  /*--- Initialize the variables related to the damping layers ---*/
-  matrix_free_storage->initialize_dof_vector(dt_tau_u, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho, EquationData::RHO_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_aux, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_aux, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_aux, EquationData::RHO_INDEX_DOF);
-  VectorTools::interpolate(mapping, dof_handler_velocity, dt_tau_vel, dt_tau_u);
-  VectorTools::interpolate(mapping, dof_handler_pressure, dt_tau, dt_tau_pres);
-  VectorTools::interpolate(mapping, dof_handler_density, dt_tau, dt_tau_rho);
-  VectorTools::interpolate(mapping, dof_handler_velocity, dt_tau_vel_aux, dt_tau_u_aux);
-  VectorTools::interpolate(mapping, dof_handler_pressure, dt_tau_aux, dt_tau_pres_aux);
-  VectorTools::interpolate(mapping, dof_handler_density, dt_tau_aux, dt_tau_rho_aux);
+  /*--- Initialize the variables related to the potential temperature ---*/
+  matrix_free_storage->initialize_dof_vector(theta_old, EquationData::P_INDEX_DOF);
 
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_right, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_right, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_right, EquationData::RHO_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_aux_right, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_aux_right, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_aux_right, EquationData::RHO_INDEX_DOF);
-  VectorTools::interpolate(mapping, dof_handler_velocity, dt_tau_vel_right, dt_tau_u_right);
-  VectorTools::interpolate(mapping, dof_handler_pressure, dt_tau_right, dt_tau_pres_right);
-  VectorTools::interpolate(mapping, dof_handler_density, dt_tau_right, dt_tau_rho_right);
-  VectorTools::interpolate(mapping, dof_handler_velocity, dt_tau_vel_aux_right, dt_tau_u_aux_right);
-  VectorTools::interpolate(mapping, dof_handler_pressure, dt_tau_aux_right, dt_tau_pres_aux_right);
-  VectorTools::interpolate(mapping, dof_handler_density, dt_tau_aux_right, dt_tau_rho_aux_right);
-
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_left, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_left, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_left, EquationData::RHO_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_aux_left, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_aux_left, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_aux_left, EquationData::RHO_INDEX_DOF);
-  VectorTools::interpolate(mapping, dof_handler_velocity, dt_tau_vel_left, dt_tau_u_left);
-  VectorTools::interpolate(mapping, dof_handler_pressure, dt_tau_left, dt_tau_pres_left);
-  VectorTools::interpolate(mapping, dof_handler_density, dt_tau_left, dt_tau_rho_left);
-  VectorTools::interpolate(mapping, dof_handler_velocity, dt_tau_vel_aux_left, dt_tau_u_aux_left);
-  VectorTools::interpolate(mapping, dof_handler_pressure, dt_tau_aux_left, dt_tau_pres_aux_left);
-  VectorTools::interpolate(mapping, dof_handler_density, dt_tau_aux_left, dt_tau_rho_aux_left);
-
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_right_y, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_right_y, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_right_y, EquationData::RHO_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_aux_right_y, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_aux_right_y, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_aux_right_y, EquationData::RHO_INDEX_DOF);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_right_y, dt_tau_u_right_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_right_y, dt_tau_pres_right_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_right_y, dt_tau_rho_right_y);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_aux_right_y, dt_tau_u_aux_right_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_aux_right_y, dt_tau_pres_aux_right_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_aux_right_y, dt_tau_rho_aux_right_y);
-
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_left_y, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_left_y, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_left_y, EquationData::RHO_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_u_aux_left_y, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_pres_aux_left_y, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(dt_tau_rho_aux_left_y, EquationData::RHO_INDEX_DOF);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_left_y, dt_tau_u_left_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_left_y, dt_tau_pres_left_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_left_y, dt_tau_rho_left_y);
-  VectorTools::interpolate(dof_handler_velocity, dt_tau_vel_aux_left_y, dt_tau_u_aux_left_y);
-  VectorTools::interpolate(dof_handler_pressure, dt_tau_aux_left_y, dt_tau_pres_aux_left_y);
-  VectorTools::interpolate(dof_handler_density, dt_tau_aux_left_y, dt_tau_rho_aux_left_y);
-
+  /*--- Initialize the auxiliary fields for the background state ---*/
   matrix_free_storage->initialize_dof_vector(u_bar, EquationData::U_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(pres_bar, EquationData::P_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(rho_bar, EquationData::RHO_INDEX_DOF);
+  matrix_free_storage->initialize_dof_vector(theta_bar, EquationData::P_INDEX_DOF);
   VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u_bar);
   VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_bar);
-  VectorTools::interpolate(mapping, dof_handler_density, rho_init, rho_bar);
-
-  dt_tau_u.scale(u_bar);
-  dt_tau_pres.scale(pres_bar);
-  dt_tau_rho.scale(rho_bar);
-
-  dt_tau_u_right.scale(u_bar);
-  dt_tau_pres_right.scale(pres_bar);
-  dt_tau_rho_right.scale(rho_bar);
-
-  dt_tau_u_left.scale(u_bar);
-  dt_tau_pres_left.scale(pres_bar);
-  dt_tau_rho_left.scale(rho_bar);
-
-  dt_tau_u_right_y.scale(u_bar);
-  dt_tau_pres_right_y.scale(pres_bar);
-  dt_tau_rho_right_y.scale(rho_bar);
-
-  dt_tau_u_left_y.scale(u_bar);
-  dt_tau_pres_left_y.scale(pres_bar);
-  dt_tau_rho_left_y.scale(rho_bar);
+  VectorTools::interpolate(mapping, dof_handler_density, rho_bar_init, rho_bar);
+  for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
+      cell->get_dof_indices(dof_indices);
+      for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+        const double T_bar  = pres_bar(dof_indices[idx])/rho_bar(dof_indices[idx]);
+        const double Pi_bar = std::pow(pres_bar(dof_indices[idx]), (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv);
+        theta_bar(dof_indices[idx]) = T_bar/Pi_bar;
+      }
+    }
+  }
 
   /*--- Initialize the auxiliary variable to check the error and stop the fixed point loop ---*/
   Vector<double> error_per_cell_tmp(triangulation.n_active_cells());
@@ -628,6 +480,19 @@ void EulerSolver<dim>::initialize() {
     VectorTools::interpolate(mapping, dof_handler_density, rho_init, rho_old);
     VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u_old);
     VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_old);
+  }
+
+  /*--- Initialize the potential temperature ---*/
+  for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
+      cell->get_dof_indices(dof_indices);
+      for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+        const double T  = pres_old(dof_indices[idx])/rho_old(dof_indices[idx]);
+        const double Pi = std::pow(pres_old(dof_indices[idx]), (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv);
+        theta_old(dof_indices[idx]) = T/Pi;
+      }
+    }
   }
 }
 
@@ -855,6 +720,9 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   pres_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, pres_old, "p", {DataComponentInterpretation::component_is_scalar});
 
+  theta_old.update_ghost_values();
+  data_out.add_data_vector(dof_handler_pressure, theta_old, "theta", {DataComponentInterpretation::component_is_scalar});
+
   /*--- Save background state ---*/
   rho_bar.update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_bar, "rho_bar", {DataComponentInterpretation::component_is_scalar});
@@ -863,6 +731,9 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   data_out.add_data_vector(dof_handler_velocity, u_bar, velocity_names, component_interpretation_velocity);
   pres_bar.update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, pres_bar, "p_bar", {DataComponentInterpretation::component_is_scalar});
+
+  theta_bar.update_ghost_values();
+  data_out.add_data_vector(dof_handler_pressure, theta_bar, "theta_bar", {DataComponentInterpretation::component_is_scalar});
 
   data_out.build_patches(mapping, EquationData::degree_u, DataOut<dim>::curved_inner_cells);
 
@@ -911,6 +782,7 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   rho_old.zero_out_ghost_values();
   u_old.zero_out_ghost_values();
   pres_old.zero_out_ghost_values();
+  theta_old.zero_out_ghost_values();
 }
 
 
@@ -1020,15 +892,14 @@ double EulerSolver<dim>::compute_max_celerity() {
   return Utilities::MPI::max(max_local_celerity, MPI_COMM_WORLD);
 }
 
-// The following function is used in determining the maximum advective Courant numbers along the directions
+// The following function is used in determining the maximum advective Courant numbers along the two directions
 //
 template<int dim>
-std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_Cu_x_y_z() {
+std::pair<double, double> EulerSolver<dim>::compute_max_Cu_x_z() {
   FEValues<dim>               fe_values(mapping, fe_velocity, quadrature_velocity, update_values);
   std::vector<Vector<double>> solution_values_velocity(quadrature_velocity.size(), Vector<double>(dim));
 
   double max_Cu_x = std::numeric_limits<double>::min();
-  double max_Cu_y = std::numeric_limits<double>::min();
   double max_Cu_z = std::numeric_limits<double>::min();
 
   /*--- Loop over all cells ---*/
@@ -1040,28 +911,24 @@ std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_Cu_x_
       for(unsigned int q = 0; q < quadrature_pressure.size(); ++q) {
         max_Cu_x = std::max(max_Cu_x,
                             EquationData::degree_u*std::abs(solution_values_velocity[q](0))*dt/cell->extent_in_direction(0));
-        max_Cu_y = std::max(max_Cu_y,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](1))*dt/cell->extent_in_direction(1));
         max_Cu_z = std::max(max_Cu_z,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](2))*dt/cell->extent_in_direction(2));
+                            EquationData::degree_u*std::abs(solution_values_velocity[q](1))*dt/cell->extent_in_direction(1));
       }
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD), Utilities::MPI::max(max_Cu_y, MPI_COMM_WORLD)),
-                        Utilities::MPI::max(max_Cu_z, MPI_COMM_WORLD));
+  return std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD), Utilities::MPI::max(max_Cu_z, MPI_COMM_WORLD));
 }
 
-// The following function is used in determining the maximum Courant number along the directions
+// The following function is used in determining the maximum Courant number along the two directions
 //
 template<int dim>
-std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_C_x_y_z() {
+std::pair<double, double> EulerSolver<dim>::compute_max_C_x_z() {
   FEValues<dim> fe_values(mapping, fe_pressure, quadrature_pressure, update_values);
   std::vector<double> solution_values_pressure(quadrature_pressure.size()),
                       solution_values_density(quadrature_pressure.size());
 
   double max_C_x = std::numeric_limits<double>::min();
-  double max_C_y = std::numeric_limits<double>::min();
   double max_C_z = std::numeric_limits<double>::min();
 
   /*--- Loop over all cells ---*/
@@ -1074,14 +941,173 @@ std::pair<std::pair<double, double>, double> EulerSolver<dim>::compute_max_C_x_y
       for(unsigned int q = 0; q < quadrature_pressure.size(); ++q) {
         double local_celerity = std::sqrt(EquationData::Cp_Cv*solution_values_pressure[q]/solution_values_density[q]);
         max_C_x = std::max(max_C_x, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(0));
-        max_C_y = std::max(max_C_x, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(1));
-        max_C_z = std::max(max_C_z, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(2));
+        max_C_z = std::max(max_C_z, 1.0/Ma*EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(1));
       }
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD), Utilities::MPI::max(max_C_y, MPI_COMM_WORLD)),
-                        Utilities::MPI::max(max_C_z, MPI_COMM_WORLD));
+  return std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD), Utilities::MPI::max(max_C_z, MPI_COMM_WORLD));
+}
+
+// The following function is used to compute some integral quantities
+//
+template<int dim>
+void EulerSolver<dim>::postprocess_integral_quantities(const double time) {
+  const int n_q_points = quadrature_density.size();
+
+  FEValues<dim> fe_values_density(fe_density, quadrature_density,
+                                  update_values | update_JxW_values);
+  FEValues<dim> fe_values_pressure(fe_pressure, quadrature_density,
+                                   update_values);
+  FEValues<dim> fe_values_velocity(fe_velocity, quadrature_density,
+                                   update_values);
+
+  std::vector<double>         density_values(n_q_points);
+  std::vector<double>         pressure_values(n_q_points);
+  std::vector<Vector<double>> velocity_values(n_q_points, Vector<double>(dim));
+
+  double local_density = 0.0;
+  double local_energy  = 0.0;
+  double local_s       = 0.0;
+  double local_eta     = 0.0;
+
+  auto tmp_cell_pres = dof_handler_pressure.begin_active();
+  auto tmp_cell_vel  = dof_handler_velocity.begin_active();
+  for(const auto& cell : dof_handler_density.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      fe_values_density.reinit(cell);
+      fe_values_density.get_function_values(rho_old, density_values);
+
+      fe_values_pressure.reinit(tmp_cell_pres);
+      fe_values_pressure.get_function_values(pres_old, pressure_values);
+
+      fe_values_velocity.reinit(tmp_cell_vel);
+      fe_values_velocity.get_function_values(u_old, velocity_values);
+
+      for(int q = 0; q < n_q_points; q++) {
+        local_density += density_values[q]*
+                         fe_values_density.JxW(q);
+
+        local_energy += (1.0/(EquationData::Cp_Cv - 1.0)*pressure_values[q] +
+                         0.5*density_values[q]*velocity_values[q].norm_sqr())*
+                        fe_values_density.JxW(q);
+
+        local_s += std::log(pressure_values[q]*std::pow(density_values[q], EquationData::Cp_Cv))*
+                   fe_values_density.JxW(q);
+
+        local_eta += ((-density_values[q]*
+                       std::log(pressure_values[q]*std::pow(density_values[q], EquationData::Cp_Cv)))/
+                      (EquationData::Cp_Cv - 1.0))*
+                     fe_values_density.JxW(q);
+      }
+    }
+    ++tmp_cell_pres;
+    ++tmp_cell_vel;
+  }
+
+  const auto density_integral = Utilities::MPI::sum(local_density, MPI_COMM_WORLD);
+  const auto energy_integral  = Utilities::MPI::sum(local_energy, MPI_COMM_WORLD);
+  const auto s_integral       = Utilities::MPI::sum(local_s, MPI_COMM_WORLD);
+  const auto eta_integral     = Utilities::MPI::sum(local_eta, MPI_COMM_WORLD);
+  if(restart) {
+    if(time == time_restart) {
+      rho0_integral = density_integral;
+      output_integral_rho << std::setprecision(12)
+                          << std::setw(35) << std::left << "Time"
+                          << std::setw(35) << std::left << "Density integral"
+                          << std::setw(35) << std::left << "Abs. diff. density integral"
+                          << std::setw(35) << std::left << "Rel. diff. density integral"
+                          << std::endl;
+
+      rhoE0_integral = energy_integral;
+      output_integral_rhoE << std::setprecision(12)
+                           << std::setw(35) << std::left << "Time"
+                           << std::setw(35) << std::left << "Tot. energy integral"
+                           << std::setw(35) << std::left << "Abs. diff. tot. energy integral"
+                           << std::setw(35) << std::left << "Rel. diff. tot. energy integral"
+                           << std::endl;
+
+      s0_integral = s_integral;
+      output_integral_s << std::setprecision(12)
+                        << std::setw(35) << std::left << "Time"
+                        << std::setw(35) << std::left << "Physic entropy integral"
+                        << std::setw(35) << std::left << "Abs. diff. physic entropy integral"
+                        << std::setw(35) << std::left << "Rel. diff. physic entropy integral"
+                        << std::endl;
+
+      eta0_integral = eta_integral;
+      output_integral_eta << std::setprecision(12)
+                          << std::setw(35) << std::left << "Time"
+                          << std::setw(35) << std::left << "Math. entropy integral"
+                          << std::setw(35) << std::left << "Abs. diff. math. entropy integral"
+                          << std::setw(35) << std::left << "Rel. diff. math. entropy integral"
+                          << std::endl;
+    }
+  }
+  else {
+    if(time == t0) {
+      rho0_integral = density_integral;
+      output_integral_rho << std::setprecision(12)
+                          << std::setw(35) << std::left << "Time"
+                          << std::setw(35) << std::left << "Density integral"
+                          << std::setw(35) << std::left << "Abs. diff. density integral"
+                          << std::setw(35) << std::left << "Rel. diff. density integral"
+                          << std::endl;
+
+      rhoE0_integral = energy_integral;
+      output_integral_rhoE << std::setprecision(12)
+                           << std::setw(35) << std::left << "Time"
+                           << std::setw(35) << std::left << "Tot. energy integral"
+                           << std::setw(35) << std::left << "Abs. diff. tot. energy integral"
+                           << std::setw(35) << std::left << "Rel. diff. tot. energy integral"
+                           << std::endl;
+
+      s0_integral = s_integral;
+      output_integral_s << std::setprecision(12)
+                        << std::setw(35) << std::left << "Time"
+                        << std::setw(35) << std::left << "Physic entropy integral"
+                        << std::setw(35) << std::left << "Abs. diff. physic entropy integral"
+                        << std::setw(35) << std::left << "Rel. diff. physic entropy integral"
+                        << std::endl;
+
+      eta0_integral = eta_integral;
+      output_integral_eta << std::setprecision(12)
+                          << std::setw(35) << std::left << "Time"
+                          << std::setw(35) << std::left << "Math. entropy integral"
+                          << std::setw(35) << std::left << "Abs. diff. math. entropy integral"
+                          << std::setw(35) << std::left << "Rel. diff. math. entropy integral"
+                          << std::endl;
+    }
+  }
+  if(Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0) {
+    output_integral_rho << std::setprecision(12)
+                        << std::setw(35) << std::left << time
+                        << std::setw(35) << std::left << density_integral
+                        << std::setw(35) << std::left << std::abs(density_integral - rho0_integral)
+                        << std::setw(35) << std::left << std::abs(density_integral - rho0_integral)/std::abs(rho0_integral)
+                        << std::endl;
+
+    output_integral_rhoE << std::setprecision(12)
+                         << std::setw(35) << std::left << time
+                         << std::setw(35) << std::left << energy_integral
+                         << std::setw(35) << std::left << std::abs(energy_integral - rhoE0_integral)
+                         << std::setw(35) << std::left << std::abs(energy_integral - rhoE0_integral)/std::abs(rhoE0_integral)
+                         << std::endl;
+
+    output_integral_s << std::setprecision(12)
+                      << std::setw(35) << std::left << time
+                      << std::setw(35) << std::left << s_integral
+                      << std::setw(35) << std::left << s_integral - s0_integral
+                      << std::setw(35) << std::left << (s_integral - s0_integral)/std::abs(s0_integral)
+                      << std::endl;
+
+    output_integral_eta << std::setprecision(12)
+                        << std::setw(35) << std::left << time
+                        << std::setw(35) << std::left << eta_integral
+                        << std::setw(35) << std::left << eta_integral - eta0_integral
+                        << std::setw(35) << std::left << (eta_integral - eta0_integral)/std::abs(eta0_integral)
+                        << std::endl;
+  }
 }
 
 
@@ -1110,6 +1136,7 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
   else {
     output_results(0);
   }
+  postprocess_integral_quantities(time);
 
   /*--- Time loop ---*/
   double tot_fixed_point_iters = 0.0;
@@ -1175,67 +1202,40 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     verbose_cout << "  Update pressure" << std::endl;
     update_pressure();
 
-    /*--- Update before applying damping layer ---*/
+    /*--- Update before next step ---*/
     rho_old.equ(1.0, rho_curr);
     u_old.equ(1.0, u_curr);
 
-    /*--- Apply the damping layer for the vertical component ---*/
-    rho_old.add(1.0, dt_tau_rho);
-    rho_old.scale(dt_tau_rho_aux);
-    u_old.add(1.0, dt_tau_u);
-    u_old.scale(dt_tau_u_aux);
-    pres_old.add(1.0, dt_tau_pres);
-    pres_old.scale(dt_tau_pres_aux);
+    /*--- Compute potential temperature from density and pressure ---*/
+    for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
+      if(cell->is_locally_owned()) {
+        std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
+        cell->get_dof_indices(dof_indices);
+        for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
+          const double T  = pres_old(dof_indices[idx])/rho_old(dof_indices[idx]);
+          const double Pi = std::pow(pres_old(dof_indices[idx]), (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv);
+          theta_old(dof_indices[idx]) = T/Pi;
+        }
+      }
+    }
 
-    /*--- Apply the damping layer for the right lateral part ---*/
-    rho_old.add(1.0, dt_tau_rho_right);
-    rho_old.scale(dt_tau_rho_aux_right);
-    u_old.add(1.0, dt_tau_u_right);
-    u_old.scale(dt_tau_u_aux_right);
-    pres_old.add(1.0, dt_tau_pres_right);
-    pres_old.scale(dt_tau_pres_aux_right);
-
-    /*--- Apply the damping layer for the left lateral part ---*/
-    rho_old.add(1.0, dt_tau_rho_left);
-    rho_old.scale(dt_tau_rho_aux_left);
-    u_old.add(1.0, dt_tau_u_left);
-    u_old.scale(dt_tau_u_aux_left);
-    pres_old.add(1.0, dt_tau_pres_left);
-    pres_old.scale(dt_tau_pres_aux_left);
-
-    /*--- Apply the damping layer for the right y lateral part ---*/
-    rho_old.add(1.0, dt_tau_rho_right_y);
-    rho_old.scale(dt_tau_rho_aux_right_y);
-    u_old.add(1.0, dt_tau_u_right_y);
-    u_old.scale(dt_tau_u_aux_right_y);
-    pres_old.add(1.0, dt_tau_pres_right_y);
-    pres_old.scale(dt_tau_pres_aux_right_y);
-
-    /*--- Apply the damping layer for the left y lateral part ---*/
-    rho_old.add(1.0, dt_tau_rho_left_y);
-    rho_old.scale(dt_tau_rho_aux_left_y);
-    u_old.add(1.0, dt_tau_u_left_y);
-    u_old.scale(dt_tau_u_aux_left_y);
-    pres_old.add(1.0, dt_tau_pres_left_y);
-    pres_old.scale(dt_tau_pres_aux_left_y);
-
-    /*--- Compute auxilairy post-processing data ---*/
+    /*--- Compute auxiliary post-processing data ---*/
     const double max_celerity = compute_max_celerity();
     pcout<< "Maximum celerity = " << 1.0/Ma*max_celerity << std::endl;
     pcout << "CFL_c = " << 1.0/Ma*dt*max_celerity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
-    const auto max_C_x_y_z = compute_max_C_x_y_z();
-    pcout << "CFL_c_x = " << max_C_x_y_z.first.first << std::endl;
-    pcout << "CFL_c_y = " << max_C_x_y_z.first.second << std::endl;
-    pcout << "CFL_c_z = " << max_C_x_y_z.second << std::endl;
+    const auto max_C_x_z = compute_max_C_x_z();
+    pcout << "CFL_c_x = " << max_C_x_z.first << std::endl;
+    pcout << "CFL_c_z = " << max_C_x_z.second << std::endl;
     const double max_velocity = get_max_velocity();
     pcout<< "Maximum velocity = " << max_velocity << std::endl;
     pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
-    const auto max_Cu_x_y_z = compute_max_Cu_x_y_z();
-    pcout << "CFL_u_x = " << max_Cu_x_y_z.first.first << std::endl;
-    pcout << "CFL_u_y = " << max_Cu_x_y_z.first.second << std::endl;
-    pcout << "CFL_u_z = " << max_Cu_x_y_z.second << std::endl;
+    const auto max_Cu_x_z = compute_max_Cu_x_z();
+    pcout << "CFL_u_x = " << max_Cu_x_z.first << std::endl;
+    pcout << "CFL_u_z = " << max_Cu_x_z.second << std::endl;
+
+    postprocess_integral_quantities(time);
 
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {
@@ -1276,7 +1276,7 @@ int main(int argc, char *argv[]) {
     const auto& curr_rank = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
     deallog.depth_console(data.verbose && curr_rank == 0 ? 2 : 0);
 
-    EulerSolver<3> test(data);
+    EulerSolver<2> test(data);
     test.run(data.verbose, data.output_interval);
 
     if(curr_rank == 0)
