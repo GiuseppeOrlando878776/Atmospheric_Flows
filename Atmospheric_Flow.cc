@@ -36,13 +36,6 @@
 
 #include <deal.II/base/timer.h>
 
-#include <deal.II/multigrid/multigrid.h>
-#include <deal.II/multigrid/mg_transfer_matrix_free.h>
-#include <deal.II/multigrid/mg_tools.h>
-#include <deal.II/multigrid/mg_coarse.h>
-#include <deal.II/multigrid/mg_smoother.h>
-#include <deal.II/multigrid/mg_matrix.h>
-
 #include <deal.II/fe/mapping_q.h>
 
 #include <deal.II/distributed/solution_transfer.h>
@@ -87,8 +80,7 @@ protected:
   DoFHandler<dim> dof_handler_pressure;
 
   /*--- Auxiliary mapping for curved boundary ---*/
-  MappingQ<dim>  mapping;
-  MappingQ1<dim> mapping_mg;
+  MappingQ<dim> mapping;
 
   /*--- Auxiliary quadratures for all the variables ---*/
   QGaussLobatto<dim> quadrature_density;
@@ -118,12 +110,12 @@ protected:
   LinearAlgebra::distributed::Vector<double> dpres_fixed;
   LinearAlgebra::distributed::Vector<double> rhs_pres;
 
-  /*--- Variables for the potential temperature ---*/
-  LinearAlgebra::distributed::Vector<double> theta_old;
-
   LinearAlgebra::distributed::Vector<double> tmp_1,
                                              tmp_2,
                                              tmp_3; /*--- Auxiliary vectors for the Schur complement ---*/
+
+  /*--- Variables for the potential temperature ---*/
+  LinearAlgebra::distributed::Vector<double> theta_old;
 
   DeclException2(ExcInvalidTimeStep,
                  double,
@@ -149,9 +141,6 @@ protected:
   void output_results(const unsigned int step); /*--- Function to save the results ---*/
 
 private:
-  void compute_multigrid_preconditioner(const DoFHandler<dim>& dof_handler,
-                                        const std::vector<unsigned int> index_dof_handler); /*--- Auxiliary function to compute the multigrid preconditioner ---*/
-
   void precompute_rhs_pressure(); /*--- Auxiliary function to compute the rhs of the pressure equation ---*/
 
   unsigned int perform_fixed_point_loop(); /*--- Auxiliary function for the fixed point loop ---*/
@@ -168,28 +157,6 @@ private:
                 2*EquationData::degree_u + 1,
                 2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree,
                 LinearAlgebra::distributed::Vector<double>> euler_matrix;
-
-  using SmootherType = PreconditionChebyshev<EULEROperator<dim,
-                                                           EquationData::degree_u,
-                                                           EquationData::degree_rho,
-                                                           EquationData::degree_p,
-                                                           2*EquationData::degree_u + 1,
-                                                           2*EquationData::degree_rho + 1 + EquationData::extra_quadrature_degree,
-                                                           LinearAlgebra::distributed::Vector<float>>,
-                                              LinearAlgebra::distributed::Vector<float>>;
-  MGTransferMatrixFree<dim, float> mg_transfer;
-  mg::SmootherRelaxation<SmootherType, LinearAlgebra::distributed::Vector<float>> mg_smoother;
-  MGCoarseGridApplySmoother<LinearAlgebra::distributed::Vector<float>> mg_coarse;
-  mg::Matrix<LinearAlgebra::distributed::Vector<float>> mg_matrix;
-
-  MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
-  MGLevelObject<EULEROperator<dim,
-                              EquationData::degree_u,
-                              EquationData::degree_rho,
-                              EquationData::degree_p,
-                              2*EquationData::degree_u + 1,
-                              2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree,
-                              LinearAlgebra::distributed::Vector<float>>> mg_matrices_euler;
 
   std::vector<const DoFHandler<dim>*> dof_handlers; /*--- Auxiliary container for the matrix-free ---*/
 
@@ -278,7 +245,6 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handler_velocity(triangulation),
   dof_handler_pressure(triangulation),
   mapping(EquationData::degree_mapping, true),
-  mapping_mg(),
   quadrature_density(EquationData::degree_rho + 1),
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_pressure(EquationData::degree_p + 1),
@@ -406,6 +372,7 @@ void EulerSolver<dim>::setup_dofs() {
   /*--- Set the quadrature formula to compute the integrals for assembling bilinear and linear forms ---*/
   quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1));
   quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree));
+  quadratures.push_back(QGauss<1>(EquationData::degree_u + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
   matrix_free_storage->reinit(mapping, dof_handlers, constraints, quadratures, additional_data);
@@ -447,77 +414,6 @@ void EulerSolver<dim>::setup_dofs() {
   /*--- Initialize the auxiliary variable to check the error and stop the fixed point loop ---*/
   Vector<double> error_per_cell_tmp(triangulation.n_active_cells());
   Linfty_error_per_cell_pres.reinit(error_per_cell_tmp);
-
-  /*--- Distribute degrees of freedom for the multigrid ---*/
-  mg_matrices_euler.clear_elements();
-  dof_handler_velocity.distribute_mg_dofs();
-  dof_handler_pressure.distribute_mg_dofs();
-  dof_handler_density.distribute_mg_dofs();
-
-  /*--- Initialize the multigrid physical parameters ---*/
-  level_projection = MGLevelObject<LinearAlgebra::distributed::Vector<float>>(0, triangulation.n_global_levels() - 1);
-  mg_matrices_euler.resize(0, triangulation.n_global_levels() - 1);
-  for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-    typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
-    additional_data_mg.mg_level = level;
-
-    std::shared_ptr<MatrixFree<dim, float>> mg_mf_storage_level(new MatrixFree<dim, float>());
-    mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
-    mg_mf_storage_level->initialize_dof_vector(level_projection[level], EquationData::RHO_INDEX_DOF);
-
-    mg_matrices_euler[level].set_dt(dt);
-    mg_matrices_euler[level].set_Mach(Ma);
-    mg_matrices_euler[level].set_Froude(Fr);
-  }
-  smoother_data.resize(0, triangulation.n_global_levels() - 1);
-}
-
-// @sect{ <code>EulerSolver::compute_multigrid_preconditioner</code> }
-
-// This auxiliary method computes a geometric multigrid preconditioner
-//
-template<int dim>
-void EulerSolver<dim>::compute_multigrid_preconditioner(const DoFHandler<dim>& dof_handler,
-                                                        const std::vector<unsigned int> index_dof_handler) {
-  /*--- Comput the multigrid preconditioner ---*/
-  for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-    typename MatrixFree<dim, float>::AdditionalData additional_data_mg;
-    additional_data_mg.tasks_parallel_scheme               = MatrixFree<dim, float>::AdditionalData::none;
-    additional_data_mg.mapping_update_flags                = (update_values | update_quadrature_points | update_JxW_values);
-    additional_data_mg.mapping_update_flags_inner_faces    = update_default;
-    additional_data_mg.mapping_update_flags_boundary_faces = update_default;
-    additional_data_mg.mg_level                            = level;
-
-    std::shared_ptr<MatrixFree<dim, float>> mg_mf_storage_level(new MatrixFree<dim, float>()); /*--- This has to be redefined to avoid issues ---*/
-    mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
-    mg_matrices_euler[level].initialize(mg_mf_storage_level, index_dof_handler, index_dof_handler);
-    mg_matrices_euler[level].set_Euler_stage(euler_matrix.get_Euler_stage());
-
-    if(level > 0) {
-      smoother_data[level].smoothing_range     = 15.0;
-      smoother_data[level].degree              = 3;
-      smoother_data[level].eig_cg_n_iterations = 10;
-    }
-    else {
-      smoother_data[0].smoothing_range     = 2e-2;
-      smoother_data[0].degree              = numbers::invalid_unsigned_int;
-      smoother_data[0].eig_cg_n_iterations = mg_matrices_euler[0].m();
-    }
-    mg_matrices_euler[level].compute_diagonal();
-    smoother_data[level].preconditioner = mg_matrices_euler[level].get_matrix_diagonal_inverse();
-  }
-
-  /*--- Apply smoother ---*/
-  mg_smoother.clear();
-  mg_smoother.initialize(mg_matrices_euler, smoother_data);
-
-  mg_coarse.initialize(mg_smoother);
-
-  mg_matrix.reset();
-  mg_matrix.initialize(mg_matrices_euler);
-
-  mg_transfer.clear();
-  mg_transfer.build(dof_handler);
 }
 
 // @sect{ <code>EulerSolver::initialize</code> }
@@ -593,29 +489,15 @@ void EulerSolver<dim>::update_density() {
                                              rho_s_3, u_s_3});
   }
 
-  SolverControl solver_control(max_its, eps*rhs_rho.l2_norm());
-  SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
-
-  /*--- Compute multigrid preconditioner for density ---*/
-  compute_multigrid_preconditioner(dof_handler_density, index_dof_handler);
-
-  Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
-  PreconditionMG<dim,
-                 LinearAlgebra::distributed::Vector<float>,
-                 MGTransferMatrixFree<dim, float>> preconditioner(dof_handler_density, mg, mg_transfer);
-
   /*--- Solve the system for the density ---*/
   if(IMEX_stage == 2) {
-    rho_s_2.equ(1.0, rho_old);
-    cg.solve(euler_matrix, rho_s_2, rhs_rho, preconditioner);
+    euler_matrix.vmult(rho_s_2, rhs_rho);
   }
   else if(IMEX_stage == 3) {
-    rho_s_3.equ(1.0, rho_s_2);
-    cg.solve(euler_matrix, rho_s_3, rhs_rho, preconditioner);
+    euler_matrix.vmult(rho_s_3, rhs_rho);
   }
   else {
-    rho_curr.equ(1.0, rho_s_3);
-    cg.solve(euler_matrix, rho_curr, rhs_rho, preconditioner);
+    euler_matrix.vmult(rho_curr, rhs_rho);
   }
 }
 
@@ -690,23 +572,12 @@ void EulerSolver<dim>::precompute_rhs_pressure() {
                                             rho_s_3});
   }
 
-  SolverControl solver_control_schur(max_its, 1e-12*rhs_u.l2_norm());
-  SolverCG<LinearAlgebra::distributed::Vector<double>> cg_schur(solver_control_schur);
-
   const std::vector<unsigned int> index_dof_handler = {EquationData::U_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
 
-  /*--- Set MultiGrid for velocity matrix --*/
-  compute_multigrid_preconditioner(dof_handler_velocity, index_dof_handler);
-
-  Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
-  PreconditionMG<dim,
-                 LinearAlgebra::distributed::Vector<float>,
-                 MGTransferMatrixFree<dim, float>> preconditioner(dof_handler_velocity, mg, mg_transfer);
-
   /*--- Solve to compute first contribution to rhs --*/
-  cg_schur.solve(euler_matrix, tmp_1, rhs_u, preconditioner);
+  euler_matrix.vmult(tmp_1, rhs_u);
 }
 
 // Auxiliary routine for the fixed point loop
@@ -762,24 +633,12 @@ void EulerSolver<dim>::update_velocity() {
                                             rho_s_3, u_s_3, pres_s_3});
   }
 
-  SolverControl solver_control(max_its, eps*rhs_u.l2_norm());
-  SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
-
-  /*--- Compute MultiGrid for velocity matrix ---*/
-  compute_multigrid_preconditioner(dof_handler_velocity, index_dof_handler);
-
-  Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
-  PreconditionMG<dim,
-                 LinearAlgebra::distributed::Vector<float>,
-                 MGTransferMatrixFree<dim, float>> preconditioner(dof_handler_velocity, mg, mg_transfer);
-
   /*--- Solve the system for the velocity ---*/
   if(IMEX_stage <= EquationData::n_stages) {
-    cg.solve(euler_matrix, u_fixed, rhs_u, preconditioner);
+    euler_matrix.vmult(u_fixed, rhs_u);
   }
   else {
-    u_curr.equ(1.0, u_s_3);
-    cg.solve(euler_matrix, u_curr, rhs_u, preconditioner);
+    euler_matrix.vmult(u_curr, rhs_u);
   }
 }
 
@@ -801,20 +660,8 @@ void EulerSolver<dim>::update_pressure() {
                                            rho_s_3, u_s_3, pres_s_3,
                                            rho_curr, u_curr});
 
-  SolverControl solver_control(max_its, eps*rhs_pres.l2_norm());
-  SolverCG<LinearAlgebra::distributed::Vector<double>> cg(solver_control);
-
-  /*--- Compute multigrid preconditioner for pressure ---*/
-  compute_multigrid_preconditioner(dof_handler_pressure, index_dof_handler);
-
-  Multigrid<LinearAlgebra::distributed::Vector<float>> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
-  PreconditionMG<dim,
-                 LinearAlgebra::distributed::Vector<float>,
-                 MGTransferMatrixFree<dim, float>> preconditioner(dof_handler_pressure, mg, mg_transfer);
-
   /*--- Solve the system for the pressure ---*/
-  pres_old.equ(1.0, pres_s_3);
-  cg.solve(euler_matrix, pres_old, rhs_pres, preconditioner);
+  euler_matrix.vmult(pres_old, rhs_pres);
 }
 
 
@@ -1062,11 +909,11 @@ template<int dim>
 void EulerSolver<dim>::postprocess_integral_quantities(const double time) {
   const int n_q_points = quadrature_density.size();
 
-  FEValues<dim> fe_values_density(mapping, fe_density, quadrature_density,
+  FEValues<dim> fe_values_density(fe_density, quadrature_density,
                                   update_values | update_JxW_values);
-  FEValues<dim> fe_values_pressure(mapping, fe_pressure, quadrature_density,
+  FEValues<dim> fe_values_pressure(fe_pressure, quadrature_density,
                                    update_values);
-  FEValues<dim> fe_values_velocity(mapping, fe_velocity, quadrature_density,
+  FEValues<dim> fe_values_velocity(fe_velocity, quadrature_density,
                                    update_values);
 
   std::vector<double>         density_values(n_q_points);
@@ -1255,9 +1102,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     /*--- Second stage of the IMEX operator ---*/
     IMEX_stage = 2;
     euler_matrix.set_IMEX_stage(IMEX_stage);
-    for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_euler[level].set_IMEX_stage(IMEX_stage);
-    }
 
     verbose_cout << "  Update density stage " << IMEX_stage << std::endl;
     update_density();
@@ -1267,10 +1111,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     verbose_cout << "  Fixed point pressure stage " << IMEX_stage << std::endl;
     /*--- Set the current density to the operator and set the variables for multigrid ---*/
     euler_matrix.set_rho_for_fixed(rho_s_2);
-    mg_transfer.interpolate_to_mg(dof_handler_density, level_projection, rho_s_2);
-    for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_euler[level].set_rho_for_fixed(level_projection[level]);
-    }
     pres_fixed.equ(1.0, pres_old);
     u_fixed.equ(1.0, u_old);
     unsigned int iter = perform_fixed_point_loop();
@@ -1282,9 +1122,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     /*--- Third stage of IMEX operator ---*/
     IMEX_stage = 3;
     euler_matrix.set_IMEX_stage(IMEX_stage);
-    for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_euler[level].set_IMEX_stage(IMEX_stage);
-    }
 
     verbose_cout << "  Update density stage " << IMEX_stage << std::endl;
     update_density();
@@ -1294,10 +1131,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     verbose_cout << "  Fixed point pressure stage " << IMEX_stage << std::endl;
     /*--- Set the current density to the operator and set the variables for multigrid ---*/
     euler_matrix.set_rho_for_fixed(rho_s_3);
-    mg_transfer.interpolate_to_mg(dof_handler_density, level_projection, rho_s_3);
-    for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_euler[level].set_rho_for_fixed(level_projection[level]);
-    }
     pres_fixed.equ(1.0, pres_s_2);
     u_fixed.equ(1.0, u_s_2);
     iter = perform_fixed_point_loop();
@@ -1309,9 +1142,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     /*--- Final stage of RK scheme to update ---*/
     IMEX_stage = 4;
     euler_matrix.set_IMEX_stage(IMEX_stage);
-    for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_euler[level].set_IMEX_stage(IMEX_stage);
-    }
 
     verbose_cout << "  Update density" << std::endl;
     update_density();
@@ -1321,10 +1151,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
     verbose_cout << "  Update velocity" << std::endl;
     /*--- Set the current density to the operator and set the variables for multigrid ---*/
     euler_matrix.set_rho_for_fixed(rho_curr);
-    mg_transfer.interpolate_to_mg(dof_handler_density, level_projection, rho_curr);
-    for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-      mg_matrices_euler[level].set_rho_for_fixed(level_projection[level]);
-    }
     update_velocity();
 
     verbose_cout << "  Update pressure" << std::endl;
@@ -1375,9 +1201,6 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
       /*--- Recompute and reset the time if needed towards the end of the simulation to stop at the proper final time ---*/
       dt = T - time;
       euler_matrix.set_dt(dt);
-      for(unsigned int level = 0; level < triangulation.n_global_levels(); ++level) {
-        mg_matrices_euler[level].set_dt(dt);
-      }
     }
   }
 
