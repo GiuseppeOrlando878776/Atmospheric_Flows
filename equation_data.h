@@ -30,35 +30,35 @@ namespace EquationData {
 
   /*--- Define axuliary indices related to the dof hadlers order and to linear systems under consideration ---*/
   static const unsigned int RHO_INDEX_SYSTEM = 1;
-  static const unsigned int P_INDEX_SYSTEM = 2;
-  static const unsigned int U_INDEX_SYSTEM = 3;
+  static const unsigned int P_INDEX_SYSTEM   = 2;
+  static const unsigned int U_INDEX_SYSTEM   = 3;
 
-  static const unsigned int U_INDEX_DOF = 0;
-  static const unsigned int P_INDEX_DOF = 1;
+  static const unsigned int U_INDEX_DOF   = 0;
+  static const unsigned int P_INDEX_DOF   = 1;
   static const unsigned int RHO_INDEX_DOF = 2;
 
   /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/
-  static const unsigned int degree_p   = 4;
-  static const unsigned int degree_rho = 4;
-  static const unsigned int degree_u   = 4;
+  static const unsigned int degree_p   = 1;
+  static const unsigned int degree_rho = 1;
+  static const unsigned int degree_u   = 1;
 
   static const double Cp_Cv = 1.4;   /*--- Specific heats ratio ---*/
   static const double R     = 287.0; /*--- Specific gas constant ---*/
 
   static const double g = 9.81; /*--- Acceleration of gravity ---*/
-  static const double N = 0.01; /*--- Buoyancy frequency ---*/
 
-  static const double xc = 100000.0; /*--- Center of the perturbation ---*/
-  static const double ac = 5000.0;   /*--- Width of the pertrubation ---*/
-  static const double H  = 10000.0;  /*--- Height of the pertrubaation ---*/
+  static const double x0    = 500.0;  /*--- x-coordinate of the center of the bubble ---*/
+  static const double y0    = 1250.0; /*--- y-coordinate of the center of the bubble ---*/
+  static const double A     = -15.0;  /*--- Potential temperature perturnation ---*/
+  static const double rb    = 50.0;   /*--- Radius of the bubble ---*/
+  static const double sigma = 100.0;  /*--- Strength exponential perturbation of the bubble ---*/
 
-  static const double x_max = 300000.0; /*--- Extension along horizontal direction ---*/
-  static const double z_max = 10000.0; /*--- Extension along vertical direction ---*/
+  static const double x_max = 1000.0; /*--- Extension along horizontal direction ---*/
+  static const double z_max = 2000.0; /*--- Extension along vertical direction ---*/
 
-  static const double L_ref   = 1000.0;          /*--- Reference length ---*/
-  static const double u_ref   = 20.0;            /*--- Reference velocity ---*/
+  static const double L_ref   = 1.0;             /*--- Reference length ---*/
   static const double p_ref   = 100000.0;        /*--- Reference pressure ---*/
-  static const double T_ref   = 300.0;
+  static const double T_ref   = 303.0;           /*--- Reference temperature ---*/
   static const double rho_ref = p_ref/(R*T_ref); /*--- Reference density ---*/
 
   static const unsigned int degree_mapping          = 1;                                                             /*--- Mapping degree ---*/
@@ -90,12 +90,7 @@ namespace EquationData {
   double Velocity<dim>::value(const Point<dim>& p, const unsigned int component) const {
     AssertIndexRange(component, dim);
 
-    if(component == 0) {
-      return 1.0;
-    }
-    else {
-      return 0.0;
-    }
+    return 0.0;
   }
 
   // Put together for a vector evalutation of the velocity.
@@ -137,8 +132,8 @@ namespace EquationData {
 
     const double Gamma  = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
 
-    const double pi_bar = 1.0 - EquationData::g*EquationData::g/(EquationData::N*EquationData::N)*Gamma*EquationData::rho_ref/EquationData::p_ref*
-                                (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref));
+    const double pi_bar = 1.0
+                        - EquationData::g*(p[1]*EquationData::L_ref)*Gamma*EquationData::rho_ref/EquationData::p_ref;
 
     return std::pow(pi_bar, 1.0/Gamma);
   }
@@ -169,55 +164,20 @@ namespace EquationData {
     (void)component;
     AssertIndexRange(component, 1);
 
-    const double Gamma     = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
+    const double r = std::sqrt((p[0]*EquationData::L_ref - EquationData::x0)*(p[0]*EquationData::L_ref - EquationData::x0) +
+                               (p[1]*EquationData::L_ref - EquationData::y0)*(p[1]*EquationData::L_ref - EquationData::y0));
 
-    const double pi_bar    = 1.0
-                           - EquationData::g*EquationData::g/(EquationData::N*EquationData::N)*Gamma*EquationData::rho_ref/EquationData::p_ref*
-                             (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref));
+    const double Gamma = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
 
-    const double theta_bar   = EquationData::T_ref*std::exp(EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref);
-    const double theta_prime = 0.01*std::sin(numbers::PI*p[1]*EquationData::L_ref/EquationData::H)/
-                                    (1.0 + ((p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac)*
-                                           ((p[0]*EquationData::L_ref - EquationData::xc)/EquationData::ac));
+    const double pi_bar = 1.0
+                        - EquationData::g*(p[1]*EquationData::L_ref)*Gamma*EquationData::rho_ref/EquationData::p_ref;
+
+    const double theta_bar   = EquationData::T_ref;
+    const double theta_prime = EquationData::A*std::exp(-(r - rb)*(r - rb)/(EquationData::sigma*EquationData::sigma))*(r > rb)
+                             + EquationData::A*(r <= rb);
     const double theta       = theta_bar + theta_prime;
 
     return EquationData::T_ref/theta*std::pow(pi_bar, 1.0/(EquationData::Cp_Cv - 1.0));
-  }
-
-  /* We do the same for the backgroudn density. Notice that in order to
-     get a dimensional version one should multiply the result by rho_ref
-  */
-  template<int dim>
-  class Density_Bar: public Function<dim> {
-  public:
-    Density_Bar(const double initial_time = 0.0); /*--- Class constructor ---*/
-
-    virtual double value(const Point<dim>&  p,
-                         const unsigned int component = 0) const override; /*--- Evaluation of the density ---*/
-  };
-
-  // Constructor which again relies on the 'Function' constructor.
-  //
-  template<int dim>
-  Density_Bar<dim>::Density_Bar(const double initial_time): Function<dim>(1, initial_time) {}
-
-  // Evaluation depending on the spatial coordinates. The input argument 'component'
-  // will be unused but it has to be kept to override
-  //
-  template<int dim>
-  double Density_Bar<dim>::value(const Point<dim>& p, const unsigned int component) const {
-    (void)component;
-    AssertIndexRange(component, 1);
-
-    const double Gamma     = (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv;
-
-    const double pi_bar    = 1.0
-                           - EquationData::g*EquationData::g/(EquationData::N*EquationData::N)*Gamma*EquationData::rho_ref/EquationData::p_ref*
-                             (1.0 - std::exp(-EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref));
-
-    const double theta_bar   = EquationData::T_ref*std::exp(EquationData::N*EquationData::N/EquationData::g*p[1]*EquationData::L_ref);
-
-    return EquationData::T_ref/theta_bar*std::pow(pi_bar, 1.0/(EquationData::Cp_Cv - 1.0));
   }
 
 } // namespace EquationData

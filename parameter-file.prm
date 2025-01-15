@@ -1,35 +1,36 @@
 subsection Physical data
   # In this subsection we declare the physical data
   set initial_time = 0.0
-  set final_time   = 120.0
-  set Mach         = 0.06815981765
-  set Froude       = 0.20192751093
+  set final_time   = 200.0
+  set Mach         = 0.003391077672437
+  set Froude       = 0.319275428407050
 end
 
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.06
+  set dt = 0.08
 end
 
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
   # we set the number of global refines the triangulation must have
   # and the minimum and maximum allowed refinements in case of adaptive mesh
-  set n_of_refines = 1
+  set n_of_refines = 3
 end
 
 subsection Data solve
   # In this section we declare the parameters that are going to control the solver
   set max_iterations  = 30000 # maximal number of iterations
+  set eps             = 1e-8  # residual linear system
   set eps_fixed_point = 1e-6  # tolerance fixed point
 end
 
 # The directory where results are saved
-set saving directory = INVERSE_MASS_MATRICES
+set saving directory = COLD_BUBBLE
 
 #The output frequency
-set output_interval = 1000
+set output_interval = 500
 
 #Finally we set the verbosity level
 set verbose = true

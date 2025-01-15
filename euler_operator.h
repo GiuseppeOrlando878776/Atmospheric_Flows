@@ -756,19 +756,20 @@ namespace Atmospheric_Flow {
                              Vec&                                         dst,
                              const Vec&                                   src,
                              const std::pair<unsigned int, unsigned int>& cell_range) const {
-    FEEvaluation<dim, fe_degree_rho, fe_degree_rho + 1, 1, Number> phi(data, EquationData::RHO_INDEX_DOF, 2);
-
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, fe_degree_rho, 1, Number> inverse(phi);
+    FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi(data, EquationData::RHO_INDEX_DOF);
 
     /*--- Loop over all cells ---*/
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi.reinit(cell);
-      phi.read_dof_values(src);
+      phi.gather_evaluate(src, EvaluationFlags::values);
 
-      inverse.apply(phi.begin_dof_values(),
-                    phi.begin_dof_values());
+      /*--- Loop over all quadrature points ---*/
+      for(unsigned int q = 0; q < phi.n_q_points; ++q) {
+        phi.submit_value(phi.get_value(q), q); /*--- Here we need to assemble just a mass matrix,
+                                                     so we simply test against the test fuction, the 'src' vector ---*/
+      }
 
-      phi.set_dof_values(dst);
+      phi.integrate_scatter(EvaluationFlags::values, dst);
     }
   }
 
@@ -1476,10 +1477,8 @@ namespace Atmospheric_Flow {
     /*--- We first start by declaring the suitable instances to read also available quantities.
           Since here we have just one 'src' vector, but we also need to deal with the current density,
           we employ the auxiliary vector 'rho_for_fixed' where we setted this information ---*/
-    FEEvaluation<dim, fe_degree_u, fe_degree_u + 1, dim, Number> phi(data, EquationData::U_INDEX_DOF, 2);
-    FEEvaluation<dim, fe_degree_rho, fe_degree_u + 1, 1, Number> phi_rho_for_fixed(data, EquationData::RHO_INDEX_DOF, 2);
-
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, fe_degree_u, dim, Number> inverse(phi);
+    FEEvaluation<dim, fe_degree_u, n_q_points_1d, dim, Number> phi(data, EquationData::U_INDEX_DOF);
+    FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi_rho_for_fixed(data, EquationData::RHO_INDEX_DOF);
 
     /*--- Loop over all cells ---*/
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
@@ -1487,21 +1486,14 @@ namespace Atmospheric_Flow {
       phi_rho_for_fixed.gather_evaluate(rho_for_fixed, EvaluationFlags::values);
 
       phi.reinit(cell);
-      phi.read_dof_values(src);
+      phi.gather_evaluate(src, EvaluationFlags::values);
 
-      AlignedVector<VectorizedArray<Number>> inverse_jxw(phi.n_q_points);
-      inverse.fill_inverse_JxW_values(inverse_jxw);
-
-      /*--- Loop over all quadrature points to fill the inverse of the coefficient ---*/
+      /*--- Loop over all quadrature points ---*/
       for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-        inverse_jxw[q] *= 1.0/phi_rho_for_fixed.get_value(q);
+        phi.submit_value(phi_rho_for_fixed.get_value(q)*phi.get_value(q), q);
       }
 
-      inverse.apply(inverse_jxw, dim,
-                    phi.begin_dof_values(),
-                    phi.begin_dof_values());
-
-      phi.set_dof_values(dst);
+      phi.integrate_scatter(EvaluationFlags::values, dst);
     }
   }
 
@@ -2233,28 +2225,19 @@ namespace Atmospheric_Flow {
                                      Vec&                                         dst,
                                      const Vec&                                   src,
                                      const std::pair<unsigned int, unsigned int>& cell_range) const {
-    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 2);
+    FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number> phi(data, EquationData::P_INDEX_DOF);
 
-    MatrixFreeOperators::CellwiseInverseMassMatrix<dim, fe_degree_p, 1, Number> inverse(phi);
-
-    /*--- Loop over all cells ---*/
     for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi.reinit(cell);
-      phi.read_dof_values(src);
+      phi.gather_evaluate(src, EvaluationFlags::values);
 
-      AlignedVector<VectorizedArray<Number>> inverse_jxw(phi.n_q_points);
-      inverse.fill_inverse_JxW_values(inverse_jxw);
-
-      /*--- Loop over all quadrature points to fill the inverse of the coefficient ---*/
       for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-        inverse_jxw[q] *= (EquationData::Cp_Cv - 1.0);
+        /*--- For an ideal gas the part associated to the internal energy for a pressure based
+              is just a modification of the mass matrix ---*/
+        phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
       }
 
-      inverse.apply(inverse_jxw, 1,
-                    phi.begin_dof_values(),
-                    phi.begin_dof_values());
-
-      phi.set_dof_values(dst);
+      phi.integrate_scatter(EvaluationFlags::values, dst);
     }
   }
 
@@ -2371,6 +2354,39 @@ namespace Atmospheric_Flow {
     else if(Euler_stage == EquationData::P_INDEX_SYSTEM) {
       this->data->cell_loop(&EULEROperator::assemble_cell_term_internal_energy,
                             this, dst, src, false);
+
+      if(IMEX_stage <= EquationData::n_stages) {
+        /*--- Implementation of the Schur complement operations ---*/
+        Vec tmp_1;
+        this->data->initialize_dof_vector(tmp_1, EquationData::U_INDEX_DOF);
+        this->vmult_pressure(tmp_1, src);
+
+        Euler_stage = EquationData::U_INDEX_SYSTEM;
+        const std::vector<unsigned int> index_dof_handler_reinit = {EquationData::U_INDEX_DOF};
+        auto* tmp_matrix = const_cast<EULEROperator*>(this);
+        Vec tmp_2;
+        this->data->initialize_dof_vector(tmp_2, EquationData::U_INDEX_DOF);
+        tmp_2 = 0;
+        tmp_matrix->initialize(tmp_matrix->get_matrix_free(), index_dof_handler_reinit, index_dof_handler_reinit);
+
+        SolverControl solver_control(10000, 1e-12*tmp_1.l2_norm());
+        SolverCG<Vec> cg(solver_control);
+        PreconditionJacobi<EULEROperator> preconditioner_Jacobi;
+        tmp_matrix->compute_diagonal();
+        preconditioner_Jacobi.initialize(*tmp_matrix);
+
+        cg.solve(*tmp_matrix, tmp_2, tmp_1, preconditioner_Jacobi);
+
+        Vec tmp_3;
+        this->data->initialize_dof_vector(tmp_3, EquationData::P_INDEX_DOF);
+        this->vmult_enthalpy(tmp_3, tmp_2);
+
+        dst.add(-1.0, tmp_3);
+        Euler_stage = EquationData::P_INDEX_SYSTEM;
+        const std::vector<unsigned int> index_dof_handler = {EquationData::P_INDEX_DOF};
+        tmp_matrix->initialize(tmp_matrix->get_matrix_free(), index_dof_handler, index_dof_handler);
+        tmp_matrix->compute_diagonal();
+      }
     }
     else if(Euler_stage == EquationData::U_INDEX_SYSTEM) {
       this->data->cell_loop(&EULEROperator::assemble_cell_term_velocity,
