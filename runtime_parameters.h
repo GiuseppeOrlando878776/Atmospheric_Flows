@@ -228,9 +228,10 @@ namespace RunTimeParameters {
 
     prm.enter_subsection("Data solve");
     {
-      max_iterations = prm.get_integer("max_iterations");
-      eps            = prm.get_double("eps");
-      step_restart   = prm.get_integer("step_restart");
+      max_iterations  = prm.get_integer("max_iterations");
+      eps             = prm.get_double("eps");
+      eps_fixed_point = prm.get_double("eps_fixed_point");
+      step_restart    = prm.get_integer("step_restart");
     }
     prm.leave_subsection();
 
