@@ -35,18 +35,22 @@ namespace RunTimeParameters {
     double Froude; /*--- The Froude number ---*/
     double dt;     /*--- The time-step ---*/
 
-    unsigned int n_global_refines; /*--- Number of global refinements for the initial coarse mesh ---*/
+    unsigned int n_global_refines;    /*--- Number of global refinements for the initial coarse mesh ---*/
+    unsigned int max_loc_refinements; /*--- Maximum number of refinements allowed ---*/
+    unsigned int min_loc_refinements; /*--- Minimum number of refinements allowed ---*/
 
     unsigned int max_iterations;  /*--- Maximum number of iterations for the linear solver ---*/
     double       eps;             /*--- Tolerance for the linear solver ---*/
     double       eps_fixed_point; /*--- Tolerance for the fixed point loop ---*/
 
-    bool         verbose;          /*--- Choose if being verboe or not ---*/
+    bool         verbose;         /*--- Choose if being verboe or not ---*/
     unsigned int output_interval; /*--- Set how often save the fields ---*/
 
     std::string  dir; /*--- Directory where the data are saved. This has to be created before launching the code
                             and we assume it is a subfolder of the folder with the executable and the parameter file.
                             This behaviour can be easily changed giving the absolute path ---*/
+
+    unsigned int refinement_iterations; /*--- How often performin mesh adaptation ---*/
 
     /*--- Auxiliary parameters related to restart ---*/
     bool         restart;
@@ -69,11 +73,14 @@ namespace RunTimeParameters {
                                 Froude(1.0),
                                 dt(5e-4),
                                 n_global_refines(0),
+                                max_loc_refinements(0),
+                                min_loc_refinements(0),
                                 max_iterations(1000),
                                 eps(1e-12),
                                 eps_fixed_point(1e-10),
                                 verbose(true),
                                 output_interval(15),
+                                refinement_iterations(0),
                                 restart(false),
                                 save_for_restart(false),
                                 step_restart(0),
@@ -119,6 +126,14 @@ namespace RunTimeParameters {
                         "3",
                         Patterns::Integer(0, 15),
                         "The number of global refinements we want for the mesh.");
+      prm.declare_entry("max_loc_refinements",
+                        "4",
+                         Patterns::Integer(1, 10),
+                         " The number of maximum local refinements in case of adaptive mesh.");
+      prm.declare_entry("min_loc_refinements",
+                        "2",
+                         Patterns::Integer(0, 10),
+                         " The number of minimum local refinements in case of adaptive mesh.");
     }
     prm.leave_subsection();
 
@@ -156,6 +171,11 @@ namespace RunTimeParameters {
                       "the solution.");
 
     prm.declare_entry("saving directory", "SimTest");
+
+    prm.declare_entry("refinement_iterations",
+                      "0",
+                       Patterns::Integer(0, 100000000),
+                       "How ofter performing mesh adaptation if desired.");
 
     prm.declare_entry("restart",
                       "false",
@@ -200,15 +220,18 @@ namespace RunTimeParameters {
 
     prm.enter_subsection("Space discretization");
     {
-      n_global_refines = prm.get_integer("n_of_refines");
+      n_global_refines    = prm.get_integer("n_of_refines");
+      max_loc_refinements = prm.get_integer("max_loc_refinements");
+      min_loc_refinements = prm.get_integer("min_loc_refinements");
     }
     prm.leave_subsection();
 
     prm.enter_subsection("Data solve");
     {
-      max_iterations = prm.get_integer("max_iterations");
-      eps            = prm.get_double("eps");
-      step_restart   = prm.get_integer("step_restart");
+      max_iterations  = prm.get_integer("max_iterations");
+      eps             = prm.get_double("eps");
+      eps_fixed_point = prm.get_double("eps_fixed_point");
+      step_restart    = prm.get_integer("step_restart");
     }
     prm.leave_subsection();
 
@@ -217,6 +240,8 @@ namespace RunTimeParameters {
     output_interval = prm.get_integer("output_interval");
 
     dir = prm.get("saving directory");
+
+    refinement_iterations = prm.get_integer("refinement_iterations");
 
     /*--- Read parameters related to restart ---*/
     restart               = prm.get_bool("restart");
