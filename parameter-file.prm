@@ -29,7 +29,7 @@ end
 set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM
 
 #The output frequency
-set output_interval = 180
+set output_interval = 100
 
 #Finally we set the verbosity level
 set verbose = true

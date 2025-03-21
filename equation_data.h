@@ -30,11 +30,11 @@ namespace EquationData {
 
   /*--- Define axuliary indices related to the dof hadlers order and to linear systems under consideration ---*/
   static const unsigned int RHO_INDEX_SYSTEM = 1;
-  static const unsigned int P_INDEX_SYSTEM = 2;
-  static const unsigned int U_INDEX_SYSTEM = 3;
+  static const unsigned int P_INDEX_SYSTEM   = 2;
+  static const unsigned int U_INDEX_SYSTEM   = 3;
 
-  static const unsigned int U_INDEX_DOF = 0;
-  static const unsigned int P_INDEX_DOF = 1;
+  static const unsigned int U_INDEX_DOF   = 0;
+  static const unsigned int P_INDEX_DOF   = 1;
   static const unsigned int RHO_INDEX_DOF = 2;
 
   /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/

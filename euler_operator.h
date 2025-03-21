@@ -65,6 +65,9 @@ namespace Atmospheric_Flow {
 
     virtual void compute_diagonal() override; /*--- Overriden function to compute the diagonal. ---*/
 
+    /*--- Perform a Jacobi step in order to build a GMG with Jacobi as preconditioner ---*/
+    //void Jacobi_step(Vec& v, const Vec& b, const Number omega) const;
+
   protected:
     double       Ma;  /*--- Mach number. ---*/
     double       Fr;  /*--- Froude number. ---*/
@@ -2166,7 +2169,7 @@ namespace Atmospheric_Flow {
           const auto& lambda_s_3       = compute_lambda(u_s_3_m, u_s_3_p, n_minus);
           const auto& rhoE_s_3_m       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_s_3_m
                                        + rho_s_3_m*(0.5*Ma*Ma*scalar_product(u_s_3_m, u_s_3_m));
-          const auto& rhoE_s_3_p       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_s_2_p
+          const auto& rhoE_s_3_p       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_s_3_p
                                        + rho_s_3_p*(0.5*Ma*Ma*scalar_product(u_s_3_p, u_s_3_p));
           const auto& jump_rhoE_s_3    = rhoE_s_3_m - rhoE_s_3_p;
 
@@ -2683,10 +2686,30 @@ namespace Atmospheric_Flow {
     }
 
     /*--- For the preconditioner, we actually need the inverse of the diagonal ---*/
-    for(unsigned int i = 0; i < inverse_diagonal.local_size(); ++i) {
+    for(unsigned int i = 0; i < inverse_diagonal.locally_owned_size(); ++i) {
       Assert(inverse_diagonal.local_element(i) != 0.0,
              ExcMessage("No diagonal entry in a definite operator should be zero"));
       inverse_diagonal.local_element(i) = 1.0/inverse_diagonal.local_element(i);
     }
   }
+
+  // Perform a Jacobi step
+  //
+  /*template<int dim, int fe_degree_u, int fe_degree_rho, int fe_degree_p,
+           int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
+  void EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
+                     n_q_points_1d, n_q_points_1d_boundary, Vec>::
+  Jacobi_step(Vec& v, const Vec& b, const Number omega) const {
+    Vec tmp;
+    tmp.reinit(v);
+
+    v.update_ghost_values();
+
+    this->apply_add(tmp, v);
+
+    tmp.add(-1.0, b);
+
+    this->precondition_Jacobi(tmp, tmp, omega);
+    v.add(-1.0, tmp);
+  }*/
 }
