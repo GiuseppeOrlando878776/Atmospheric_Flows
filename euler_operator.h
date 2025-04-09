@@ -199,28 +199,16 @@ namespace Atmospheric_Flow {
 
     /*--- Assembler functions for the diagonal part of the matrix for the continuity equation. For compatibilty conditions,
           also face and boundary contributions have to be defined, even though they are empty. ---*/
-    void assemble_diagonal_cell_term_density(const MatrixFree<dim, Number>&               data,
-                                             Vec&                                         dst,
-                                             const unsigned int&                          src,
-                                             const std::pair<unsigned int, unsigned int>& cell_range) const;
+    void assemble_diagonal_cell_term_density(FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number>& phi) const;
 
     /*--- Assembler functions for the diagonal part of 'A' matrix. ---*/
-    void assemble_diagonal_cell_term_velocity(const MatrixFree<dim, Number>&               data,
-                                              Vec&                                         dst,
-                                              const unsigned int&                          src,
-                                              const std::pair<unsigned int, unsigned int>& cell_range) const;
+    void assemble_diagonal_cell_term_velocity(FEEvaluation<dim, fe_degree_u, n_q_points_1d, dim, Number>& phi) const;
 
     /*--- Assembler functions for the diagonal part of the ellptic operator associated to the Schur complement for the pressure. ---*/
-    void assemble_diagonal_cell_term_pressure(const MatrixFree<dim, Number>&               data,
-                                              Vec&                                         dst,
-                                              const unsigned int&                          src,
-                                              const std::pair<unsigned int, unsigned int>& cell_range) const;
+    void assemble_diagonal_cell_term_pressure(FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number>& phi) const;
 
     /*--- Assembler functions for the diagonal part of 'D' matrix. ---*/
-    void assemble_diagonal_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
-                                                     Vec&                                         dst,
-                                                     const unsigned int&                          src,
-                                                     const std::pair<unsigned int, unsigned int>& cell_range) const;
+    void assemble_diagonal_cell_term_internal_energy(FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number>& phi) const;
   };
 
 
@@ -2443,42 +2431,15 @@ namespace Atmospheric_Flow {
            int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
   void EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary, Vec>::
-  assemble_diagonal_cell_term_density(const MatrixFree<dim, Number>&               data,
-                                      Vec&                                         dst,
-                                      const unsigned int&                          ,
-                                      const std::pair<unsigned int, unsigned int>& cell_range) const {
-    FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi(data, EquationData::RHO_INDEX_DOF);
+  assemble_diagonal_cell_term_density(FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number>& phi) const {
+    phi.evaluate(EvaluationFlags::values);
 
-    AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
-
-    /*--- Loop over all cells ---*/
-    for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-      phi.reinit(cell);
-
-      /*--- Loop over all dofs ---*/
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        for(unsigned int j = 0; j < phi.dofs_per_component; ++j) {
-          phi.submit_dof_value(VectorizedArray<Number>(), j);
-        }
-        phi.submit_dof_value(make_vectorized_array<Number>(1.0), i);
-        /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-              a vector which is 1 for the node of interest and 0 elsewhere.---*/
-        phi.evaluate(EvaluationFlags::values);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          phi.submit_value(phi.get_value(q), q);
-        }
-
-        phi.integrate(EvaluationFlags::values);
-        diagonal[i] = phi.get_dof_value(i);
-      }
-
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        phi.submit_dof_value(diagonal[i], i);
-      }
-      phi.distribute_local_to_global(dst);
+    /*--- Loop over all quadrature points ---*/
+    for(unsigned int q = 0; q < phi.n_q_points; ++q) {
+      phi.submit_value(phi.get_value(q), q);
     }
+
+    phi.integrate(EvaluationFlags::values);
   }
 
 
@@ -2488,52 +2449,22 @@ namespace Atmospheric_Flow {
            int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
   void EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary, Vec>::
-  assemble_diagonal_cell_term_velocity(const MatrixFree<dim, Number>&               data,
-                                       Vec&                                         dst,
-                                       const unsigned int&                          ,
-                                       const std::pair<unsigned int, unsigned int>& cell_range) const {
-    FEEvaluation<dim, fe_degree_u, n_q_points_1d, dim, Number> phi(data, EquationData::U_INDEX_DOF);
-    FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi_rho_for_fixed(data, EquationData::RHO_INDEX_DOF);
+  assemble_diagonal_cell_term_velocity(FEEvaluation<dim, fe_degree_u, n_q_points_1d, dim, Number>& phi) const {
+    FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi_rho_for_fixed(*this->data, EquationData::RHO_INDEX_DOF);
 
-    /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-          a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp' does.
-          Moreover, since here we have just one 'src' vector, but we also need to deal with the current density,
-          we employ the auxiliary vector 'rho_for_fixed' where we setted this information ---*/
-    AlignedVector<Tensor<1, dim, VectorizedArray<Number>>> diagonal(phi.dofs_per_component);
-    Tensor<1, dim, VectorizedArray<Number>> tmp;
-    for(unsigned int d = 0; d < dim; ++d) {
-      tmp[d] = make_vectorized_array<Number>(1.0);
+    /*--- Recover current cell index ---*/
+    const auto cell = phi.get_current_cell_index();
+
+    phi_rho_for_fixed.reinit(cell);
+    phi_rho_for_fixed.gather_evaluate(rho_for_fixed, EvaluationFlags::values);
+
+    phi.evaluate(EvaluationFlags::values);
+
+    for(unsigned int q = 0; q < phi.n_q_points; ++q) {
+      phi.submit_value(phi_rho_for_fixed.get_value(q)*phi.get_value(q), q);
     }
 
-    /*--- Loop over all cells ---*/
-    for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-      phi_rho_for_fixed.reinit(cell);
-      phi_rho_for_fixed.gather_evaluate(rho_for_fixed, EvaluationFlags::values);
-
-      phi.reinit(cell);
-
-      /*--- Loop over all dofs ---*/
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        for(unsigned int j = 0; j < phi.dofs_per_component; ++j) {
-          phi.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
-        }
-        phi.submit_dof_value(tmp, i);
-        phi.evaluate(EvaluationFlags::values);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          phi.submit_value(phi_rho_for_fixed.get_value(q)*phi.get_value(q), q);
-        }
-
-        phi.integrate(EvaluationFlags::values);
-        diagonal[i] = phi.get_dof_value(i);
-      }
-
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        phi.submit_dof_value(diagonal[i], i);
-      }
-      phi.distribute_local_to_global(dst);
-    }
+    phi.integrate(EvaluationFlags::values);
   }
 
 
@@ -2543,59 +2474,35 @@ namespace Atmospheric_Flow {
            int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
   void EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary, Vec>::
-  assemble_diagonal_cell_term_pressure(const MatrixFree<dim, Number>&               data,
-                                       Vec&                                         dst,
-                                       const unsigned int&                          ,
-                                       const std::pair<unsigned int, unsigned int>& cell_range) const {
-    FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number>   phi(data, EquationData::P_INDEX_DOF),
-                                                               phi_pres_fixed(data, EquationData::P_INDEX_DOF);
-    FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi_rho_for_fixed(data, EquationData::RHO_INDEX_DOF);
-
-    AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
-
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
+  assemble_diagonal_cell_term_pressure(FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number>& phi) const {
     const double coeff = (IMEX_stage == 2) ? a22_tilde : a33_tilde;
 
-    for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-      phi_pres_fixed.reinit(cell);
-      phi_pres_fixed.gather_evaluate(pres_fixed, EvaluationFlags::values);
+    FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number>   phi_pres_fixed(*this->data, EquationData::P_INDEX_DOF);
+    FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi_rho_for_fixed(*this->data, EquationData::RHO_INDEX_DOF);
 
-      phi_rho_for_fixed.reinit(cell);
-      phi_rho_for_fixed.gather_evaluate(rho_for_fixed, EvaluationFlags::values);
+    /*--- Recover current cell index ---*/
+    const auto cell = phi.get_current_cell_index();
 
-      phi.reinit(cell);
+    phi_pres_fixed.reinit(cell);
+    phi_pres_fixed.gather_evaluate(pres_fixed, EvaluationFlags::values);
 
-      /*--- Loop over all dofs ---*/
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        for(unsigned int j = 0; j < phi.dofs_per_component; ++j) {
-          phi.submit_dof_value(VectorizedArray<Number>(), j);
-        }
-        phi.submit_dof_value(make_vectorized_array<Number>(1.0), i);
-        /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-              a vector which is 1 for the node of interest and 0 elsewhere.---*/
-        phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
+    phi_rho_for_fixed.reinit(cell);
+    phi_rho_for_fixed.gather_evaluate(rho_for_fixed, EvaluationFlags::values);
 
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          const auto& pres_fixed    = phi_pres_fixed.get_value(q);
+    phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
-          const auto& rho_for_fixed = phi_rho_for_fixed.get_value(q);
+    /*--- Loop over all quadrature points ---*/
+    for(unsigned int q = 0; q < phi.n_q_points; ++q) {
+      const auto& pres_fixed    = phi_pres_fixed.get_value(q);
 
-          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
-          phi.submit_gradient((coeff*dt/Ma)*(coeff*dt/Ma)*
-                              (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_fixed/rho_for_fixed)*phi.get_gradient(q)), q);
-        }
+      const auto& rho_for_fixed = phi_rho_for_fixed.get_value(q);
 
-        phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
-        diagonal[i] = phi.get_dof_value(i);
-      }
-
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        phi.submit_dof_value(diagonal[i], i);
-      }
-      phi.distribute_local_to_global(dst);
+      phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
+      phi.submit_gradient((coeff*dt/Ma)*(coeff*dt/Ma)*
+                          (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_fixed/rho_for_fixed)*phi.get_gradient(q)), q);
     }
+
+    phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
   }
 
 
@@ -2605,40 +2512,15 @@ namespace Atmospheric_Flow {
            int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
   void EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary, Vec>::
-  assemble_diagonal_cell_term_internal_energy(const MatrixFree<dim, Number>&               data,
-                                              Vec&                                         dst,
-                                              const unsigned int&                          ,
-                                              const std::pair<unsigned int, unsigned int>& cell_range) const {
-    FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number> phi(data, EquationData::P_INDEX_DOF);
+  assemble_diagonal_cell_term_internal_energy(FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number>& phi) const {
+    phi.evaluate(EvaluationFlags::values);
 
-    AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
-
-    for(unsigned int cell = cell_range.first; cell < cell_range.second; ++cell) {
-      phi.reinit(cell);
-
-      /*--- Loop over all dofs ---*/
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        for(unsigned int j = 0; j < phi.dofs_per_component; ++j) {
-          phi.submit_dof_value(VectorizedArray<Number>(), j);
-        }
-        phi.submit_dof_value(make_vectorized_array<Number>(1.0), i);
-        /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-              a vector which is 1 for the node of interest and 0 elsewhere.---*/
-        phi.evaluate(EvaluationFlags::values);
-
-        for(unsigned int q = 0; q < phi.n_q_points; ++q) {
-          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
-        }
-
-        phi.integrate(EvaluationFlags::values);
-        diagonal[i] = phi.get_dof_value(i);
-      }
-
-      for(unsigned int i = 0; i < phi.dofs_per_component; ++i) {
-        phi.submit_dof_value(diagonal[i], i);
-      }
-      phi.distribute_local_to_global(dst);
+    /*--- Loop over all quadrature points ---*/
+    for(unsigned int q = 0; q < phi.n_q_points; ++q) {
+      phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
     }
+
+    phi.integrate(EvaluationFlags::values);
   }
 
 
@@ -2655,31 +2537,33 @@ namespace Atmospheric_Flow {
     this->inverse_diagonal_entries.reset(new DiagonalMatrix<Vec>());
     auto& inverse_diagonal = this->inverse_diagonal_entries->get_vector();
 
-    const unsigned int dummy = 0;
-
     if(Euler_stage == EquationData::RHO_INDEX_SYSTEM) {
       this->data->initialize_dof_vector(inverse_diagonal, EquationData::RHO_INDEX_DOF);
 
-      this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_density,
-                            this, inverse_diagonal, dummy, false);
+      MatrixFreeTools::compute_diagonal(*this->data, inverse_diagonal,
+                                        &EULEROperator::assemble_diagonal_cell_term_density,
+                                        this, EquationData::RHO_INDEX_DOF);
     }
     else if(Euler_stage == EquationData::P_INDEX_SYSTEM) {
       this->data->initialize_dof_vector(inverse_diagonal, EquationData::P_INDEX_DOF);
 
       if(IMEX_stage <= EquationData::n_stages) {
-        this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_pressure,
-                              this, inverse_diagonal, dummy, false);
+        MatrixFreeTools::compute_diagonal(*this->data, inverse_diagonal,
+                                          &EULEROperator::assemble_diagonal_cell_term_pressure,
+                                          this, EquationData::P_INDEX_DOF);
       }
       else {
-        this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_internal_energy,
-                              this, inverse_diagonal, dummy, false);
+        MatrixFreeTools::compute_diagonal(*this->data, inverse_diagonal,
+                                          &EULEROperator::assemble_diagonal_cell_term_internal_energy,
+                                          this, EquationData::P_INDEX_DOF);
       }
     }
     else if(Euler_stage == EquationData::U_INDEX_SYSTEM) {
       this->data->initialize_dof_vector(inverse_diagonal, EquationData::U_INDEX_DOF);
 
-      this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_velocity,
-                            this, inverse_diagonal, dummy, false);
+      MatrixFreeTools::compute_diagonal(*this->data, inverse_diagonal,
+                                        &EULEROperator::assemble_diagonal_cell_term_velocity,
+                                        this, EquationData::U_INDEX_DOF);
     }
     else {
       Assert(false, ExcInternalError());
