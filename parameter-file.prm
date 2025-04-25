@@ -1,22 +1,21 @@
 subsection Physical data
   # In this subsection we declare the physical data
   set initial_time = 0.0
-  set final_time   = 200.0
-  set Mach         = 0.003391077672437
-  set Froude       = 0.319275428407050
+  set final_time   = 36.0
+  set Mach         = 0.03447578013
+  set Froude       = 0.10096375546
 end
 
 subsection Time step data
   # In this subsection we declare the data that is to be used for time discretization,
   # i.e. the time step dt
-  set dt = 0.08
+  set dt = 0.04
 end
 
 subsection Space discretization
   # In this subsection we declare the data that is relevant to the space discretization
   # we set the number of global refines the triangulation must have
-  # and the minimum and maximum allowed refinements in case of adaptive mesh
-  set n_of_refines = 3
+  set n_of_refines = 2
 end
 
 subsection Data solve
@@ -27,10 +26,10 @@ subsection Data solve
 end
 
 # The directory where results are saved
-set saving directory = COLD_BUBBLE
+set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM_NEW_PRECON_INVERSE_MASS_MATRIX
 
 #The output frequency
-set output_interval = 500
+set output_interval = 100
 
 #Finally we set the verbosity level
 set verbose = true
