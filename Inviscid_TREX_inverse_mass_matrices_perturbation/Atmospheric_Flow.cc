@@ -599,19 +599,6 @@ void EulerSolver<dim>::initialize() {
     VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_old);
   }
 
-  /*--- Initialize the potential temperature ---*/
-  for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
-    if(cell->is_locally_owned()) {
-      std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
-      cell->get_dof_indices(dof_indices);
-      for(unsigned int idx = 0; idx < dof_indices.size(); ++idx) {
-        const double T  = pres_old(dof_indices[idx])/rho_old(dof_indices[idx]);
-        const double Pi = std::pow(pres_old(dof_indices[idx]), (EquationData::Cp_Cv - 1.0)/EquationData::Cp_Cv);
-        theta_old(dof_indices[idx]) = T/Pi;
-      }
-    }
-  }
-
   /*--- Initialize density and pressure perturbation ---*/
   rho_prime_old.equ(1.0, rho_old);
   rho_prime_old.add(-1.0, rho_bar);
