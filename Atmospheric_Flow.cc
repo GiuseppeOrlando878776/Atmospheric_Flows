@@ -53,7 +53,7 @@ using namespace Atmospheric_Flow;
 template<int dim>
 class EulerSolver {
 public:
-  EulerSolver(RunTimeParameters::Data_Storage& data); /*--- Class constructor ---*/
+  EulerSolver(RunTimeParameters::Data_Storage<double>& data); /*--- Class constructor ---*/
 
   void run(const bool verbose = false, const unsigned int output_interval = 10);
   /*--- The run function which actually runs the simulation ---*/
@@ -284,7 +284,7 @@ private:
 // load the initial data.
 //
 template<int dim>
-EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
+EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage<double>& data):
   t0(data.initial_time),
   T(data.final_time),
   IMEX_stage(2),            /*--- Initialize the flag for the IMEX scheme stage ---*/
@@ -334,8 +334,8 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage& data):
   dof_handlers(EquationData::n_vars),
   constraints(EquationData::n_vars),
   max_its(data.max_iterations),
-  eps(data.eps),
-  eps_fixed_point(data.eps_fixed_point),
+  eps(data.rtol_iterative),
+  eps_fixed_point(data.rtol_fixed_point),
   n_refines(data.n_global_refines),
   saving_dir(data.dir),
   restart(data.restart),
@@ -1261,7 +1261,7 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned int output_interva
 //
 int main(int argc, char *argv[]) {
   try {
-    RunTimeParameters::Data_Storage data;
+    RunTimeParameters::Data_Storage<double> data;
     data.read_data("parameter-file.prm");
 
     Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, -1);

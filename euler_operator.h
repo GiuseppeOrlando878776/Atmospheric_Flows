@@ -11,7 +11,7 @@
 
 #include <deal.II/meshworker/mesh_loop.h>
 
-#include "runtime_parameters.h"
+#include "include/io/runtime_parameters.h"
 #include "equation_data.h"
 
 // This is the class that implements the discretization
@@ -29,7 +29,7 @@ namespace Atmospheric_Flow {
 
     EULEROperator(); /*--- Default constructor ---*/
 
-    EULEROperator(RunTimeParameters::Data_Storage& data); /*--- Constructor with some input related data ---*/
+    EULEROperator(RunTimeParameters::Data_Storage<Number>& data); /*--- Constructor with some input related data ---*/
 
     void set_dt(const double time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
                                                in case of modifications of the time step. ---*/
@@ -246,14 +246,14 @@ namespace Atmospheric_Flow {
            int n_q_points_1d, int n_q_points_1d_boundary, typename Vec>
   EULEROperator<dim, fe_degree_u, fe_degree_rho, fe_degree_p,
                 n_q_points_1d, n_q_points_1d_boundary, Vec>::
-  EULEROperator(RunTimeParameters::Data_Storage& data): MatrixFreeOperators::Base<dim, Vec>(),
-                                                        Ma(data.Mach), Fr(data.Froude), dt(data.dt),
-                                                        gamma(2.0 - std::sqrt(2.0)), a21(gamma),
-                                                        a31(0.5), a32(0.5),
-                                                        a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
-                                                        a31_tilde(0.5 - 0.25*gamma), a32_tilde(0.5 - 0.25*gamma), a33_tilde(0.5*gamma),
-                                                        b1(0.5 - 0.25*gamma), b2(0.5 - 0.25*gamma), b3(0.5*gamma),
-                                                        IMEX_stage(1), Euler_stage(1) {}
+  EULEROperator(RunTimeParameters::Data_Storage<Number>& data): MatrixFreeOperators::Base<dim, Vec>(),
+                                                                Ma(data.Mach), Fr(data.Froude), dt(data.dt),
+                                                                gamma(2.0 - std::sqrt(2.0)), a21(gamma),
+                                                                a31(0.5), a32(0.5),
+                                                                a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
+                                                                a31_tilde(0.5 - 0.25*gamma), a32_tilde(0.5 - 0.25*gamma), a33_tilde(0.5*gamma),
+                                                                b1(0.5 - 0.25*gamma), b2(0.5 - 0.25*gamma), b3(0.5*gamma),
+                                                                IMEX_stage(1), Euler_stage(1) {}
 
 
   // Setter of time-step

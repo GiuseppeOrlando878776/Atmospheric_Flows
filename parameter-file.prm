@@ -2,43 +2,46 @@ subsection Physical data
   # In this subsection we declare the physical data
   set initial_time = 0.0
   set final_time   = 36.0
-  set Mach         = 0.03447578013
-  set Froude       = 0.10096375546
+
+  set Mach   = 0.03447578013
+  set Froude = 0.10096375546
 end
 
-subsection Time step data
-  # In this subsection we declare the data that is to be used for time discretization,
-  # i.e. the time step dt
+subsection Numerical data
+  # In this subsection we declare some numerical data
+  # (time step dt and fixed point iteration tolerance)
   set dt = 0.04
+
+  set rtol_fixed_point = 1e-6
 end
 
-subsection Space discretization
-  # In this subsection we declare the data that is relevant to the space discretization
-  # we set the number of global refines the triangulation must have
-  set n_of_refines = 2
+subsection Mesh parameters
+  # In this subsection we declare the data that is relevant to the domain discretization
+  set n_of_refines = 2 # number of global refines of the initial triangulation
 end
 
-subsection Data solve
-  # In this section we declare the parameters that are going to control the solver
-  set max_iterations  = 30000 # maximal number of iterations
-  set eps             = 1e-8  # residual linear system
-  set eps_fixed_point = 1e-6  # tolerance fixed point
+subsection Data linear solvers
+  # In this section we declare the parameters that are going to control the solution process.
+  set max_iterations = 30000 # maximum number of iterations
+  set rtol_iterative = 1e-8  # relative tolerance linear solvers
 end
 
 # The directory where results are saved
 set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM_NEW_PRECON_INVERSE_MASS_MATRIX
 
-#The output frequency
+# The output frequency
 set output_interval = 100
 
-#Finally we set the verbosity level
+# Finally we set the verbosity level
 set verbose = true
 
-#Set whether we are in presence of a restart or not
-set restart = false
+subsection Restart data
+  #Set whether we are in presence of a restart or not
+  set restart = false
 
-#Set if you want to save files for possible restart
-set save_for_restart = false
+  #Set if you want to save files for possible restart
+  set save_for_restart = false
 
-#Set if you want to use the saved data for initial conditions
-set as_initial_conditions = true
+  #Set if you want to use the saved data for initial conditions
+  set as_initial_conditions = true
+end
