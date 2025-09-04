@@ -917,7 +917,7 @@ double EulerSolver<dim>::get_max_velocity() {
 
   std::vector<Vector<double>> velocity_values(n_q_points, Vector<double>(dim));
 
-  FEValues<dim> fe_values_velocity(mapping, fe_velocity, quadrature_formula, update_values);
+  FEValues<dim> fe_values_velocity(mapping, fe_velocity, quadrature_velocity, update_values);
 
   double max_local_velocity = 0.0;
 
