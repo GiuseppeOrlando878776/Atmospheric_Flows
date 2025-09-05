@@ -41,6 +41,10 @@
 
 #include <deal.II/distributed/solution_transfer.h>
 
+/*--- Include headers related to the problem of interest ---*/
+#include "include/ic_bc/ic_3D_nonhydrostatic_hill.h"
+#include "include/ic_bc/Rayleigh_damping.h"
+#include "include/mapping/mapping.h"
 #include "euler_operator.h"
 
 using namespace Atmospheric_Flow;
@@ -185,38 +189,38 @@ private:
   LinearAlgebra::distributed::Vector<double> dt_tau_pres_aux_left_y;
 
   /*--- Manifold and fields handling data structures ---*/
-  EquationData::PushForward<dim>  push_forward;
-  EquationData::PullBack<dim>     pull_back;
-  FunctionManifold<dim, dim, dim> manifold;
+  GalChenMapping::PushForward<dim> push_forward;
+  GalChenMapping::PullBack<dim>    pull_back;
+  FunctionManifold<dim, dim, dim>  manifold;
 
-  EquationData::Density<dim>  rho_init;
-  EquationData::Velocity<dim> u_init;
-  EquationData::Pressure<dim> pres_init;
+  ICBC::Density<dim>  rho_init;
+  ICBC::Velocity<dim> u_init;
+  ICBC::Pressure<dim> pres_init;
 
-  EquationData::Rayleigh<dim, 1>       dt_tau;
-  EquationData::Rayleigh_Aux<dim, 1>   dt_tau_aux;
-  EquationData::Rayleigh<dim, dim>     dt_tau_vel;
-  EquationData::Rayleigh_Aux<dim, dim> dt_tau_vel_aux;
+  RayleighDamping::Rayleigh<dim, 1>       dt_tau;
+  RayleighDamping::Rayleigh_Aux<dim, 1>   dt_tau_aux;
+  RayleighDamping::Rayleigh<dim, dim>     dt_tau_vel;
+  RayleighDamping::Rayleigh_Aux<dim, dim> dt_tau_vel_aux;
 
-  EquationData::Rayleigh_Right<dim, 1>       dt_tau_right;
-  EquationData::Rayleigh_Aux_Right<dim, 1>   dt_tau_aux_right;
-  EquationData::Rayleigh_Right<dim, dim>     dt_tau_vel_right;
-  EquationData::Rayleigh_Aux_Right<dim, dim> dt_tau_vel_aux_right;
+  RayleighDamping::Rayleigh_Right<dim, 1>       dt_tau_right;
+  RayleighDamping::Rayleigh_Aux_Right<dim, 1>   dt_tau_aux_right;
+  RayleighDamping::Rayleigh_Right<dim, dim>     dt_tau_vel_right;
+  RayleighDamping::Rayleigh_Aux_Right<dim, dim> dt_tau_vel_aux_right;
 
-  EquationData::Rayleigh_Left<dim, 1>       dt_tau_left;
-  EquationData::Rayleigh_Aux_Left<dim, 1>   dt_tau_aux_left;
-  EquationData::Rayleigh_Left<dim, dim>     dt_tau_vel_left;
-  EquationData::Rayleigh_Aux_Left<dim, dim> dt_tau_vel_aux_left;
+  RayleighDamping::Rayleigh_Left<dim, 1>       dt_tau_left;
+  RayleighDamping::Rayleigh_Aux_Left<dim, 1>   dt_tau_aux_left;
+  RayleighDamping::Rayleigh_Left<dim, dim>     dt_tau_vel_left;
+  RayleighDamping::Rayleigh_Aux_Left<dim, dim> dt_tau_vel_aux_left;
 
-  EquationData::Rayleigh_RightY<dim, 1>       dt_tau_right_y;
-  EquationData::Rayleigh_Aux_RightY<dim, 1>   dt_tau_aux_right_y;
-  EquationData::Rayleigh_RightY<dim, dim>     dt_tau_vel_right_y;
-  EquationData::Rayleigh_Aux_RightY<dim, dim> dt_tau_vel_aux_right_y;
+  RayleighDamping::Rayleigh_RightY<dim, 1>       dt_tau_right_y;
+  RayleighDamping::Rayleigh_Aux_RightY<dim, 1>   dt_tau_aux_right_y;
+  RayleighDamping::Rayleigh_RightY<dim, dim>     dt_tau_vel_right_y;
+  RayleighDamping::Rayleigh_Aux_RightY<dim, dim> dt_tau_vel_aux_right_y;
 
-  EquationData::Rayleigh_LeftY<dim, 1>       dt_tau_left_y;
-  EquationData::Rayleigh_Aux_LeftY<dim, 1>   dt_tau_aux_left_y;
-  EquationData::Rayleigh_LeftY<dim, dim>     dt_tau_vel_left_y;
-  EquationData::Rayleigh_Aux_LeftY<dim, dim> dt_tau_vel_aux_left_y;
+  RayleighDamping::Rayleigh_LeftY<dim, 1>       dt_tau_left_y;
+  RayleighDamping::Rayleigh_Aux_LeftY<dim, 1>   dt_tau_aux_left_y;
+  RayleighDamping::Rayleigh_LeftY<dim, dim>     dt_tau_vel_left_y;
+  RayleighDamping::Rayleigh_Aux_LeftY<dim, dim> dt_tau_vel_aux_left_y;
 
   /*--- Auxiliary structures for the matrix-free and for the multigrid ---*/
   std::shared_ptr<MatrixFree<dim, double>> matrix_free_storage;
@@ -225,8 +229,8 @@ private:
                                    EquationData::degree_u,
                                    EquationData::degree_rho,
                                    EquationData::degree_p,
-                                   2*EquationData::degree_u + 1,
-                                   2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree,
+                                   EquationData::quadrature_degree,
+                                   EquationData::quadrature_degree + GalChenMapping::extra_quadrature_degree,
                                    LinearAlgebra::distributed::Vector<double>>;
   MatrixType euler_matrix;
 
@@ -300,7 +304,7 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage<double>& data):
   dof_handler_density(triangulation),
   dof_handler_velocity(triangulation),
   dof_handler_pressure(triangulation),
-  mapping(EquationData::degree_mapping, true),
+  mapping(GalChenMapping::degree_mapping, true),
   quadrature_density(EquationData::degree_rho + 1),
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_pressure(EquationData::degree_p + 1),
@@ -462,8 +466,8 @@ void EulerSolver<dim>::setup_dofs() {
   constraints[EquationData::RHO_INDEX_DOF] = &constraints_density;
 
   /*--- Set the quadrature formula to compute the integrals for assembling bilinear and linear forms ---*/
-  quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1));
-  quadratures.push_back(QGauss<1>(2*EquationData::degree_u + 1 + EquationData::extra_quadrature_degree));
+  quadratures.push_back(QGauss<1>(EquationData::quadrature_degree));
+  quadratures.push_back(QGauss<1>(EquationData::quadrature_degree + GalChenMapping::extra_quadrature_degree));
   quadratures.push_back(QGauss<1>(EquationData::degree_u + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
@@ -878,7 +882,7 @@ void EulerSolver<dim>::output_results(const unsigned int step) {
   DataOutBase::VtkFlags flags_high_order;
   flags_high_order.write_higher_order_cells = true;
   data_out.set_flags(flags_high_order);
-  data_out.build_patches(mapping, EquationData::degree_mapping, DataOut<dim>::curved_inner_cells);
+  data_out.build_patches(mapping, GalChenMapping::degree_mapping, DataOut<dim>::curved_inner_cells);
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
 
   /*--- Serialization ---*/

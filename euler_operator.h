@@ -12,7 +12,7 @@
 #include <deal.II/meshworker/mesh_loop.h>
 
 #include "include/io/runtime_parameters.h"
-#include "equation_data.h"
+#include "include/equation_data.h"
 
 // This is the class that implements the discretization
 //
