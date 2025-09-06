@@ -23,7 +23,7 @@ namespace GalChenMapping {
 
   static const double h  = 400.0;   /*--- Hill height ---*/
   static const double xc = 30000.0; /*--- x-Center of the hill ---*/
-  static const double yc = 20000.0; /*--- x-Center of the hill ---*/
+  static const double yc = 20000.0; /*--- y-Center of the hill ---*/
   static const double ac = 1000.0;  /*--- Width of the hill ---*/
 
   /**

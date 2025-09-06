@@ -25,8 +25,8 @@ namespace RunTimeParameters {
     void read_data(const std::string& filename); /*--- The function that actually reads the parameters ---*/
 
     /*--- Start with physical parameters ---*/
-    double initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
-    double final_time;   /*--- Variable to set the final time ---*/
+    T initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
+    T final_time;   /*--- Variable to set the final time ---*/
 
     // The present code is meant to work using non-dimensional variables and using
     // the non-dimensional equations described in Orlando et al., JCP, 2022.
@@ -37,11 +37,16 @@ namespace RunTimeParameters {
     T Mach;   /*--- The Mach number ---*/
     T Froude; /*--- The Froude number ---*/
 
-    T L_ref;   /*--- Reference length ---*/
-    T u_ref;   /*--- Reference velocity ---*/
-    T p_ref;   /*--- Reference pressure ---*/
-    T T_ref;   /*--- Reference temperature ---*/
-    T rho_ref; /*--- Reference density ---*/
+    T L_ref;   /*--- Reference length (not used so far) ---*/
+    T u_ref;   /*--- Reference velocity (not used so far) ---*/
+    T p_ref;   /*--- Reference pressure (not used so far) ---*/
+    T T_ref;   /*--- Reference temperature (not used so far) ---*/
+    T rho_ref; /*--- Reference density (not used so far) ---*/
+
+    T h;  /*--- Hill height (not used so far) ---*/
+    T xc; /*--- x-Center of the hill (not used so far) ---*/
+    T yc; /*--- y-Center of the hill (not used so far) ---*/
+    T ac; /*--- Width of the hill (not used so far) ---*/
 
     /*--- Numerical parameters ---*/
     T dt; /*--- The time-step ---*/
@@ -73,7 +78,7 @@ namespace RunTimeParameters {
     bool     restart;
     bool     save_for_restart;
     unsigned step_restart;
-    double   time_restart;
+    T        time_restart;
     bool     as_initial_conditions;
 
   protected:
@@ -94,6 +99,10 @@ namespace RunTimeParameters {
                                    p_ref(1.0),
                                    T_ref(1.0),
                                    rho_ref(1.0),
+                                   h(1.0),
+                                   xc(1.0),
+                                   yc(1.0),
+                                   ac(1.0),
                                    dt(5e-4),
                                    atol_fixed_point(1e-12),
                                    rtol_fixed_point(1e-10),
@@ -152,6 +161,23 @@ namespace RunTimeParameters {
                         "1.0",
                         Patterns::Double(0.0),
                         "The reference density.");
+
+      prm.declare_entry("h",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The hill height.");
+      prm.declare_entry("xc",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The x-Center of the hill.");
+      prm.declare_entry("yc",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The y-Center of the hill.");
+      prm.declare_entry("ac",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The width of the hill.");
     }
     prm.leave_subsection();
 
@@ -282,6 +308,11 @@ namespace RunTimeParameters {
       p_ref   = prm.get_double("p_ref");
       T_ref   = prm.get_double("T_ref");
       rho_ref = prm.get_double("rho_ref");
+
+      h  = prm.get_double("h");
+      xc = prm.get_double("xc");
+      yc = prm.get_double("yc");
+      ac = prm.get_double("ac");
     }
     prm.leave_subsection();
 
