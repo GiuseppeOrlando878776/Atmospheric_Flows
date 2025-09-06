@@ -36,9 +36,9 @@ namespace Atmospheric_Flow {
     void set_dt(const Number time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
                                                in case of modifications of the time step. ---*/
 
-    void set_Mach(const Number Ma_); /*--- Setter of the Mach number. This is useful for multigrid purpose. ---*/
+    Number get_Mach() const; /*--- Getter of the Mach number. This is useful for debugging purpose. ---*/
 
-    void set_Froude(const Number Fr_); /*--- Setter of the Froude number. This is useful for multigrid purpose. ---*/
+    Number get_Froude() const; /*--- Getter of the Froude number. This is useful for debugging purpose. ---*/
 
     void set_IMEX_stage(const unsigned stage); /*--- Setter of the IMEX stage. ---*/
 
@@ -299,32 +299,40 @@ namespace Atmospheric_Flow {
     dt = time_step;
   }
 
-  // Setter of Mach number
+  // Getter of Mach number
   //
   template<unsigned dim,
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
-  void EULEROperator<dim,
+  typename EULEROperator<dim,
+                     fe_degree_u, fe_degree_rho, fe_degree_p,
+                     n_q_points_1d, n_q_points_1d_boundary,
+                     Vec>::Number
+  EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
                      Vec>::
-  set_Mach(const Number Ma_) {
-    Ma = Ma_;
+  get_Mach() const {
+    return Ma;
   }
 
-  // Setter of Froude number
+  // Getter of Froude number
   //
   template<unsigned dim,
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
-  void EULEROperator<dim,
+  typename EULEROperator<dim,
+                     fe_degree_u, fe_degree_rho, fe_degree_p,
+                     n_q_points_1d, n_q_points_1d_boundary,
+                     Vec>::Number
+  EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
                      Vec>::
-  set_Froude(const Number Fr_) {
-    Fr = Fr_;
+  get_Froude() const {
+    return Fr;
   }
 
   // Setter of IMEX stage (this can be known only during the effective execution
