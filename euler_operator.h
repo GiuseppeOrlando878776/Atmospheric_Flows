@@ -13,6 +13,7 @@
 /*--- Include headers related to the problem of interest ---*/
 #include "include/io/runtime_parameters.h"
 #include "include/equation_data.h"
+#include "include/space_discretization/numerical_flux/Rusanov_flux.h"
 
 // This is the class that implements the discretization
 //
@@ -36,14 +37,19 @@ namespace Atmospheric_Flow {
     void set_dt(const Number time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
                                                in case of modifications of the time step. ---*/
 
+    inline DEAL_II_ALWAYS_INLINE
     Number get_Mach() const; /*--- Getter of the Mach number. This is useful for debugging purpose. ---*/
 
+    inline DEAL_II_ALWAYS_INLINE
     Number get_Froude() const; /*--- Getter of the Froude number. This is useful for debugging purpose. ---*/
 
+    inline DEAL_II_ALWAYS_INLINE
     void set_IMEX_stage(const unsigned stage); /*--- Setter of the IMEX stage. ---*/
 
+    inline DEAL_II_ALWAYS_INLINE
     void set_Euler_stage(const unsigned stage); /*--- Setter of the equation currently under solution. ---*/
 
+    inline DEAL_II_ALWAYS_INLINE
     unsigned get_Euler_stage() const; /*--- Getter of the equation currently under solution. ---*/
 
     void set_rho_for_fixed(const Vec& src); /*--- Setter of the current density. This is for the assembling of the bilinear forms
@@ -81,10 +87,10 @@ namespace Atmospheric_Flow {
     using FEFaceEvaluation_u_boundary    = FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_boundary, dim, Number>;
     using FEFaceEvaluation_pres_boundary = FEFaceEvaluation<dim, fe_degree_p, n_q_points_1d_boundary, 1, Number>;
 
-    Number Ma;  /*--- Mach number. ---*/
-    Number Fr;  /*--- Froude number. ---*/
+    Number Ma; /*--- Mach number. ---*/
+    Number Fr; /*--- Froude number. ---*/
 
-    Number dt;  /*--- Time step. ---*/
+    Number dt; /*--- Time step. ---*/
 
     const Number gamma; /*--- TR-BDF2 (i.e. implicit part) parameter. ---*/
     /*--- The following variables follow the classical Butcher tableaux notation ---*/
@@ -112,10 +118,8 @@ namespace Atmospheric_Flow {
     Vec rho_for_fixed,
         pres_fixed;
 
-    /*--- Auxiliary function to compute the upwind penalization constant ---*/
-    inline VectorizedArray<Number> compute_lambda(const Tensor<1, dim, VectorizedArray<Number>>& u_m,
-                                                  const Tensor<1, dim, VectorizedArray<Number>>& u_p,
-                                                  const Tensor<1, dim, VectorizedArray<Number>>& n_minus) const;
+    /*--- Auxiliary function for the numerical flux ---*/
+    NumericalFlux::RusanovFluxEuler<dim, VectorizedArray<Number>> num_flux;
 
     /*--- Assembler functions for the rhs related to the continuity equation. Here, and also in the following,
           we distinguish between the contribution for cells, faces and boundary. ---*/
@@ -258,16 +262,16 @@ namespace Atmospheric_Flow {
                 Vec>::
   EULEROperator():
     MatrixFreeOperators::Base<dim, Vec>(), Ma(), Fr(), dt(),
-    gamma(static_cast<Number>(2.0 - std::sqrt(2.0))), a21(gamma),
-    a31(0.5), a32(0.5),
-    a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
-    a31_tilde(0.5 - static_cast<Number>(0.25)*gamma),
-    a32_tilde(0.5 - static_cast<Number>(0.25)*gamma),
-    a33_tilde(0.5*gamma),
-    b1(0.5 - static_cast<Number>(0.25)*gamma),
-    b2(0.5 - static_cast<Number>(0.25)*gamma),
-    b3(0.5*gamma),
-    IMEX_stage(1), Euler_stage(1) {}
+    gamma(static_cast<Number>(2.0) - static_cast<Number>(std::sqrt(2.0))), a21(gamma),
+    a31(static_cast<Number>(0.5)), a32(static_cast<Number>(0.5)),
+    a21_tilde(static_cast<Number>(0.5)*gamma), a22_tilde(static_cast<Number>(0.5)*gamma),
+    a31_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    a32_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    a33_tilde(static_cast<Number>(0.5)*gamma),
+    b1(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    b2(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    b3(static_cast<Number>(0.5)*gamma),
+    IMEX_stage(1), Euler_stage(1), num_flux() {}
 
   // Constructor with runtime parameters storage
   //
@@ -282,16 +286,16 @@ namespace Atmospheric_Flow {
   EULEROperator(RunTimeParameters::Data_Storage<Number>& data):
     MatrixFreeOperators::Base<dim, Vec>(),
     Ma(data.Mach), Fr(data.Froude), dt(data.dt),
-    gamma(static_cast<Number>(2.0 - std::sqrt(2.0))), a21(gamma),
-    a31(0.5), a32(0.5),
-    a21_tilde(0.5*gamma), a22_tilde(0.5*gamma),
-    a31_tilde(0.5 - static_cast<Number>(0.25)*gamma),
-    a32_tilde(0.5 - static_cast<Number>(0.25)*gamma),
-    a33_tilde(0.5*gamma),
-    b1(0.5 - static_cast<Number>(0.25)*gamma),
-    b2(0.5 - static_cast<Number>(0.25)*gamma),
-    b3(0.5*gamma),
-    IMEX_stage(1), Euler_stage(1) {}
+    gamma(static_cast<Number>(2.0) - static_cast<Number>(std::sqrt(2.0))), a21(gamma),
+    a31(static_cast<Number>(0.5)), a32(static_cast<Number>(0.5)),
+    a21_tilde(static_cast<Number>(0.5)*gamma), a22_tilde(static_cast<Number>(0.5)*gamma),
+    a31_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    a32_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    a33_tilde(static_cast<Number>(0.5)*gamma),
+    b1(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    b2(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
+    b3(static_cast<Number>(0.5)*gamma),
+    IMEX_stage(1), Euler_stage(1), num_flux(Ma) {}
 
 
   //////////////////////////////////////////////////////////////
@@ -304,6 +308,7 @@ namespace Atmospheric_Flow {
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
+  inline DEAL_II_ALWAYS_INLINE
   void EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
@@ -318,6 +323,7 @@ namespace Atmospheric_Flow {
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
+  inline DEAL_II_ALWAYS_INLINE
   typename EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
@@ -336,6 +342,7 @@ namespace Atmospheric_Flow {
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
+  inline DEAL_II_ALWAYS_INLINE
   typename EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
@@ -353,7 +360,9 @@ namespace Atmospheric_Flow {
   //
   template<unsigned dim,
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
-           unsigned n_q_points_1d, unsigned n_q_points_1d_boundary, typename Vec>
+           unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
+           typename Vec>
+  inline DEAL_II_ALWAYS_INLINE
   void EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
@@ -372,6 +381,7 @@ namespace Atmospheric_Flow {
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
+  inline DEAL_II_ALWAYS_INLINE
   void EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
@@ -390,6 +400,7 @@ namespace Atmospheric_Flow {
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
+  inline DEAL_II_ALWAYS_INLINE
   unsigned EULEROperator<dim,
                          fe_degree_u, fe_degree_rho, fe_degree_p,
                          n_q_points_1d, n_q_points_1d_boundary,
@@ -427,28 +438,6 @@ namespace Atmospheric_Flow {
   set_pres_fixed(const Vec& src) {
     pres_fixed = src;
     pres_fixed.update_ghost_values();
-  }
-
-  //////////////////////////////////////////////////////////////
-  /*---- AUXILIARY FUNCTION FOR THE NUMERICAL FLUX ---*/
-  /////////////////////////////////////////////////////////////
-
-  // Auxiliary function to compute the stabilization term
-  //
-  template<unsigned dim,
-           unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
-           unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
-           typename Vec>
-  inline VectorizedArray<typename Vec::value_type>
-  EULEROperator<dim,
-                fe_degree_u, fe_degree_rho, fe_degree_p,
-                n_q_points_1d, n_q_points_1d_boundary,
-                Vec>::
-  compute_lambda(const Tensor<1, dim, VectorizedArray<Number>>& u_m,
-                 const Tensor<1, dim, VectorizedArray<Number>>& u_p,
-                 const Tensor<1, dim, VectorizedArray<Number>>& n_minus) const {
-    return std::max(std::abs(scalar_product(u_m, n_minus)),
-                    std::abs(scalar_product(u_p, n_minus)));
   }
 
 
@@ -641,23 +630,19 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over quadrature points of each internal face ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus      = phi_m.get_normal_vector(q); /*--- Notice that the unit normal vector is the same from
-                                                                       'both sides'. ---*/
+          const auto& n_minus = phi_m.get_normal_vector(q); /*--- Notice that the unit normal vector is the same from
+                                                                  'both sides'. ---*/
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m    = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p    = phi_rho_old_p.get_value(q);
-          const auto& u_old_m      = phi_u_old_m.get_value(q);
-          const auto& u_old_p      = phi_u_old_p.get_value(q);
-
-          const auto& avg_flux_old = 0.5*(rho_old_m*u_old_m +
-                                          rho_old_p*u_old_p);
-          const auto& lambda_old   = compute_lambda(u_old_m, u_old_p, n_minus);
-          const auto& jump_rho_old = rho_old_m - rho_old_p;
+          const auto& rho_old_m = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p = phi_rho_old_p.get_value(q);
+          const auto& u_old_m   = phi_u_old_m.get_value(q);
+          const auto& u_old_p   = phi_u_old_p.get_value(q);
 
           /*--- Compute the numerical flux ---*/
-          const auto& flux_num = a21*dt*(scalar_product(avg_flux_old, n_minus) +
-                                         0.5*lambda_old*jump_rho_old);
+          const auto& flux_num = a21*dt*num_flux.numerical_flux_continuity(rho_old_m, u_old_m,
+                                                                           rho_old_p, u_old_p,
+                                                                           n_minus);
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -705,35 +690,27 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus      = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m    = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p    = phi_rho_old_p.get_value(q);
-          const auto& u_old_m      = phi_u_old_m.get_value(q);
-          const auto& u_old_p      = phi_u_old_p.get_value(q);
-
-          const auto& avg_flux_old = 0.5*(rho_old_m*u_old_m +
-                                          rho_old_p*u_old_p);
-          const auto& lambda_old   = compute_lambda(u_old_m, u_old_p, n_minus);
-          const auto& jump_rho_old = rho_old_m - rho_old_p;
+          const auto& rho_old_m = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p = phi_rho_old_p.get_value(q);
+          const auto& u_old_m   = phi_u_old_m.get_value(q);
+          const auto& u_old_p   = phi_u_old_p.get_value(q);
 
           /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m    = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p    = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m      = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p      = phi_u_s_2_p.get_value(q);
-
-          const auto& avg_flux_s_2 = 0.5*(rho_s_2_m*u_s_2_m +
-                                          rho_s_2_p*u_s_2_p);
-          const auto& lambda_s_2   = compute_lambda(u_s_2_m, u_s_2_p, n_minus);
-          const auto& jump_rho_s_2 = rho_s_2_m - rho_s_2_p;
+          const auto& rho_s_2_m = phi_rho_s_2_m.get_value(q);
+          const auto& rho_s_2_p = phi_rho_s_2_p.get_value(q);
+          const auto& u_s_2_m   = phi_u_s_2_m.get_value(q);
+          const auto& u_s_2_p   = phi_u_s_2_p.get_value(q);
 
           /*--- Compute the numerical flux ---*/
-          const auto& flux_num = a31*dt*(scalar_product(avg_flux_old, n_minus) +
-                                         0.5*lambda_old*jump_rho_old)
-                               + a32*dt*(scalar_product(avg_flux_s_2, n_minus) +
-                                         0.5*lambda_s_2*jump_rho_s_2);
+          const auto& flux_num = a31*dt*num_flux.numerical_flux_continuity(rho_old_m, u_old_m,
+                                                                           rho_old_p, u_old_p,
+                                                                           n_minus)
+                               + a32*dt*num_flux.numerical_flux_continuity(rho_s_2_m, u_s_2_m,
+                                                                           rho_s_2_p, u_s_2_p,
+                                                                           n_minus);
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -794,48 +771,36 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points. ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus      = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m    = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p    = phi_rho_old_p.get_value(q);
-          const auto& u_old_m      = phi_u_old_m.get_value(q);
-          const auto& u_old_p      = phi_u_old_p.get_value(q);
-
-          const auto& avg_flux_old = 0.5*(rho_old_m*u_old_m +
-                                          rho_old_p*u_old_p);
-          const auto& lambda_old   = compute_lambda(u_old_m, u_old_p, n_minus);
-          const auto& jump_rho_old = rho_old_m - rho_old_p;
+          const auto& rho_old_m = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p = phi_rho_old_p.get_value(q);
+          const auto& u_old_m   = phi_u_old_m.get_value(q);
+          const auto& u_old_p   = phi_u_old_p.get_value(q);
 
           /*--- Compute the quantities at the second stage ---*/
-          const auto& rho_s_2_m    = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p    = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m      = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p      = phi_u_s_2_p.get_value(q);
-
-          const auto& avg_flux_s_2 = 0.5*(rho_s_2_m*u_s_2_m +
-                                          rho_s_2_p*u_s_2_p);
-          const auto& lambda_s_2   = compute_lambda(u_s_2_m, u_s_2_p, n_minus);
-          const auto& jump_rho_s_2 = rho_s_2_m - rho_s_2_p;
+          const auto& rho_s_2_m = phi_rho_s_2_m.get_value(q);
+          const auto& rho_s_2_p = phi_rho_s_2_p.get_value(q);
+          const auto& u_s_2_m   = phi_u_s_2_m.get_value(q);
+          const auto& u_s_2_p   = phi_u_s_2_p.get_value(q);
 
           /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3_m    = phi_rho_s_3_m.get_value(q);
-          const auto& rho_s_3_p    = phi_rho_s_3_p.get_value(q);
-          const auto& u_s_3_m      = phi_u_s_3_m.get_value(q);
-          const auto& u_s_3_p      = phi_u_s_3_p.get_value(q);
-
-          const auto& avg_flux_s_3 = 0.5*(rho_s_3_m*u_s_3_m +
-                                          rho_s_3_p*u_s_3_p);
-          const auto& lambda_s_3   = compute_lambda(u_s_3_m, u_s_3_p, n_minus);
-          const auto& jump_rho_s_3 = rho_s_3_m - rho_s_3_p;
+          const auto& rho_s_3_m = phi_rho_s_3_m.get_value(q);
+          const auto& rho_s_3_p = phi_rho_s_3_p.get_value(q);
+          const auto& u_s_3_m   = phi_u_s_3_m.get_value(q);
+          const auto& u_s_3_p   = phi_u_s_3_p.get_value(q);
 
           /*--- Compute the numerical flux ---*/
-          const auto& flux_num = b1*dt*(scalar_product(avg_flux_old, n_minus) +
-                                        0.5*lambda_old*jump_rho_old)
-                               + b2*dt*(scalar_product(avg_flux_s_2, n_minus) +
-                                        0.5*lambda_s_2*jump_rho_s_2)
-                               + b3*dt*(scalar_product(avg_flux_s_3, n_minus) +
-                                        0.5*lambda_s_3*jump_rho_s_3);
+          const auto& flux_num = b1*dt*num_flux.numerical_flux_continuity(rho_old_m, u_old_m,
+                                                                          rho_old_p, u_old_p,
+                                                                          n_minus)
+                               + b2*dt*num_flux.numerical_flux_continuity(rho_s_2_m, u_s_2_m,
+                                                                          rho_s_2_p, u_s_2_p,
+                                                                          n_minus)
+                               + b3*dt*num_flux.numerical_flux_continuity(rho_s_3_m, u_s_3_m,
+                                                                          rho_s_3_p, u_s_3_p,
+                                                                          n_minus);
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -1182,31 +1147,27 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus                = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m              = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p              = phi_rho_old_p.get_value(q);
-          const auto& u_old_m                = phi_u_old_m.get_value(q);
-          const auto& u_old_p                = phi_u_old_p.get_value(q);
-          const auto& pres_old_m             = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p             = phi_pres_old_p.get_value(q);
-
-          const auto& avg_tensor_product_u_n = 0.5*(outer_product(rho_old_m*u_old_m, u_old_m) +
-                                                    outer_product(rho_old_p*u_old_p, u_old_p));
-          const auto& avg_pres_old           = 0.5*(pres_old_m + pres_old_p);
-
-          const auto& jump_rhou_old          = rho_old_m*u_old_m - rho_old_p*u_old_p;
-          const auto& lambda_old             = compute_lambda(u_old_m, u_old_p, n_minus);
+          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
+          const auto& u_old_m    = phi_u_old_m.get_value(q);
+          const auto& u_old_p    = phi_u_old_p.get_value(q);
+          const auto& pres_old_m = phi_pres_old_m.get_value(q);
+          const auto& pres_old_p = phi_pres_old_p.get_value(q);
 
           /*--- Compute the numerical flux ---*/
-          const auto& num_flux_explicit = a21*dt*(avg_tensor_product_u_n*n_minus +
-                                                  0.5*lambda_old*jump_rhou_old);
-          const auto& num_flux_implicit = a21_tilde*dt*(avg_pres_old/(Ma*Ma)*n_minus);
-          const auto& num_flux          = num_flux_explicit + num_flux_implicit;
+          const auto& flux_num_explicit = a21*dt*num_flux.numerical_flux_momentum_explicit(rho_old_m, u_old_m,
+                                                                                           rho_old_p, u_old_p,
+                                                                                           n_minus);
+          const auto& flux_num_implicit = a21_tilde*dt*num_flux.numerical_flux_momentum_implicit(pres_old_m,
+                                                                                                 pres_old_p,
+                                                                                                 n_minus);
+          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
 
-          phi_m.submit_value(-num_flux, q);
-          phi_p.submit_value(num_flux, q);
+          phi_m.submit_value(-flux_num, q);
+          phi_p.submit_value(flux_num, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -1263,49 +1224,41 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus                  = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m                = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p                = phi_rho_old_p.get_value(q);
-          const auto& u_old_m                  = phi_u_old_m.get_value(q);
-          const auto& u_old_p                  = phi_u_old_p.get_value(q);
-          const auto& pres_old_m               = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p               = phi_pres_old_p.get_value(q);
-
-          const auto& avg_tensor_product_u_n   = 0.5*(outer_product(rho_old_m*u_old_m, u_old_m) +
-                                                      outer_product(rho_old_p*u_old_p, u_old_p));
-          const auto& avg_pres_old             = 0.5*(pres_old_m + pres_old_p);
-
-          const auto& jump_rhou_old            = rho_old_m*u_old_m - rho_old_p*u_old_p;
-          const auto& lambda_old               = compute_lambda(u_old_m, u_old_p, n_minus);
+          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
+          const auto& u_old_m    = phi_u_old_m.get_value(q);
+          const auto& u_old_p    = phi_u_old_p.get_value(q);
+          const auto& pres_old_m = phi_pres_old_m.get_value(q);
+          const auto& pres_old_p = phi_pres_old_p.get_value(q);
 
           /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m                = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p                = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m                  = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p                  = phi_u_s_2_p.get_value(q);
-          const auto& pres_s_2_m               = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p               = phi_pres_s_2_p.get_value(q);
-
-          const auto& avg_tensor_product_u_s_2 = 0.5*(outer_product(rho_s_2_m*u_s_2_m, u_s_2_m) +
-                                                      outer_product(rho_s_2_p*u_s_2_p, u_s_2_p));
-          const auto& avg_pres_s_2             = 0.5*(pres_s_2_m + pres_s_2_p);
-
-          const auto& jump_rhou_s_2            = rho_s_2_m*u_s_2_m - rho_s_2_p*u_s_2_p;
-          const auto& lambda_s_2               = compute_lambda(u_s_2_m, u_s_2_p, n_minus);
+          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
+          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
+          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
+          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
+          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
+          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
 
           /*--- Compute the numerical flux ---*/
-          const auto& num_flux_explicit = a31*dt*(avg_tensor_product_u_n*n_minus +
-                                                  0.5*lambda_old*jump_rhou_old)
-                                        + a32*dt*(avg_tensor_product_u_s_2*n_minus +
-                                                  0.5*lambda_s_2*jump_rhou_s_2);
-          const auto& num_flux_implicit = a31_tilde*dt*(avg_pres_old/(Ma*Ma)*n_minus)
-                                        + a32_tilde*dt*(avg_pres_s_2/(Ma*Ma)*n_minus);
-          const auto& num_flux          = num_flux_explicit + num_flux_implicit;
+          const auto& flux_num_explicit = a31*dt*num_flux.numerical_flux_momentum_explicit(rho_old_m, u_old_m,
+                                                                                           rho_old_p, u_old_p,
+                                                                                           n_minus)
+                                        + a32*dt*num_flux.numerical_flux_momentum_explicit(rho_s_2_m, u_s_2_m,
+                                                                                           rho_s_2_p, u_s_2_p,
+                                                                                           n_minus);
+          const auto& flux_num_implicit = a31_tilde*dt*num_flux.numerical_flux_momentum_implicit(pres_old_m,
+                                                                                                 pres_old_p,
+                                                                                                 n_minus)
+                                        + a32_tilde*dt*num_flux.numerical_flux_momentum_implicit(pres_s_2_m,
+                                                                                                 pres_s_2_p,
+                                                                                                 n_minus);
+          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
 
-          phi_m.submit_value(-num_flux, q);
-          phi_p.submit_value(num_flux, q);
+          phi_m.submit_value(-flux_num, q);
+          phi_p.submit_value(flux_num, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -1381,67 +1334,55 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus                  = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m                = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p                = phi_rho_old_p.get_value(q);
-          const auto& u_old_m                  = phi_u_old_m.get_value(q);
-          const auto& u_old_p                  = phi_u_old_p.get_value(q);
-          const auto& pres_old_m               = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p               = phi_pres_old_p.get_value(q);
-
-          const auto& avg_tensor_product_u_n   = 0.5*(outer_product(rho_old_m*u_old_m, u_old_m) +
-                                                      outer_product(rho_old_p*u_old_p, u_old_p));
-          const auto& avg_pres_old             = 0.5*(pres_old_m + pres_old_p);
-
-          const auto& jump_rhou_old            = rho_old_m*u_old_m - rho_old_p*u_old_p;
-          const auto& lambda_old               = compute_lambda(u_old_m, u_old_p, n_minus);
+          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
+          const auto& u_old_m    = phi_u_old_m.get_value(q);
+          const auto& u_old_p    = phi_u_old_p.get_value(q);
+          const auto& pres_old_m = phi_pres_old_m.get_value(q);
+          const auto& pres_old_p = phi_pres_old_p.get_value(q);
 
           /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m                = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p                = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m                  = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p                  = phi_u_s_2_p.get_value(q);
-          const auto& pres_s_2_m               = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p               = phi_pres_s_2_p.get_value(q);
-
-          const auto& avg_tensor_product_u_s_2 = 0.5*(outer_product(rho_s_2_m*u_s_2_m, u_s_2_m) +
-                                                      outer_product(rho_s_2_p*u_s_2_p, u_s_2_p));
-          const auto& avg_pres_s_2             = 0.5*(pres_s_2_m + pres_s_2_p);
-
-          const auto& jump_rhou_s_2            = rho_s_2_m*u_s_2_m - rho_s_2_p*u_s_2_p;
-          const auto& lambda_s_2               = compute_lambda(u_s_2_m, u_s_2_p, n_minus);
+          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
+          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
+          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
+          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
+          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
+          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
 
           /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3_m                = phi_rho_s_3_m.get_value(q);
-          const auto& rho_s_3_p                = phi_rho_s_3_p.get_value(q);
-          const auto& u_s_3_m                  = phi_u_s_3_m.get_value(q);
-          const auto& u_s_3_p                  = phi_u_s_3_p.get_value(q);
-          const auto& pres_s_3_m               = phi_pres_s_3_m.get_value(q);
-          const auto& pres_s_3_p               = phi_pres_s_3_p.get_value(q);
-
-          const auto& avg_tensor_product_u_s_3 = 0.5*(outer_product(rho_s_3_m*u_s_3_m, u_s_3_m) +
-                                                      outer_product(rho_s_3_p*u_s_3_p, u_s_3_p));
-          const auto& avg_pres_s_3             = 0.5*(pres_s_3_m + pres_s_3_p);
-
-          const auto& jump_rhou_s_3            = rho_s_3_m*u_s_3_m - rho_s_3_p*u_s_3_p;
-          const auto& lambda_s_3               = compute_lambda(u_s_3_m, u_s_3_p, n_minus);
+          const auto& rho_s_3_m  = phi_rho_s_3_m.get_value(q);
+          const auto& rho_s_3_p  = phi_rho_s_3_p.get_value(q);
+          const auto& u_s_3_m    = phi_u_s_3_m.get_value(q);
+          const auto& u_s_3_p    = phi_u_s_3_p.get_value(q);
+          const auto& pres_s_3_m = phi_pres_s_3_m.get_value(q);
+          const auto& pres_s_3_p = phi_pres_s_3_p.get_value(q);
 
           /*--- Compute the numerical flux ---*/
-          const auto& num_flux_explicit = b1*dt*(avg_tensor_product_u_n*n_minus +
-                                                 0.5*lambda_old*jump_rhou_old) +
-                                          b2*dt*(avg_tensor_product_u_s_2*n_minus +
-                                                 0.5*lambda_s_2*jump_rhou_s_2) +
-                                          b3*dt*(avg_tensor_product_u_s_3*n_minus +
-                                                 0.5*lambda_s_3*jump_rhou_s_3);
-          const auto& num_flux_implicit = b1*dt*(avg_pres_old/(Ma*Ma)*n_minus)
-                                        + b2*dt*(avg_pres_s_2/(Ma*Ma)*n_minus)
-                                        + b3*dt*(avg_pres_s_3/(Ma*Ma)*n_minus);
-          const auto& num_flux          = num_flux_explicit + num_flux_implicit;
+          const auto& flux_num_explicit = b1*dt*num_flux.numerical_flux_momentum_explicit(rho_old_m, u_old_m,
+                                                                                          rho_old_p, u_old_p,
+                                                                                          n_minus) +
+                                          b2*dt*num_flux.numerical_flux_momentum_explicit(rho_s_2_m, u_s_2_m,
+                                                                                          rho_s_2_p, u_s_2_p,
+                                                                                          n_minus) +
+                                          b3*dt*num_flux.numerical_flux_momentum_explicit(rho_s_3_m, u_s_3_m,
+                                                                                          rho_s_3_p, u_s_3_p,
+                                                                                          n_minus);
+          const auto& flux_num_implicit = b1*dt*num_flux.numerical_flux_momentum_implicit(pres_old_m,
+                                                                                          pres_old_p,
+                                                                                          n_minus)
+                                        + b2*dt*num_flux.numerical_flux_momentum_implicit(pres_s_2_m,
+                                                                                          pres_s_2_p,
+                                                                                          n_minus)
+                                        + b3*dt*num_flux.numerical_flux_momentum_implicit(pres_s_3_m,
+                                                                                          pres_s_3_p,
+                                                                                          n_minus);
+          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
 
-          phi_m.submit_value(-num_flux, q);
-          phi_p.submit_value(num_flux, q);
+          phi_m.submit_value(-flux_num, q);
+          phi_p.submit_value(flux_num, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -1478,15 +1419,14 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_minus      = phi.get_normal_vector(q);
+          const auto& n_minus = phi.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& pres_old     = phi_pres_old.get_value(q);
-          const auto& pres_old_D   = pres_old;
+          const auto& pres_old   = phi_pres_old.get_value(q);
+          const auto& pres_old_D = pres_old;
 
-          const auto& avg_pres_old = 0.5*(pres_old + pres_old_D);
-
-          phi.submit_value(-a21_tilde*dt*(avg_pres_old/(Ma*Ma)*n_minus), q);
+          phi.submit_value(-a21_tilde*dt*
+                            num_flux.numerical_flux_momentum_implicit(pres_old, pres_old_D, n_minus), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1510,22 +1450,20 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_minus      = phi.get_normal_vector(q);
+          const auto& n_minus = phi.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& pres_old     = phi_pres_old.get_value(q);
-          const auto& pres_old_D   = pres_old;
-
-          const auto& avg_pres_old = 0.5*(pres_old + pres_old_D);
+          const auto& pres_old   = phi_pres_old.get_value(q);
+          const auto& pres_old_D = pres_old;
 
           /*--- Compute the quantities at the previous stage ---*/
-          const auto& pres_s_2     = phi_pres_s_2.get_value(q);
-          const auto& pres_s_2_D   = pres_s_2;
+          const auto& pres_s_2   = phi_pres_s_2.get_value(q);
+          const auto& pres_s_2_D = pres_s_2;
 
-          const auto& avg_pres_s_2 = 0.5*(pres_s_2 + pres_s_2_D);
-
-          phi.submit_value(-a31_tilde*dt*(avg_pres_old/(Ma*Ma)*n_minus)
-                           -a32_tilde*dt*(avg_pres_s_2/(Ma*Ma)*n_minus), q);
+          phi.submit_value(-a31_tilde*dt*
+                            num_flux.numerical_flux_momentum_implicit(pres_old, pres_old_D, n_minus)
+                           -a32_tilde*dt*
+                            num_flux.numerical_flux_momentum_implicit(pres_s_2, pres_s_2_D, n_minus), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1553,29 +1491,26 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_minus      = phi.get_normal_vector(q);
+          const auto& n_minus = phi.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& pres_old     = phi_pres_old.get_value(q);
-          const auto& pres_old_D   = pres_old;
-
-          const auto& avg_pres_old = 0.5*(pres_old + pres_old_D);
+          const auto& pres_old   = phi_pres_old.get_value(q);
+          const auto& pres_old_D = pres_old;
 
           /*--- Compute the quantities at the previous stage ---*/
-          const auto& pres_s_2     = phi_pres_s_2.get_value(q);
-          const auto& pres_s_2_D   = pres_s_2;
-
-          const auto& avg_pres_s_2 = 0.5*(pres_s_2 + pres_s_2_D);
+          const auto& pres_s_2   = phi_pres_s_2.get_value(q);
+          const auto& pres_s_2_D = pres_s_2;
 
           /*--- Compute the quantities at the final steage---*/
-          const auto& pres_s_3     = phi_pres_s_3.get_value(q);
-          const auto& pres_s_3_D   = pres_s_3;
+          const auto& pres_s_3   = phi_pres_s_3.get_value(q);
+          const auto& pres_s_3_D = pres_s_3;
 
-          const auto& avg_pres_s_3 = 0.5*(pres_s_3 + pres_s_3_D);
-
-          phi.submit_value(-b1*dt*(avg_pres_old/(Ma*Ma)*n_minus)
-                           -b2*dt*(avg_pres_s_2/(Ma*Ma)*n_minus)
-                           -b3*dt*(avg_pres_s_3/(Ma*Ma)*n_minus), q);
+          phi.submit_value(-b1*dt*
+                            num_flux.numerical_flux_momentum_implicit(pres_old, pres_old_D, n_minus)
+                           -b2*dt*
+                            num_flux.numerical_flux_momentum_implicit(pres_s_2, pres_s_2_D, n_minus)
+                           -b3*dt*
+                            num_flux.numerical_flux_momentum_implicit(pres_s_3, pres_s_3_D, n_minus), q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -2067,27 +2002,15 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus          = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m        = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p        = phi_rho_old_p.get_value(q);
-          const auto& u_old_m          = phi_u_old_m.get_value(q);
-          const auto& u_old_p          = phi_u_old_p.get_value(q);
-          const auto& avg_kinetic_old  = 0.5*(0.5*scalar_product(u_old_m, u_old_m)*rho_old_m*u_old_m +
-                                              0.5*scalar_product(u_old_p, u_old_p)*rho_old_p*u_old_p);
-
-          const auto& pres_old_m       = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p       = phi_pres_old_p.get_value(q);
-          const auto& avg_enthalpy_old = 0.5*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0))*
-                                         (pres_old_m*u_old_m +
-                                          pres_old_p*u_old_p);
-
-          const auto& lambda_old       = compute_lambda(u_old_m, u_old_p, n_minus);
-          const auto& jump_rho_kin_old = rho_old_m*(0.5*scalar_product(u_old_m, u_old_m)) -
-                                         rho_old_p*(0.5*scalar_product(u_old_p, u_old_p));
-          const auto& jump_rho_e_old   = 1.0/(EquationData::Cp_Cv - 1.0)*
-                                         (pres_old_m - pres_old_p);
+          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
+          const auto& u_old_m    = phi_u_old_m.get_value(q);
+          const auto& u_old_p    = phi_u_old_p.get_value(q);
+          const auto& pres_old_m = phi_pres_old_m.get_value(q);
+          const auto& pres_old_p = phi_pres_old_p.get_value(q);
 
           /*--- Compute the quantities at the current stage ---*/
           const auto& u_fixed_m        = phi_u_fixed_m.get_value(q);
@@ -2095,20 +2018,22 @@ namespace Atmospheric_Flow {
           const auto& pres_fixed_m     = phi_pres_fixed_m.get_value(q);
           const auto& pres_fixed_p     = phi_pres_fixed_p.get_value(q);
 
-          const auto& lambda_fixed     = compute_lambda(u_fixed_m, u_fixed_p, n_minus);
+          const auto& lambda_fixed     = num_flux.compute_lambda(u_fixed_m, u_fixed_p, n_minus);
           const auto& jump_rho_e_fixed = 1.0/(EquationData::Cp_Cv - 1.0)*
                                          (pres_fixed_m - pres_fixed_p);
 
           /*--- Compute the numerical flux ---*/
-          const auto& num_flux_explicit = a21*dt*((Ma*Ma)*(scalar_product(avg_kinetic_old, n_minus) +
-                                                  0.5*lambda_old*jump_rho_kin_old));
-          const auto& num_flux_implicit = a21_tilde*dt*(scalar_product(avg_enthalpy_old, n_minus) +
-                                                        0.5*lambda_old*jump_rho_e_old)
+          const auto& flux_num_explicit = a21*dt*num_flux.numerical_flux_energy_explicit(rho_old_m, u_old_m,
+                                                                                         rho_old_p, u_old_p,
+                                                                                         n_minus);
+          const auto& flux_num_implicit = a21_tilde*dt*num_flux.numerical_flux_energy_implicit(u_old_m, pres_old_m,
+                                                                                               u_old_p, pres_old_p,
+                                                                                               n_minus)
                                         + a22_tilde*dt*(0.5*lambda_fixed*jump_rho_e_fixed);
-          const auto& num_flux          = num_flux_explicit + num_flux_implicit;
+          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
 
-          phi_m.submit_value(-num_flux, q);
-          phi_p.submit_value(num_flux, q);
+          phi_m.submit_value(-flux_num, q);
+          phi_p.submit_value(flux_num, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -2178,47 +2103,23 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus          = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m        = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p        = phi_rho_old_p.get_value(q);
-          const auto& u_old_m          = phi_u_old_m.get_value(q);
-          const auto& u_old_p          = phi_u_old_p.get_value(q);
-          const auto& avg_kinetic_old  = 0.5*(0.5*scalar_product(u_old_m, u_old_m)*rho_old_m*u_old_m +
-                                              0.5*scalar_product(u_old_p, u_old_p)*rho_old_p*u_old_p);
-
-          const auto& pres_old_m       = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p       = phi_pres_old_p.get_value(q);
-          const auto& avg_enthalpy_old = 0.5*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0))*
-                                         (pres_old_m*u_old_m +
-                                          pres_old_p*u_old_p);
-
-          const auto& lambda_old       = compute_lambda(u_old_m, u_old_p, n_minus);
-          const auto& jump_rho_kin_old = rho_old_m*(0.5*scalar_product(u_old_m, u_old_m)) -
-                                         rho_old_p*(0.5*scalar_product(u_old_p, u_old_p));
-          const auto& jump_rho_e_old   = 1.0/(EquationData::Cp_Cv - 1.0)*
-                                         (pres_old_m - pres_old_p);
+          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
+          const auto& u_old_m    = phi_u_old_m.get_value(q);
+          const auto& u_old_p    = phi_u_old_p.get_value(q);
+          const auto& pres_old_m = phi_pres_old_m.get_value(q);
+          const auto& pres_old_p = phi_pres_old_p.get_value(q);
 
           /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m        = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p        = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m          = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p          = phi_u_s_2_p.get_value(q);
-          const auto& avg_kinetic_s_2  = 0.5*(0.5*scalar_product(u_s_2_m, u_s_2_m)*rho_s_2_m*u_s_2_m +
-                                              0.5*scalar_product(u_s_2_p, u_s_2_p)*rho_s_2_p*u_s_2_p);
-
-          const auto& pres_s_2_m       = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p       = phi_pres_s_2_p.get_value(q);
-          const auto& avg_enthalpy_s_2 = 0.5*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0))*
-                                         (pres_s_2_m*u_s_2_m +
-                                          pres_s_2_p*u_s_2_p);
-
-          const auto& lambda_s_2       = compute_lambda(u_s_2_m, u_s_2_p, n_minus);
-          const auto& jump_rho_kin_s_2 = rho_s_2_m*(0.5*scalar_product(u_s_2_m, u_s_2_m)) -
-                                         rho_s_2_p*(0.5*scalar_product(u_s_2_p, u_s_2_p));
-          const auto& jump_rho_e_s_2   = 1.0/(EquationData::Cp_Cv - 1.0)*
-                                         (pres_s_2_m - pres_s_2_p);
+          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
+          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
+          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
+          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
+          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
+          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
 
           /*--- Compute the quantities at the current stage ---*/
           const auto& u_fixed_m        = phi_u_fixed_m.get_value(q);
@@ -2226,24 +2127,28 @@ namespace Atmospheric_Flow {
           const auto& pres_fixed_m     = phi_pres_fixed_m.get_value(q);
           const auto& pres_fixed_p     = phi_pres_fixed_p.get_value(q);
 
-          const auto& lambda_fixed     = compute_lambda(u_fixed_m, u_fixed_p, n_minus);
+          const auto& lambda_fixed     = num_flux.compute_lambda(u_fixed_m, u_fixed_p, n_minus);
           const auto& jump_rho_e_fixed = 1.0/(EquationData::Cp_Cv - 1.0)*
                                          (pres_fixed_m - pres_fixed_p);
 
           /*--- Compute the numerical flux ---*/
-          const auto& num_flux_explicit = a31*dt*((Ma*Ma)*(scalar_product(avg_kinetic_old, n_minus) +
-                                                           0.5*lambda_old*jump_rho_kin_old))
-                                        + a32*dt*((Ma*Ma)*(scalar_product(avg_kinetic_s_2, n_minus) +
-                                                           0.5*lambda_s_2*jump_rho_kin_s_2));
-          const auto& num_flux_implicit = a31_tilde*dt*(scalar_product(avg_enthalpy_old, n_minus) +
-                                                        0.5*lambda_old*jump_rho_e_old)
-                                        + a32_tilde*dt*(scalar_product(avg_enthalpy_s_2, n_minus) +
-                                                        0.5*lambda_s_2*jump_rho_e_s_2)
+          const auto& flux_num_explicit = a31*dt*num_flux.numerical_flux_energy_explicit(rho_old_m, u_old_m,
+                                                                                         rho_old_p, u_old_p,
+                                                                                         n_minus)
+                                        + a32*dt*num_flux.numerical_flux_energy_explicit(rho_s_2_m, u_s_2_m,
+                                                                                         rho_s_2_p, u_s_2_p,
+                                                                                         n_minus);
+          const auto& flux_num_implicit = a31_tilde*dt*num_flux.numerical_flux_energy_implicit(u_old_m, pres_old_m,
+                                                                                               u_old_p, pres_old_p,
+                                                                                               n_minus)
+                                        + a32_tilde*dt*num_flux.numerical_flux_energy_implicit(u_s_2_m, pres_s_2_m,
+                                                                                               u_s_2_p, pres_s_2_p,
+                                                                                               n_minus)
                                         + a33_tilde*dt*(0.5*lambda_fixed*jump_rho_e_fixed);
-          const auto& num_flux          = num_flux_explicit + num_flux_implicit;
+          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
 
-          phi_m.submit_value(-num_flux, q);
-          phi_p.submit_value(num_flux, q);
+          phi_m.submit_value(-flux_num, q);
+          phi_p.submit_value(flux_num, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -2319,84 +2224,54 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus          = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m        = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p        = phi_rho_old_p.get_value(q);
-          const auto& u_old_m          = phi_u_old_m.get_value(q);
-          const auto& u_old_p          = phi_u_old_p.get_value(q);
-          const auto& avg_kinetic_old  = 0.5*(0.5*scalar_product(u_old_m, u_old_m)*rho_old_m*u_old_m +
-                                              0.5*scalar_product(u_old_p, u_old_p)*rho_old_p*u_old_p);
-
-          const auto& pres_old_m       = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p       = phi_pres_old_p.get_value(q);
-          const auto& avg_enthalpy_old = 0.5*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0))*
-                                         (pres_old_m*u_old_m +
-                                          pres_old_p*u_old_p);
-
-          const auto& lambda_old       = compute_lambda(u_old_m, u_old_p, n_minus);
-          const auto& rhoE_old_m       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old_m
-                                       + rho_old_m*(0.5*Ma*Ma*scalar_product(u_old_m, u_old_m));
-          const auto& rhoE_old_p       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old_p
-                                       + rho_old_p*(0.5*Ma*Ma*scalar_product(u_old_p, u_old_p));
-          const auto& jump_rhoE_old    = rhoE_old_m - rhoE_old_p;
+          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
+          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
+          const auto& u_old_m    = phi_u_old_m.get_value(q);
+          const auto& u_old_p    = phi_u_old_p.get_value(q);
+          const auto& pres_old_m = phi_pres_old_m.get_value(q);
+          const auto& pres_old_p = phi_pres_old_p.get_value(q);
 
           /*--- Compute the quantities at the second stage ---*/
-          const auto& rho_s_2_m        = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p        = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m          = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p          = phi_u_s_2_p.get_value(q);
-          const auto& avg_kinetic_s_2  = 0.5*(0.5*scalar_product(u_s_2_m, u_s_2_m)*rho_s_2_m*u_s_2_m +
-                                              0.5*scalar_product(u_s_2_p, u_s_2_p)*rho_s_2_p*u_s_2_p);
-
-          const auto& pres_s_2_m       = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p       = phi_pres_s_2_p.get_value(q);
-          const auto& avg_enthalpy_s_2 = 0.5*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0))*
-                                         (pres_s_2_m*u_s_2_m +
-                                          pres_s_2_p*u_s_2_p);
-
-          const auto& lambda_s_2       = compute_lambda(u_s_2_m, u_s_2_p, n_minus);
-          const auto& rhoE_s_2_m       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_s_2_m
-                                       + rho_s_2_m*(0.5*Ma*Ma*scalar_product(u_s_2_m, u_s_2_m));
-          const auto& rhoE_s_2_p       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_s_2_p
-                                       + rho_s_2_p*(0.5*Ma*Ma*scalar_product(u_s_2_p, u_s_2_p));
-          const auto& jump_rhoE_s_2    = rhoE_s_2_m - rhoE_s_2_p;
+          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
+          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
+          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
+          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
+          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
+          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
 
           /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3_m        = phi_rho_s_3_m.get_value(q);
-          const auto& rho_s_3_p        = phi_rho_s_3_p.get_value(q);
-          const auto& u_s_3_m          = phi_u_s_3_m.get_value(q);
-          const auto& u_s_3_p          = phi_u_s_3_p.get_value(q);
-          const auto& avg_kinetic_s_3  = 0.5*(0.5*scalar_product(u_s_3_m, u_s_3_m)*rho_s_3_m*u_s_3_m +
-                                              0.5*scalar_product(u_s_3_p, u_s_3_p)*rho_s_3_p*u_s_3_p);
-
-          const auto& pres_s_3_m       = phi_pres_s_3_m.get_value(q);
-          const auto& pres_s_3_p       = phi_pres_s_3_p.get_value(q);
-          const auto& avg_enthalpy_s_3 = 0.5*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0))*
-                                         (pres_s_3_m*u_s_3_m +
-                                          pres_s_3_p*u_s_3_p);
-
-          const auto& lambda_s_3       = compute_lambda(u_s_3_m, u_s_3_p, n_minus);
-          const auto& rhoE_s_3_m       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_s_3_m
-                                       + rho_s_3_m*(0.5*Ma*Ma*scalar_product(u_s_3_m, u_s_3_m));
-          const auto& rhoE_s_3_p       = 1.0/(EquationData::Cp_Cv - 1.0)*pres_s_3_p
-                                       + rho_s_3_p*(0.5*Ma*Ma*scalar_product(u_s_3_p, u_s_3_p));
-          const auto& jump_rhoE_s_3    = rhoE_s_3_m - rhoE_s_3_p;
+          const auto& rho_s_3_m  = phi_rho_s_3_m.get_value(q);
+          const auto& rho_s_3_p  = phi_rho_s_3_p.get_value(q);
+          const auto& u_s_3_m    = phi_u_s_3_m.get_value(q);
+          const auto& u_s_3_p    = phi_u_s_3_p.get_value(q);
+          const auto& pres_s_3_m = phi_pres_s_3_m.get_value(q);
+          const auto& pres_s_3_p = phi_pres_s_3_p.get_value(q);
 
           /*--- Compute the numerical flux ---*/
-          const auto& num_flux = b1*dt*((Ma*Ma)*scalar_product(avg_kinetic_old, n_minus))
-                               + b1*dt*scalar_product(avg_enthalpy_old, n_minus)
-                               + b1*dt*(0.5*lambda_old*jump_rhoE_old)
-                               + b2*dt*((Ma*Ma)*scalar_product(avg_kinetic_s_2, n_minus))
-                               + b2*dt*scalar_product(avg_enthalpy_s_2, n_minus)
-                               + b2*dt*(0.5*lambda_s_2*jump_rhoE_s_2)
-                               + b3*dt*((Ma*Ma)*scalar_product(avg_kinetic_s_3, n_minus))
-                               + b3*dt*scalar_product(avg_enthalpy_s_3, n_minus)
-                               + b3*dt*(0.5*lambda_s_3*jump_rhoE_s_3);
+          const auto& flux_num = b1*dt*num_flux.numerical_flux_energy_explicit(rho_old_m, u_old_m,
+                                                                               rho_old_p, u_old_p,
+                                                                               n_minus)
+                               + b1*dt*num_flux.numerical_flux_energy_implicit(u_old_m, pres_old_m,
+                                                                               u_old_p, pres_old_p,
+                                                                               n_minus)
+                               + b2*dt*num_flux.numerical_flux_energy_explicit(rho_s_2_m, u_s_2_m,
+                                                                               rho_s_2_p, u_s_2_p,
+                                                                               n_minus)
+                               + b2*dt*num_flux.numerical_flux_energy_implicit(u_s_2_m, pres_s_2_m,
+                                                                               u_s_2_p, pres_s_2_p,
+                                                                               n_minus)
+                               + b3*dt*num_flux.numerical_flux_energy_explicit(rho_s_3_m, u_s_3_m,
+                                                                               rho_s_3_p, u_s_3_p,
+                                                                               n_minus)
+                               + b3*dt*num_flux.numerical_flux_energy_implicit(u_s_3_m, pres_s_3_m,
+                                                                               u_s_3_p, pres_s_3_p,
+                                                                               n_minus);
 
-          phi_m.submit_value(-num_flux, q);
-          phi_p.submit_value(num_flux, q);
+          phi_m.submit_value(-flux_num, q);
+          phi_p.submit_value(flux_num, q);
         }
 
         phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -2988,7 +2863,7 @@ namespace Atmospheric_Flow {
 
     /*--- For the preconditioner, we actually need the inverse of the diagonal ---*/
     for(unsigned i = 0; i < inverse_diagonal.locally_owned_size(); ++i) {
-      Assert(inverse_diagonal.local_element(i) != 0.0,
+      Assert(inverse_diagonal.local_element(i) != static_cast<Number>(0.0),
              ExcMessage("No diagonal entry in a definite operator should be zero"));
       inverse_diagonal.local_element(i) = static_cast<Number>(1.0)/inverse_diagonal.local_element(i);
     }
