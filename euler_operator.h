@@ -1,10 +1,10 @@
 /* Author: Giuseppe Orlando, 2025. */
+#pragma once
 
 // @sect{Include files}
 
 // We start by including all the necessary deal.II header files
 //
-#include <deal.II/matrix_free/matrix_free.h>
 #include <deal.II/matrix_free/operators.h>
 #include <deal.II/matrix_free/fe_evaluation.h>
 
@@ -32,7 +32,7 @@ namespace Atmospheric_Flow {
 
     EULEROperator(); /*--- Default constructor ---*/
 
-    EULEROperator(RunTimeParameters::Data_Storage<Number>& data); /*--- Constructor with some input related data ---*/
+    EULEROperator(const RunTimeParameters::Data_Storage& data); /*--- Constructor with some input related data ---*/
 
     void set_dt(const Number time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
                                                in case of modifications of the time step. ---*/
@@ -245,10 +245,10 @@ namespace Atmospheric_Flow {
                                                      const std::pair<unsigned, unsigned>& cell_range) const;
   };
 
+
   //////////////////////////////////////////////////////////////
   /*---- START WITH CLASS CONSTRUCTORS ---*/
   /////////////////////////////////////////////////////////////
-
 
   // Default constructor
   //
@@ -283,9 +283,11 @@ namespace Atmospheric_Flow {
                 fe_degree_u, fe_degree_rho, fe_degree_p,
                 n_q_points_1d, n_q_points_1d_boundary,
                 Vec>::
-  EULEROperator(RunTimeParameters::Data_Storage<Number>& data):
+  EULEROperator(const RunTimeParameters::Data_Storage& data):
     MatrixFreeOperators::Base<dim, Vec>(),
-    Ma(data.Mach), Fr(data.Froude), dt(data.dt),
+    Ma(static_cast<Number>(data.Mach)),
+    Fr(static_cast<Number>(data.Froude)),
+    dt(static_cast<Number>(data.dt)),
     gamma(static_cast<Number>(2.0) - static_cast<Number>(std::sqrt(2.0))), a21(gamma),
     a31(static_cast<Number>(0.5)), a32(static_cast<Number>(0.5)),
     a21_tilde(static_cast<Number>(0.5)*gamma), a22_tilde(static_cast<Number>(0.5)*gamma),
@@ -951,7 +953,7 @@ namespace Atmospheric_Flow {
                         phi_pres_s_2(data, EquationData::P_INDEX_DOF);
       FEEvaluation_rho  phi_rho_old(data, EquationData::RHO_INDEX_DOF),
                         phi_rho_s_2(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_curr(data, EquationData::RHO_INDEX_DOF);
+                        phi_rho_s_3(data, EquationData::RHO_INDEX_DOF);
 
       /*--- Loop over all cells ---*/
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
@@ -969,8 +971,8 @@ namespace Atmospheric_Flow {
         phi_pres_s_2.reinit(cell);
         phi_pres_s_2.gather_evaluate(src[5], EvaluationFlags::values);
 
-        phi_rho_curr.reinit(cell);
-        phi_rho_curr.gather_evaluate(src[6], EvaluationFlags::values);
+        phi_rho_s_3.reinit(cell);
+        phi_rho_s_3.gather_evaluate(src[6], EvaluationFlags::values);
 
         phi.reinit(cell);
 
@@ -998,12 +1000,12 @@ namespace Atmospheric_Flow {
             p_s_2_times_identity[d][d] = pres_s_2;
           }
 
-          const auto& rho_curr = phi_rho_curr.get_value(q);
+          const auto& rho_s_3 = phi_rho_s_3.get_value(q);
 
           phi.submit_value(rho_old*u_old -
                            a31_tilde*dt*(rho_old*e_k/(Fr*Fr)) -
                            a32_tilde*dt*(rho_s_2*e_k/(Fr*Fr)) -
-                           a33_tilde*dt*(rho_curr*e_k/(Fr*Fr)), q);
+                           a33_tilde*dt*(rho_s_3*e_k/(Fr*Fr)), q);
           phi.submit_gradient(a31*dt*(rho_old*tensor_product_u_n) +
                               a31_tilde*dt*(p_n_times_identity/(Ma*Ma)) +
                               a32*dt*(rho_s_2*tensor_product_u_s_2) +
@@ -1666,8 +1668,11 @@ namespace Atmospheric_Flow {
         const auto& avg_term = 0.5*(phi_src_m.get_value(q) +
                                     phi_src_p.get_value(q));
 
-        phi_m.submit_value(coeff*dt*(avg_term/(Ma*Ma)*n_minus), q);
-        phi_p.submit_value(-coeff*dt*(avg_term/(Ma*Ma)*n_minus), q);
+        const auto& flux_num = coeff*dt*
+                               (avg_term/(Ma*Ma)*n_minus);
+
+        phi_m.submit_value(flux_num, q);
+        phi_p.submit_value(-flux_num, q);
       }
 
       phi_m.integrate_scatter(EvaluationFlags::values, dst);
@@ -2470,8 +2475,11 @@ namespace Atmospheric_Flow {
                                         (pres_fixed_m*phi_src_m.get_value(q) +
                                          pres_fixed_p*phi_src_p.get_value(q));
 
-        phi_m.submit_value(coeff*dt*scalar_product(avg_flux_enthalpy, n_minus), q);
-        phi_p.submit_value(-coeff*dt*scalar_product(avg_flux_enthalpy, n_minus), q);
+        const auto& flux_num          = coeff*dt*
+                                        scalar_product(avg_flux_enthalpy, n_minus);
+
+        phi_m.submit_value(flux_num, q);
+        phi_p.submit_value(-flux_num, q);
       }
 
       phi_m.integrate_scatter(EvaluationFlags::values, dst);

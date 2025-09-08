@@ -53,7 +53,7 @@ public:
   using Vec    = LinearAlgebra::distributed::Vector<double>;
   using Number = Vec::value_type;
 
-  EulerSolver(RunTimeParameters::Data_Storage<Number>& data); /*--- Class constructor ---*/
+  EulerSolver(const RunTimeParameters::Data_Storage& data); /*--- Class constructor ---*/
 
   void run(const bool verbose = false,
            const unsigned output_interval = 10);
@@ -298,13 +298,13 @@ private:
 // load the initial data.
 //
 template<unsigned dim>
-EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage<Number>& data):
-  t0(data.initial_time),
-  T(data.final_time),
-  dt(data.dt),
+EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data):
+  t0(static_cast<Number>(data.initial_time)),
+  T(static_cast<Number>(data.final_time)),
+  dt(static_cast<Number>(data.dt)),
   IMEX_stage(2),
   max_its(data.max_iterations),
-  rtol_iterative(data.rtol_iterative),
+  rtol_iterative(static_cast<Number>(data.rtol_iterative)),
   triangulation(MPI_COMM_WORLD,
                 parallel::distributed::Triangulation<dim>::limit_level_difference_at_vertices,
                 parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy),
@@ -323,29 +323,29 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage<Number>& data):
   push_forward(),
   pull_back(),
   manifold(push_forward, pull_back),
-  rho_init(data.initial_time),
-  u_init(data.initial_time),
-  pres_init(data.initial_time),
-  dt_tau(data.initial_time),
-  dt_tau_aux(data.initial_time),
-  dt_tau_vel(data.initial_time),
-  dt_tau_vel_aux(data.initial_time),
-  dt_tau_right(data.initial_time),
-  dt_tau_aux_right(data.initial_time),
-  dt_tau_vel_right(data.initial_time),
-  dt_tau_vel_aux_right(data.initial_time),
-  dt_tau_left(data.initial_time),
-  dt_tau_aux_left(data.initial_time),
-  dt_tau_vel_left(data.initial_time),
-  dt_tau_vel_aux_left(data.initial_time),
-  dt_tau_right_y(data.initial_time),
-  dt_tau_aux_right_y(data.initial_time),
-  dt_tau_vel_right_y(data.initial_time),
-  dt_tau_vel_aux_right_y(data.initial_time),
-  dt_tau_left_y(data.initial_time),
-  dt_tau_aux_left_y(data.initial_time),
-  dt_tau_vel_left_y(data.initial_time),
-  dt_tau_vel_aux_left_y(data.initial_time),
+  rho_init(static_cast<Number>(data.initial_time)),
+  u_init(static_cast<Number>(data.initial_time)),
+  pres_init(static_cast<Number>(data.initial_time)),
+  dt_tau(static_cast<Number>(data.initial_time)),
+  dt_tau_aux(static_cast<Number>(data.initial_time)),
+  dt_tau_vel(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_aux(static_cast<Number>(data.initial_time)),
+  dt_tau_right(static_cast<Number>(data.initial_time)),
+  dt_tau_aux_right(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_right(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_aux_right(static_cast<Number>(data.initial_time)),
+  dt_tau_left(static_cast<Number>(data.initial_time)),
+  dt_tau_aux_left(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_left(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_aux_left(static_cast<Number>(data.initial_time)),
+  dt_tau_right_y(static_cast<Number>(data.initial_time)),
+  dt_tau_aux_right_y(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_right_y(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_aux_right_y(static_cast<Number>(data.initial_time)),
+  dt_tau_left_y(static_cast<Number>(data.initial_time)),
+  dt_tau_aux_left_y(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_left_y(static_cast<Number>(data.initial_time)),
+  dt_tau_vel_aux_left_y(static_cast<Number>(data.initial_time)),
   saving_dir(data.dir),
   pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
   time_out("./" + data.dir + "/time_analysis_" +
@@ -355,10 +355,10 @@ EulerSolver<dim>::EulerSolver(RunTimeParameters::Data_Storage<Number>& data):
   restart(data.restart),
   save_for_restart(data.save_for_restart),
   step_restart(data.step_restart),
-  time_restart(data.time_restart),
+  time_restart(static_cast<Number>(data.time_restart)),
   as_initial_conditions(data.as_initial_conditions),
   euler_matrix(data),
-  rtol_fixed_point(data.rtol_fixed_point) {
+  rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)) {
     AssertThrow(!((dt <= static_cast<Number>(0.0)) || (dt > T)),
                 ExcInvalidTimeStep(dt, T));
 
@@ -662,6 +662,7 @@ template<unsigned dim>
 void EulerSolver<dim>::update_density() {
   TimerOutput::Scope t(time_table, "Update density");
 
+  /*--- Set the proper dof index to specify that we are dealing with continuity equation ---*/
   const std::vector<unsigned> index_dof_handler = {EquationData::RHO_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::RHO_INDEX_SYSTEM);
@@ -699,6 +700,12 @@ void EulerSolver<dim>::update_density() {
 //
 template<unsigned dim>
 void EulerSolver<dim>::precompute_rhs_pressure() {
+  /*--- Set the proper dof index ---*/
+  const std::vector<unsigned> index_dof_handler = {EquationData::U_INDEX_DOF};
+  euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
+  euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
+
+  /*--- Compute the rhs ---*/
   if(IMEX_stage == 2) {
     euler_matrix.vmult_rhs_momentum(rhs_momentum, {rho_old, u_old, pres_old,
                                                    rho_s_2});
@@ -708,10 +715,6 @@ void EulerSolver<dim>::precompute_rhs_pressure() {
                                                    rho_s_2, u_s_2, pres_s_2,
                                                    rho_s_3});
   }
-
-  const std::vector<unsigned> index_dof_handler = {EquationData::U_INDEX_DOF};
-  euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
-  euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
 
   /*--- Solve to compute first contribution to rhs --*/
   euler_matrix.vmult(rhs_u_precomputed, rhs_momentum);
@@ -723,6 +726,7 @@ template<unsigned dim>
 void EulerSolver<dim>::pressure_fixed_point() {
   TimerOutput::Scope t(time_table, "Fixed point pressure");
 
+  /*--- Set the proper dof index ---*/
   const std::vector<unsigned> index_dof_handler = {EquationData::P_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::P_INDEX_SYSTEM);
@@ -795,6 +799,7 @@ template<unsigned dim>
 void EulerSolver<dim>::update_velocity() {
   TimerOutput::Scope t(time_table, "Update velocity");
 
+  /*--- Set the proper dof index ---*/
   const std::vector<unsigned> index_dof_handler = {EquationData::U_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
@@ -828,6 +833,7 @@ template<unsigned dim>
 void EulerSolver<dim>::update_pressure() {
   TimerOutput::Scope t(time_table, "Update pressure");
 
+  /*--- Set the proper dof index ---*/
   const std::vector<unsigned> index_dof_handler = {EquationData::P_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::P_INDEX_SYSTEM);
@@ -1021,7 +1027,8 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::compute_max_celerity() {
 
       for(unsigned q = 0; q < n_q_points; ++q) {
         max_local_celerity = std::max(max_local_celerity,
-                                      std::sqrt(EquationData::Cp_Cv*solution_values_pressure[q]/solution_values_density[q]));
+                                      std::sqrt(static_cast<Number>(EquationData::Cp_Cv)*
+                                                (solution_values_pressure[q]/solution_values_density[q])));
       }
     }
   }
@@ -1061,7 +1068,8 @@ EulerSolver<dim>::compute_max_Cu_x_y_z() {
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD), Utilities::MPI::max(max_Cu_y, MPI_COMM_WORLD)),
+  return std::make_pair(std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD),
+                                       Utilities::MPI::max(max_Cu_y, MPI_COMM_WORLD)),
                         Utilities::MPI::max(max_Cu_z, MPI_COMM_WORLD));
 }
 
@@ -1089,7 +1097,8 @@ EulerSolver<dim>::compute_max_C_x_y_z() {
       fe_values.get_function_values(rho_old, solution_values_density);
 
       for(unsigned q = 0; q < n_q_points; ++q) {
-        auto local_celerity = std::sqrt(EquationData::Cp_Cv*solution_values_pressure[q]/solution_values_density[q]);
+        auto local_celerity = std::sqrt(static_cast<Number>(EquationData::Cp_Cv)*
+                                        (solution_values_pressure[q]/solution_values_density[q]));
         max_C_x = std::max(max_C_x, (static_cast<Number>(1.0)/euler_matrix.get_Mach())*
                                     EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(0));
         max_C_y = std::max(max_C_x, (static_cast<Number>(1.0)/euler_matrix.get_Mach())*
@@ -1100,7 +1109,8 @@ EulerSolver<dim>::compute_max_C_x_y_z() {
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD), Utilities::MPI::max(max_C_y, MPI_COMM_WORLD)),
+  return std::make_pair(std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD),
+                                       Utilities::MPI::max(max_C_y, MPI_COMM_WORLD)),
                         Utilities::MPI::max(max_C_z, MPI_COMM_WORLD));
 }
 
@@ -1297,8 +1307,7 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned output_interval) {
 int main(int argc, char *argv[]) {
   try {
     /*--- Read the parameters ---*/
-    using Number = typename EulerSolver<2>::Number;
-    RunTimeParameters::Data_Storage<Number> data;
+    RunTimeParameters::Data_Storage data;
     data.read_data("parameter-file.prm");
 
     /*-- Initialize console and output ---*/

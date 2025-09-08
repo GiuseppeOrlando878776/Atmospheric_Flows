@@ -17,7 +17,6 @@
 namespace RunTimeParameters {
   using namespace dealii;
 
-  template<typename T = double>
   class Data_Storage {
   public:
     Data_Storage(); /*--- Class constructor ---*/
@@ -25,8 +24,8 @@ namespace RunTimeParameters {
     void read_data(const std::string& filename); /*--- The function that actually reads the parameters ---*/
 
     /*--- Start with physical parameters ---*/
-    T initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
-    T final_time;   /*--- Variable to set the final time ---*/
+    double initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
+    double final_time;   /*--- Variable to set the final time ---*/
 
     // The present code is meant to work using non-dimensional variables and using
     // the non-dimensional equations described in Orlando et al., JCP, 2022.
@@ -34,25 +33,25 @@ namespace RunTimeParameters {
     // to set the Mach numer equal to 1 and the Froude number equal to 1/sqrt(g),
     // where g is, as usual, the acceleration of gravity.
     //
-    T Mach;   /*--- The Mach number ---*/
-    T Froude; /*--- The Froude number ---*/
+    double Mach;   /*--- The Mach number ---*/
+    double Froude; /*--- The Froude number ---*/
 
-    T L_ref;   /*--- Reference length (not used so far) ---*/
-    T u_ref;   /*--- Reference velocity (not used so far) ---*/
-    T p_ref;   /*--- Reference pressure (not used so far) ---*/
-    T T_ref;   /*--- Reference temperature (not used so far) ---*/
-    T rho_ref; /*--- Reference density (not used so far) ---*/
+    double L_ref;   /*--- Reference length (not used so far) ---*/
+    double u_ref;   /*--- Reference velocity (not used so far) ---*/
+    double p_ref;   /*--- Reference pressure (not used so far) ---*/
+    double T_ref;   /*--- Reference temperature (not used so far) ---*/
+    double rho_ref; /*--- Reference density (not used so far) ---*/
 
-    T h;  /*--- Hill height (not used so far) ---*/
-    T xc; /*--- x-Center of the hill (not used so far) ---*/
-    T yc; /*--- y-Center of the hill (not used so far) ---*/
-    T ac; /*--- Width of the hill (not used so far) ---*/
+    double h;  /*--- Hill height (not used so far) ---*/
+    double xc; /*--- x-Center of the hill (not used so far) ---*/
+    double yc; /*--- y-Center of the hill (not used so far) ---*/
+    double ac; /*--- Width of the hill (not used so far) ---*/
 
     /*--- Numerical parameters ---*/
-    T dt; /*--- The time-step ---*/
+    double dt; /*--- The time-step ---*/
 
-    T atol_fixed_point; /*--- Absolute tolerance for the fixed point loop ---*/
-    T rtol_fixed_point; /*--- Relative tolerance for the fixed point loop ---*/
+    double atol_fixed_point; /*--- Absolute tolerance for the fixed point loop ---*/
+    double rtol_fixed_point; /*--- Relative tolerance for the fixed point loop ---*/
 
     /*--- Mesh parameters ---*/
     unsigned n_global_refines;    /*--- Number of global refinements for the initial (coarse) mesh ---*/
@@ -63,8 +62,8 @@ namespace RunTimeParameters {
 
     /*--- Parameters related to the linear solver ---*/
     unsigned max_iterations;  /*--- Maximum number of iterations for the linear solver ---*/
-    T        atol_iterative;  /*--- Absolute tolerance for the linear solver ---*/
-    T        rtol_iterative;  /*--- Relative tolerance for the linear solver ---*/
+    double   atol_iterative;  /*--- Absolute tolerance for the linear solver ---*/
+    double   rtol_iterative;  /*--- Relative tolerance for the linear solver ---*/
 
     /*--- Parameters related to the output ---*/
     bool     verbose;         /*--- Choose if being verboe or not ---*/
@@ -78,7 +77,7 @@ namespace RunTimeParameters {
     bool     restart;
     bool     save_for_restart;
     unsigned step_restart;
-    T        time_restart;
+    double        time_restart;
     bool     as_initial_conditions;
 
   protected:
@@ -89,37 +88,36 @@ namespace RunTimeParameters {
   // We employ the 'enter_subsection' to divide into categories and
   // the 'declare_entry' to declare a certain parameter to be setted.
   //
-  template<typename T>
-  Data_Storage<T>::Data_Storage(): initial_time(0.0),
-                                   final_time(1.0),
-                                   Mach(1.0),
-                                   Froude(0.319275428407050),
-                                   L_ref(1.0),
-                                   u_ref(1.0),
-                                   p_ref(1.0),
-                                   T_ref(1.0),
-                                   rho_ref(1.0),
-                                   h(1.0),
-                                   xc(1.0),
-                                   yc(1.0),
-                                   ac(1.0),
-                                   dt(5e-4),
-                                   atol_fixed_point(1e-12),
-                                   rtol_fixed_point(1e-10),
-                                   n_global_refines(0),
-                                   max_loc_refinements(0),
-                                   min_loc_refinements(0),
-                                   refinement_iterations(0),
-                                   max_iterations(1000),
-                                   atol_iterative(1e-14),
-                                   rtol_iterative(1e-12),
-                                   verbose(true),
-                                   output_interval(15),
-                                   restart(false),
-                                   save_for_restart(false),
-                                   step_restart(0),
-                                   time_restart(0.0),
-                                   as_initial_conditions(false) {
+  Data_Storage::Data_Storage(): initial_time(0.0),
+                                final_time(1.0),
+                                Mach(1.0),
+                                Froude(0.319275428407050),
+                                L_ref(1.0),
+                                u_ref(1.0),
+                                p_ref(1.0),
+                                T_ref(1.0),
+                                rho_ref(1.0),
+                                h(1.0),
+                                xc(1.0),
+                                yc(1.0),
+                                ac(1.0),
+                                dt(5e-4),
+                                atol_fixed_point(1e-12),
+                                rtol_fixed_point(1e-10),
+                                n_global_refines(0),
+                                max_loc_refinements(0),
+                                min_loc_refinements(0),
+                                refinement_iterations(0),
+                                max_iterations(1000),
+                                atol_iterative(1e-14),
+                                rtol_iterative(1e-12),
+                                verbose(true),
+                                output_interval(15),
+                                restart(false),
+                                save_for_restart(false),
+                                step_restart(0),
+                                time_restart(0.0),
+                                as_initial_conditions(false) {
     /*--- Start declaring entries for the physical parameters ---*/
     prm.enter_subsection("Physical data");
     {
@@ -287,8 +285,7 @@ namespace RunTimeParameters {
 
   // Function to read all declared parameters in the constructor
   //
-  template<typename T>
-  void Data_Storage<T>::read_data(const std::string& filename) {
+  void Data_Storage::read_data(const std::string& filename) {
     std::ifstream file(filename);
     AssertThrow(file, ExcFileNotOpen(filename));
 
