@@ -14,6 +14,7 @@
 #include "include/io/runtime_parameters.h"
 #include "include/equation_data.h"
 #include "include/space_discretization/numerical_flux/Rusanov_flux.h"
+#include "include/time_integrator/runge_kutta.h"
 
 // This is the class that implements the discretization
 //
@@ -32,7 +33,9 @@ namespace Atmospheric_Flow {
 
     EULEROperator(); /*--- Default constructor ---*/
 
-    EULEROperator(const RunTimeParameters::Data_Storage& data); /*--- Constructor with some input related data ---*/
+    EULEROperator(const RunTimeParameters::Data_Storage& data,
+                  const TimeStepping::RungeKutta<Number>& explicit_RK,
+                  const TimeStepping::RungeKutta<Number>& implicit_RK); /*--- Constructor with some input related data ---*/
 
     void set_dt(const Number time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
                                                in case of modifications of the time step. ---*/
@@ -92,21 +95,14 @@ namespace Atmospheric_Flow {
 
     Number dt; /*--- Time step. ---*/
 
-    const Number gamma; /*--- TR-BDF2 (i.e. implicit part) parameter. ---*/
     /*--- The following variables follow the classical Butcher tableaux notation ---*/
-    const Number a21;
-    const Number a31;
-    const Number a32;
+    std::vector<std::vector<Number>> a;
+    std::vector<std::vector<Number>> a_tilde;
 
-    const Number a21_tilde;
-    const Number a22_tilde;
-    const Number a31_tilde;
-    const Number a32_tilde;
-    const Number a33_tilde;
+    std::vector<Number> b;
+    std::vector<Number> b_tilde;
 
-    const Number b1;
-    const Number b2;
-    const Number b3;
+    unsigned n_stages; /*--- Number of stages ---*/
 
     unsigned IMEX_stage;          /*--- Flag for the IMEX stage ---*/
     mutable unsigned Euler_stage; /*--- Flag for the equation actually considered ---*/
@@ -262,15 +258,6 @@ namespace Atmospheric_Flow {
                 Vec>::
   EULEROperator():
     MatrixFreeOperators::Base<dim, Vec>(), Ma(), Fr(), dt(),
-    gamma(static_cast<Number>(2.0) - static_cast<Number>(std::sqrt(2.0))), a21(gamma),
-    a31(static_cast<Number>(0.5)), a32(static_cast<Number>(0.5)),
-    a21_tilde(static_cast<Number>(0.5)*gamma), a22_tilde(static_cast<Number>(0.5)*gamma),
-    a31_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    a32_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    a33_tilde(static_cast<Number>(0.5)*gamma),
-    b1(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    b2(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    b3(static_cast<Number>(0.5)*gamma),
     IMEX_stage(1), Euler_stage(1), num_flux() {}
 
   // Constructor with runtime parameters storage
@@ -283,21 +270,21 @@ namespace Atmospheric_Flow {
                 fe_degree_u, fe_degree_rho, fe_degree_p,
                 n_q_points_1d, n_q_points_1d_boundary,
                 Vec>::
-  EULEROperator(const RunTimeParameters::Data_Storage& data):
+  EULEROperator(const RunTimeParameters::Data_Storage& data,
+                const TimeStepping::RungeKutta<Number>& explicit_RK,
+                const TimeStepping::RungeKutta<Number>& implicit_RK):
     MatrixFreeOperators::Base<dim, Vec>(),
     Ma(static_cast<Number>(data.Mach)),
     Fr(static_cast<Number>(data.Froude)),
     dt(static_cast<Number>(data.dt)),
-    gamma(static_cast<Number>(2.0) - static_cast<Number>(std::sqrt(2.0))), a21(gamma),
-    a31(static_cast<Number>(0.5)), a32(static_cast<Number>(0.5)),
-    a21_tilde(static_cast<Number>(0.5)*gamma), a22_tilde(static_cast<Number>(0.5)*gamma),
-    a31_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    a32_tilde(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    a33_tilde(static_cast<Number>(0.5)*gamma),
-    b1(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    b2(static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma),
-    b3(static_cast<Number>(0.5)*gamma),
-    IMEX_stage(1), Euler_stage(1), num_flux(Ma) {}
+    n_stages(explicit_RK.get_n_stages()),
+    IMEX_stage(1), Euler_stage(1), num_flux(Ma) {
+      /*--- Initialize the RK coefficients ---*/
+      explicit_RK.get_coefficients(a, b);
+      implicit_RK.get_coefficients(a_tilde, b_tilde);
+
+      Assert(n_stages == implicit_RK.get_n_stages(), ExcInternalError());
+    }
 
 
   //////////////////////////////////////////////////////////////
@@ -370,7 +357,7 @@ namespace Atmospheric_Flow {
                      n_q_points_1d, n_q_points_1d_boundary,
                      Vec>::
   set_IMEX_stage(const unsigned stage) {
-    AssertIndexRange(stage, EquationData::n_stages + 2);
+    AssertIndexRange(stage, n_stages + 2);
     Assert(stage > 0, ExcInternalError());
 
     IMEX_stage = stage;
@@ -461,35 +448,46 @@ namespace Atmospheric_Flow {
                                  Vec&                                 dst,
                                  const std::vector<Vec>&              src,
                                  const std::pair<unsigned, unsigned>& cell_range) const {
-    if(IMEX_stage == 2) {
+    /*--- Intermediate stages ---*/
+    if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the old density and
       the old velocity. 'phi' will be used only to 'submit' the result.
       The second argument specifies which dof handler has to be used. ---*/
-      FEEvaluation_rho phi(data, EquationData::RHO_INDEX_DOF),
-                       phi_rho_old(data, EquationData::RHO_INDEX_DOF);
-      FEEvaluation_u   phi_u_old(data, EquationData::U_INDEX_DOF);
+      FEEvaluation_rho              phi(data, EquationData::RHO_INDEX_DOF);
+      std::vector<FEEvaluation_rho> phi_rho(IMEX_stage - 1, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
+      std::vector<FEEvaluation_u>   phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
 
       /*--- Loop over all cells ---*/
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
         /*--- Now we need to assign the current cell to each FEEvaluation object and then to specify which src vector
         it has to read (the proper order is clearly delegated to the user, which has to pay attention in the function
         call to be coherent). All these considerations are valid also for the other assembler functions. ---*/
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
+        for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+          phi_rho[s - 1].reinit(cell);
+          phi_rho[s - 1].gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+          phi_u[s - 1].reinit(cell);
+          phi_u[s - 1].gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+        }
 
         phi.reinit(cell);
 
         /*--- Loop over quadrature points of each cell ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step. ---*/
-          const auto& rho_old = phi_rho_old.get_value(q);
-          const auto& u_old   = phi_u_old.get_value(q);
+          /*--- Compute the density at the previous step (always needed) ---*/
+          const auto& rho_old = phi_rho.front().get_value(q);
+
+          /*--- Compute the quantities at the previous stages for the flux ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            const auto& rho_s = phi_rho[s - 1].get_value(q);
+            const auto& u_s   = phi_u[s - 1].get_value(q);
+
+            flux += a[IMEX_stage - 1][s - 1]*dt*(rho_s*u_s);
+          }
 
           phi.submit_value(rho_old, q);
           /*--- submit_value is used for quantities to be tested against test functions ---*/
-          phi.submit_gradient(a21*dt*(rho_old*u_old), q);
+          phi.submit_gradient(flux, q);
           /*--- submit_gradient is used for quantities to be tested against gradient of test functions ---*/
         }
 
@@ -498,93 +496,40 @@ namespace Atmospheric_Flow {
               The flag parameter specifies if we are testing against the test function and/or its gradient ---*/
       }
     }
-    else if(IMEX_stage == 3) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_rho phi(data, EquationData::RHO_INDEX_DOF),
-                       phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                       phi_rho_s_2(data, EquationData::RHO_INDEX_DOF);
-      FEEvaluation_u   phi_u_old(data, EquationData::U_INDEX_DOF),
-                       phi_u_s_2(data, EquationData::U_INDEX_DOF);
-
-      /*--- Loop over all cells ---*/
-      for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_u_s_2.reinit(cell);
-        phi_u_s_2.gather_evaluate(src[3], EvaluationFlags::values);
-
-        phi.reinit(cell);
-
-        /*--- Loop over quadrature points of each cell ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old  = phi_rho_old.get_value(q);
-          const auto& u_old    = phi_u_old.get_value(q);
-
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2 = phi_rho_s_2.get_value(q);
-          const auto& u_s_2   = phi_u_s_2.get_value(q);
-
-          phi.submit_value(rho_old, q);
-          phi.submit_gradient(a31*dt*(rho_old*u_old) +
-                              a32*dt*(rho_s_2*u_s_2), q);
-        }
-
-        phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
-      }
-    }
+    /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_rho phi(data, EquationData::RHO_INDEX_DOF),
-                       phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                       phi_rho_s_2(data, EquationData::RHO_INDEX_DOF),
-                       phi_rho_s_3(data, EquationData::RHO_INDEX_DOF);
-      FEEvaluation_u   phi_u_old(data, EquationData::U_INDEX_DOF),
-                       phi_u_s_2(data, EquationData::U_INDEX_DOF),
-                       phi_u_s_3(data, EquationData::U_INDEX_DOF);
+      FEEvaluation_rho              phi(data, EquationData::RHO_INDEX_DOF);
+      std::vector<FEEvaluation_rho> phi_rho(IMEX_stage - 1, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
+      std::vector<FEEvaluation_u>   phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
 
       /*--- Loop over all cells ---*/
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_u_s_2.reinit(cell);
-        phi_u_s_2.gather_evaluate(src[3], EvaluationFlags::values);
-
-        phi_rho_s_3.reinit(cell);
-        phi_rho_s_3.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_s_3.reinit(cell);
-        phi_u_s_3.gather_evaluate(src[5], EvaluationFlags::values);
+        for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+          phi_rho[s - 1].reinit(cell);
+          phi_rho[s - 1].gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+          phi_u[s - 1].reinit(cell);
+          phi_u[s - 1].gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+        }
 
         phi.reinit(cell);
 
         /*--- Loop over quadrature points of each cell ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old = phi_rho_old.get_value(q);
-          const auto& u_old   = phi_u_old.get_value(q);
+          /*--- Compute the density at the previous step (always needed) ---*/
+          const auto& rho_old = phi_rho.front().get_value(q);
 
-          /*--- Compute the quantities at the second stage ---*/
-          const auto& rho_s_2 = phi_rho_s_2.get_value(q);
-          const auto& u_s_2   = phi_u_s_2.get_value(q);
+          /*--- Compute the quantities at the previous stages for the flux ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            const auto& rho_s = phi_rho[s - 1].get_value(q);
+            const auto& u_s   = phi_u[s - 1].get_value(q);
 
-          /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3 = phi_rho_s_3.get_value(q);
-          const auto& u_s_3   = phi_u_s_3.get_value(q);
+            flux += b[s - 1]*dt*(rho_s*u_s);
+          }
 
           phi.submit_value(rho_old, q);
-          phi.submit_gradient(b1*dt*(rho_old*u_old) +
-                              b2*dt*(rho_s_2*u_s_2) +
-                              b3*dt*(rho_s_3*u_s_3), q);
+          phi.submit_gradient(flux, q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -606,26 +551,23 @@ namespace Atmospheric_Flow {
                                  Vec&                                 dst,
                                  const std::vector<Vec>&              src,
                                  const std::pair<unsigned, unsigned>& face_range) const {
-    if(IMEX_stage == 2) {
+    /*--- Intermediate stages ---*/
+    if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities.
             'true' means that we are reading the information from 'inside', whereas 'false' from 'outside' ---*/
       FEFaceEvaluation_rho phi_m(data, true, EquationData::RHO_INDEX_DOF),
                            phi_p(data, false, EquationData::RHO_INDEX_DOF),
-                           phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF);
-      FEFaceEvaluation_u   phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                           phi_u_old_p(data, false, EquationData::U_INDEX_DOF);
+                           phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
+                           phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
+      FEFaceEvaluation_u   phi_u_m(data, true, EquationData::U_INDEX_DOF),
+                           phi_u_p(data, false, EquationData::U_INDEX_DOF);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
+        phi_rho_m.reinit(face);
+        phi_rho_p.reinit(face);
+        phi_u_m.reinit(face);
+        phi_u_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
@@ -633,18 +575,28 @@ namespace Atmospheric_Flow {
         /*--- Loop over quadrature points of each internal face ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
           const auto& n_minus = phi_m.get_normal_vector(q); /*--- Notice that the unit normal vector is the same from
-                                                                  'both sides'. ---*/
+                                                                 'both sides'. ---*/
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p = phi_rho_old_p.get_value(q);
-          const auto& u_old_m   = phi_u_old_m.get_value(q);
-          const auto& u_old_p   = phi_u_old_p.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_rho_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            phi_rho_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            phi_u_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+            phi_u_p.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
 
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num = a21*dt*num_flux.numerical_flux_continuity(rho_old_m, u_old_m,
-                                                                           rho_old_p, u_old_p,
-                                                                           n_minus);
+            const auto& rho_s_m = phi_rho_m.get_value(q);
+            const auto& rho_s_p = phi_rho_p.get_value(q);
+            const auto& u_s_m   = phi_u_m.get_value(q);
+            const auto& u_s_p   = phi_u_p.get_value(q);
+
+            /*--- Compute the numerical flux ---*/
+            flux_num += a[IMEX_stage - 1][s - 1]*dt*
+                        num_flux.numerical_flux_continuity(rho_s_m, u_s_m,
+                                                           rho_s_p, u_s_p,
+                                                           n_minus);
+          }
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -654,38 +606,22 @@ namespace Atmospheric_Flow {
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    else if(IMEX_stage == 3) {
+    /*--- Final update ---*/
+    else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_rho phi_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_p(data, false, EquationData::RHO_INDEX_DOF),
-                           phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF),
-                           phi_rho_s_2_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_rho_s_2_p(data, false, EquationData::RHO_INDEX_DOF);
-      FEFaceEvaluation_u   phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                           phi_u_old_p(data, false, EquationData::U_INDEX_DOF),
-                           phi_u_s_2_m(data, true, EquationData::U_INDEX_DOF),
-                           phi_u_s_2_p(data, false, EquationData::U_INDEX_DOF);
+      FEFaceEvaluation_rho  phi_m(data, true, EquationData::RHO_INDEX_DOF),
+                            phi_p(data, false, EquationData::RHO_INDEX_DOF),
+                            phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
+                            phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
+      FEFaceEvaluation_u    phi_u_m(data, true, EquationData::U_INDEX_DOF),
+                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-
-        phi_rho_s_2_m.reinit(face);
-        phi_rho_s_2_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_rho_s_2_p.reinit(face);
-        phi_rho_s_2_p.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_u_s_2_m.reinit(face);
-        phi_u_s_2_m.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2_p.reinit(face);
-        phi_u_s_2_p.gather_evaluate(src[3], EvaluationFlags::values);
+        phi_rho_m.reinit(face);
+        phi_rho_p.reinit(face);
+        phi_u_m.reinit(face);
+        phi_u_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
@@ -694,115 +630,26 @@ namespace Atmospheric_Flow {
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p = phi_rho_old_p.get_value(q);
-          const auto& u_old_m   = phi_u_old_m.get_value(q);
-          const auto& u_old_p   = phi_u_old_p.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_rho_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            phi_rho_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
+            phi_u_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
+            phi_u_p.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
 
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m   = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p   = phi_u_s_2_p.get_value(q);
+            const auto& rho_s_m = phi_rho_m.get_value(q);
+            const auto& rho_s_p = phi_rho_p.get_value(q);
+            const auto& u_s_m   = phi_u_m.get_value(q);
+            const auto& u_s_p   = phi_u_p.get_value(q);
 
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num = a31*dt*num_flux.numerical_flux_continuity(rho_old_m, u_old_m,
-                                                                           rho_old_p, u_old_p,
-                                                                           n_minus)
-                               + a32*dt*num_flux.numerical_flux_continuity(rho_s_2_m, u_s_2_m,
-                                                                           rho_s_2_p, u_s_2_p,
-                                                                           n_minus);
-
-          phi_m.submit_value(-flux_num, q);
-          phi_p.submit_value(flux_num, q);
-        }
-
-        phi_m.integrate_scatter(EvaluationFlags::values, dst);
-        phi_p.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-    else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_rho phi_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_p(data, false, EquationData::RHO_INDEX_DOF),
-                           phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF),
-                           phi_rho_s_2_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_rho_s_2_p(data, false, EquationData::RHO_INDEX_DOF),
-                           phi_rho_s_3_m(data, true, EquationData::RHO_INDEX_DOF),
-                           phi_rho_s_3_p(data, false, EquationData::RHO_INDEX_DOF);
-      FEFaceEvaluation_u   phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                           phi_u_old_p(data, false, EquationData::U_INDEX_DOF),
-                           phi_u_s_2_m(data, true, EquationData::U_INDEX_DOF),
-                           phi_u_s_2_p(data, false, EquationData::U_INDEX_DOF),
-                           phi_u_s_3_m(data, true, EquationData::U_INDEX_DOF),
-                           phi_u_s_3_p(data, false, EquationData::U_INDEX_DOF);
-
-      /*--- Loop over all internal faces ---*/
-      for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-
-        phi_rho_s_2_m.reinit(face);
-        phi_rho_s_2_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_rho_s_2_p.reinit(face);
-        phi_rho_s_2_p.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_u_s_2_m.reinit(face);
-        phi_u_s_2_m.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2_p.reinit(face);
-        phi_u_s_2_p.gather_evaluate(src[3], EvaluationFlags::values);
-
-        phi_rho_s_3_m.reinit(face);
-        phi_rho_s_3_m.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_rho_s_3_p.reinit(face);
-        phi_rho_s_3_p.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_s_3_m.reinit(face);
-        phi_u_s_3_m.gather_evaluate(src[5], EvaluationFlags::values);
-        phi_u_s_3_p.reinit(face);
-        phi_u_s_3_p.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_m.reinit(face);
-        phi_p.reinit(face);
-
-        /*--- Loop over all quadrature points. ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
-
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p = phi_rho_old_p.get_value(q);
-          const auto& u_old_m   = phi_u_old_m.get_value(q);
-          const auto& u_old_p   = phi_u_old_p.get_value(q);
-
-          /*--- Compute the quantities at the second stage ---*/
-          const auto& rho_s_2_m = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m   = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p   = phi_u_s_2_p.get_value(q);
-
-          /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3_m = phi_rho_s_3_m.get_value(q);
-          const auto& rho_s_3_p = phi_rho_s_3_p.get_value(q);
-          const auto& u_s_3_m   = phi_u_s_3_m.get_value(q);
-          const auto& u_s_3_p   = phi_u_s_3_p.get_value(q);
-
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num = b1*dt*num_flux.numerical_flux_continuity(rho_old_m, u_old_m,
-                                                                          rho_old_p, u_old_p,
-                                                                          n_minus)
-                               + b2*dt*num_flux.numerical_flux_continuity(rho_s_2_m, u_s_2_m,
-                                                                          rho_s_2_p, u_s_2_p,
-                                                                          n_minus)
-                               + b3*dt*num_flux.numerical_flux_continuity(rho_s_3_m, u_s_3_m,
-                                                                          rho_s_3_p, u_s_3_p,
-                                                                          n_minus);
+            /*--- Compute the numerical_flux ---*/
+            flux_num += b[s - 1]*dt*
+                        num_flux.numerical_flux_continuity(rho_s_m, u_s_m,
+                                                           rho_s_p, u_s_p,
+                                                           n_minus);
+          }
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -889,215 +736,119 @@ namespace Atmospheric_Flow {
     /*--- We create an auxiliary vector for the unit vector along vertical direction. This will never change
           independently on the stage, so we declare it once and for all. ---*/
     Tensor<1, dim, VectorizedArray<Number>> e_k;
+    Tensor<2, dim, VectorizedArray<Number>> identity;
     for(unsigned d = 0; d < dim - 1; ++d) {
-      e_k[d] = make_vectorized_array<Number>(0.0);
+      e_k[d]         = make_vectorized_array<Number>(0.0);
+      identity[d][d] = make_vectorized_array<Number>(1.0);
     }
-    e_k[dim - 1] = make_vectorized_array<Number>(1.0);
+    identity[dim - 1][dim - 1] = make_vectorized_array<Number>(1.0);
+    e_k[dim - 1]               = make_vectorized_array<Number>(1.0);
 
-    if(IMEX_stage == 2) {
+    /*--- Intermediate stages ---*/
+    if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_u    phi(data, EquationData::U_INDEX_DOF),
-                        phi_u_old(data, EquationData::U_INDEX_DOF);
-      FEEvaluation_pres phi_pres_old(data, EquationData::P_INDEX_DOF);
-      FEEvaluation_rho  phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_2(data, EquationData::RHO_INDEX_DOF);
+      FEEvaluation_u                 phi(data, EquationData::U_INDEX_DOF);
+      std::vector<FEEvaluation_u>    phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
+      std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
+      std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
       /*--- Loop over all cells ---*/
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(cell);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[3], EvaluationFlags::values);
+        for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+          phi_rho[s - 1].reinit(cell);
+          phi_rho[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+          phi_u[s - 1].reinit(cell);
+          phi_u[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+          phi_pres[s - 1].reinit(cell);
+          phi_pres[s - 1].gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+        }
+        phi_rho.back().reinit(cell);
+        phi_rho.back().gather_evaluate(src[3*(IMEX_stage - 1)], EvaluationFlags::values);
 
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old            = phi_rho_old.get_value(q);
-          const auto& u_old              = phi_u_old.get_value(q);
-          const auto& pres_old           = phi_pres_old.get_value(q);
+          /*--- Compute the density and the velocity at the previous step (always necessary).
+                Notice that this is ok because of ESDIRK method. ---*/
+          const auto& rho_old = phi_rho.front().get_value(q);
+          const auto& u_old   = phi_u.front().get_value(q);
 
-          const auto& tensor_product_u_n = outer_product(u_old, u_old);
-          /*--- For the sake of compatibility, since after integration by parts, the pressure gradient
-                would be tested against the divergence of the test function. This is equaivalent to test a diagonal matrix
-                with diagonal entries equal to the pressure itself against the gradient of the test function. ---*/
-          Tensor<2, dim, VectorizedArray<Number>> p_n_times_identity;
-          for(unsigned d = 0; d < dim; ++d) {
-            p_n_times_identity[d][d] = pres_old;
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<2, dim, VectorizedArray<Number>> flux;
+          Tensor<1, dim, VectorizedArray<Number>> gravity_term;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            const auto& u_s                = phi_u[s - 1].get_value(q);
+            const auto& tensor_product_u_s = outer_product(u_s, u_s);
+
+            const auto& p_s_times_identity = phi_pres[s - 1].get_value(q)*identity;
+
+            const auto& rho_s              = phi_rho[s - 1].get_value(q);
+
+            gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*(rho_s*e_k/(Fr*Fr));
+
+            flux += a[IMEX_stage - 1][s - 1]*dt*(rho_s*tensor_product_u_s) +
+                    a_tilde[IMEX_stage - 1][s - 1]*dt*(p_s_times_identity/(Ma*Ma));
           }
 
-          const auto& rho_s_2 = phi_rho_s_2.get_value(q);
+          /*--- Add last contribution of the gravity term (implicit treatment) ---*/
+          const auto& rho_s = phi_rho.back().get_value(q);
+          gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(rho_s*e_k/(Fr*Fr));
 
-          phi.submit_value(rho_old*u_old -
-                           a21_tilde*dt*(rho_old*e_k/(Fr*Fr)) -
-                           a22_tilde*dt*(rho_s_2*e_k/(Fr*Fr)), q);
-          phi.submit_gradient(a21*dt*(rho_old*tensor_product_u_n) +
-                              a21_tilde*dt*(p_n_times_identity/(Ma*Ma)), q);
+          phi.submit_value(rho_old*u_old - gravity_term, q);
+          phi.submit_gradient(flux, q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
     }
-    else if(IMEX_stage == 3) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_u    phi(data, EquationData::U_INDEX_DOF),
-                        phi_u_old(data, EquationData::U_INDEX_DOF),
-                        phi_u_s_2(data, EquationData::U_INDEX_DOF);
-      FEEvaluation_pres phi_pres_old(data, EquationData::P_INDEX_DOF),
-                        phi_pres_s_2(data, EquationData::P_INDEX_DOF);
-      FEEvaluation_rho  phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_2(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_3(data, EquationData::RHO_INDEX_DOF);
-
-      /*--- Loop over all cells ---*/
-      for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(cell);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2.reinit(cell);
-        phi_u_s_2.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2.reinit(cell);
-        phi_pres_s_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_rho_s_3.reinit(cell);
-        phi_rho_s_3.gather_evaluate(src[6], EvaluationFlags::values);
-
-        phi.reinit(cell);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old            = phi_rho_old.get_value(q);
-          const auto& u_old              = phi_u_old.get_value(q);
-          const auto& pres_old           = phi_pres_old.get_value(q);
-
-          const auto& tensor_product_u_n = outer_product(u_old, u_old);
-          Tensor<2, dim, VectorizedArray<Number>> p_n_times_identity;
-          for(unsigned d = 0; d < dim; ++d) {
-            p_n_times_identity[d][d] = pres_old;
-          }
-
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2              = phi_rho_s_2.get_value(q);
-          const auto& u_s_2                = phi_u_s_2.get_value(q);
-          const auto& pres_s_2             = phi_pres_s_2.get_value(q);
-
-          const auto& tensor_product_u_s_2 = outer_product(u_s_2, u_s_2);
-          Tensor<2, dim, VectorizedArray<Number>> p_s_2_times_identity;
-          for(unsigned d = 0; d < dim; ++d) {
-            p_s_2_times_identity[d][d] = pres_s_2;
-          }
-
-          const auto& rho_s_3 = phi_rho_s_3.get_value(q);
-
-          phi.submit_value(rho_old*u_old -
-                           a31_tilde*dt*(rho_old*e_k/(Fr*Fr)) -
-                           a32_tilde*dt*(rho_s_2*e_k/(Fr*Fr)) -
-                           a33_tilde*dt*(rho_s_3*e_k/(Fr*Fr)), q);
-          phi.submit_gradient(a31*dt*(rho_old*tensor_product_u_n) +
-                              a31_tilde*dt*(p_n_times_identity/(Ma*Ma)) +
-                              a32*dt*(rho_s_2*tensor_product_u_s_2) +
-                              a32_tilde*dt*(p_s_2_times_identity/(Ma*Ma)), q);
-        }
-
-        phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
-      }
-    }
+    /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_u    phi(data, EquationData::U_INDEX_DOF),
-                        phi_u_old(data, EquationData::U_INDEX_DOF),
-                        phi_u_s_2(data, EquationData::U_INDEX_DOF),
-                        phi_u_s_3(data, EquationData::U_INDEX_DOF);
-      FEEvaluation_pres phi_pres_old(data, EquationData::P_INDEX_DOF),
-                        phi_pres_s_2(data, EquationData::P_INDEX_DOF),
-                        phi_pres_s_3(data, EquationData::P_INDEX_DOF);
-      FEEvaluation_rho  phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_2(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_3(data, EquationData::RHO_INDEX_DOF);
+      FEEvaluation_u                 phi(data, EquationData::U_INDEX_DOF);
+      std::vector<FEEvaluation_u>    phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
+      std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
+      std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage - 1, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
       /*--- Loop over all cells ---*/
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(cell);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2.reinit(cell);
-        phi_u_s_2.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2.reinit(cell);
-        phi_pres_s_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_rho_s_3.reinit(cell);
-        phi_rho_s_3.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_u_s_3.reinit(cell);
-        phi_u_s_3.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_pres_s_3.reinit(cell);
-        phi_pres_s_3.gather_evaluate(src[8], EvaluationFlags::values);
+        for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+          phi_rho[s - 1].reinit(cell);
+          phi_rho[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+          phi_u[s - 1].reinit(cell);
+          phi_u[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+          phi_pres[s - 1].reinit(cell);
+          phi_pres[s - 1].gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+        }
 
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old            = phi_rho_old.get_value(q);
-          const auto& u_old              = phi_u_old.get_value(q);
-          const auto& pres_old           = phi_pres_old.get_value(q);
+          /*--- Compute the density and the velocity at the previous step (always necessary).
+                Notice that this is ok because of ESDIRK method. ---*/
+          const auto& rho_old = phi_rho.front().get_value(q);
+          const auto& u_old   = phi_u.front().get_value(q);
 
-          const auto& tensor_product_u_n = outer_product(u_old, u_old);
-          Tensor<2, dim, VectorizedArray<Number>> p_n_times_identity;
-          for(unsigned d = 0; d < dim; ++d) {
-            p_n_times_identity[d][d] = pres_old;
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<2, dim, VectorizedArray<Number>> flux;
+          Tensor<1, dim, VectorizedArray<Number>> gravity_term;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            const auto& u_s                = phi_u[s - 1].get_value(q);
+            const auto& tensor_product_u_s = outer_product(u_s, u_s);
+
+            const auto& p_s_times_identity = phi_pres[s - 1].get_value(q)*identity;
+
+            const auto& rho_s              = phi_rho[s - 1].get_value(q);
+
+            gravity_term += b_tilde[s - 1]*dt*(rho_s*e_k/(Fr*Fr));
+
+            flux += b[s - 1]*dt*(rho_s*tensor_product_u_s) +
+                    b_tilde[s - 1]*dt*(p_s_times_identity/(Ma*Ma));
           }
 
-          /*--- Compute the quantities at the second stage ---*/
-          const auto& rho_s_2              = phi_rho_s_2.get_value(q);
-          const auto& u_s_2                = phi_u_s_2.get_value(q);
-          const auto& pres_s_2             = phi_pres_s_2.get_value(q);
-
-          const auto& tensor_product_u_s_2 = outer_product(u_s_2, u_s_2);
-          Tensor<2, dim, VectorizedArray<Number>> p_s_2_times_identity;
-          for(unsigned d = 0; d < dim; ++d) {
-            p_s_2_times_identity[d][d] = pres_s_2;
-          }
-
-          /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3              = phi_rho_s_3.get_value(q);
-          const auto& u_s_3                = phi_u_s_3.get_value(q);
-          const auto& pres_s_3             = phi_pres_s_3.get_value(q);
-
-          const auto& tensor_product_u_s_3 = outer_product(u_s_3, u_s_3);
-          Tensor<2, dim, VectorizedArray<Number>> p_s_3_times_identity;
-          for(unsigned d = 0; d < dim; ++d) {
-            p_s_3_times_identity[d][d] = pres_s_3;
-          }
-
-          phi.submit_value(rho_old*u_old -
-                           b1*dt*(rho_old*e_k/(Fr*Fr)) -
-                           b2*dt*(rho_s_2*e_k/(Fr*Fr)) -
-                           b3*dt*(rho_s_3*e_k/(Fr*Fr)), q);
-          phi.submit_gradient(b1*dt*(rho_old*tensor_product_u_n) +
-                              b1*dt*(p_n_times_identity/(Ma*Ma)) +
-                              b2*dt*(rho_s_2*tensor_product_u_s_2) +
-                              b2*dt*(p_s_2_times_identity/(Ma*Ma)) +
-                              b3*dt*(rho_s_3*tensor_product_u_s_3) +
-                              b3*dt*(p_s_3_times_identity/(Ma*Ma)), q);
+          phi.submit_value(rho_old*u_old - gravity_term, q);
+          phi.submit_gradient(flux, q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -1118,31 +869,26 @@ namespace Atmospheric_Flow {
                                   Vec&                                 dst,
                                   const std::vector<Vec>&              src,
                                   const std::pair<unsigned, unsigned>& face_range) const {
-    if(IMEX_stage == 2) {
+    /*--- Intermediate stages ---*/
+    if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation_u    phi_m(data, true, EquationData::U_INDEX_DOF),
                             phi_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_old_p(data, false, EquationData::U_INDEX_DOF);
-      FEFaceEvaluation_pres phi_pres_old_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_old_p(data, false, EquationData::P_INDEX_DOF);
-      FEFaceEvaluation_rho  phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF);
+                            phi_u_m(data, true, EquationData::U_INDEX_DOF),
+                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
+      FEFaceEvaluation_pres phi_pres_m(data, true, EquationData::P_INDEX_DOF),
+                            phi_pres_p(data, false, EquationData::P_INDEX_DOF);
+      FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
+                            phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old_m.reinit(face);
-        phi_pres_old_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_pres_old_p.reinit(face);
-        phi_pres_old_p.gather_evaluate(src[2], EvaluationFlags::values);
+        phi_rho_m.reinit(face);
+        phi_rho_p.reinit(face);
+        phi_u_m.reinit(face);
+        phi_u_p.reinit(face);
+        phi_pres_m.reinit(face);
+        phi_pres_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
@@ -1151,22 +897,32 @@ namespace Atmospheric_Flow {
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
-          const auto& u_old_m    = phi_u_old_m.get_value(q);
-          const auto& u_old_p    = phi_u_old_p.get_value(q);
-          const auto& pres_old_m = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p = phi_pres_old_p.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux_num;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_u_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_pres_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            phi_pres_p.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num_explicit = a21*dt*num_flux.numerical_flux_momentum_explicit(rho_old_m, u_old_m,
-                                                                                           rho_old_p, u_old_p,
-                                                                                           n_minus);
-          const auto& flux_num_implicit = a21_tilde*dt*num_flux.numerical_flux_momentum_implicit(pres_old_m,
-                                                                                                 pres_old_p,
-                                                                                                 n_minus);
-          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
+            const auto& rho_s_m  = phi_rho_m.get_value(q);
+            const auto& rho_s_p  = phi_rho_p.get_value(q);
+            const auto& u_s_m    = phi_u_m.get_value(q);
+            const auto& u_s_p    = phi_u_p.get_value(q);
+            const auto& pres_s_m = phi_pres_m.get_value(q);
+            const auto& pres_s_p = phi_pres_p.get_value(q);
+
+            /*--- Compute the numerical flux ---*/
+            flux_num += a[IMEX_stage - 1][s - 1]*dt*
+                        num_flux.numerical_flux_momentum_explicit(rho_s_m, u_s_m,
+                                                                  rho_s_p, u_s_p,
+                                                                  n_minus)
+                      + a_tilde[IMEX_stage - 1][s - 1]*dt*
+                        num_flux.numerical_flux_momentum_implicit(pres_s_m, pres_s_p, n_minus);
+          }
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -1176,160 +932,26 @@ namespace Atmospheric_Flow {
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    else if(IMEX_stage == 3) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_u    phi_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_old_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_p(data, false, EquationData::U_INDEX_DOF);
-      FEFaceEvaluation_pres phi_pres_old_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_old_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_p(data, false, EquationData::P_INDEX_DOF);
-      FEFaceEvaluation_rho  phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_p(data, false, EquationData::RHO_INDEX_DOF);
-
-      /*---Loop over all internal faces ---*/
-      for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old_m.reinit(face);
-        phi_pres_old_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_pres_old_p.reinit(face);
-        phi_pres_old_p.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2_m.reinit(face);
-        phi_rho_s_2_m.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_rho_s_2_p.reinit(face);
-        phi_rho_s_2_p.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2_m.reinit(face);
-        phi_u_s_2_m.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_s_2_p.reinit(face);
-        phi_u_s_2_p.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2_m.reinit(face);
-        phi_pres_s_2_m.gather_evaluate(src[5], EvaluationFlags::values);
-        phi_pres_s_2_p.reinit(face);
-        phi_pres_s_2_p.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_m.reinit(face);
-        phi_p.reinit(face);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
-
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
-          const auto& u_old_m    = phi_u_old_m.get_value(q);
-          const auto& u_old_p    = phi_u_old_p.get_value(q);
-          const auto& pres_old_m = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p = phi_pres_old_p.get_value(q);
-
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
-          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
-
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num_explicit = a31*dt*num_flux.numerical_flux_momentum_explicit(rho_old_m, u_old_m,
-                                                                                           rho_old_p, u_old_p,
-                                                                                           n_minus)
-                                        + a32*dt*num_flux.numerical_flux_momentum_explicit(rho_s_2_m, u_s_2_m,
-                                                                                           rho_s_2_p, u_s_2_p,
-                                                                                           n_minus);
-          const auto& flux_num_implicit = a31_tilde*dt*num_flux.numerical_flux_momentum_implicit(pres_old_m,
-                                                                                                 pres_old_p,
-                                                                                                 n_minus)
-                                        + a32_tilde*dt*num_flux.numerical_flux_momentum_implicit(pres_s_2_m,
-                                                                                                 pres_s_2_p,
-                                                                                                 n_minus);
-          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
-
-          phi_m.submit_value(-flux_num, q);
-          phi_p.submit_value(flux_num, q);
-        }
-
-        phi_m.integrate_scatter(EvaluationFlags::values, dst);
-        phi_p.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
+    /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation_u    phi_m(data, true, EquationData::U_INDEX_DOF),
                             phi_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_old_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_s_3_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_s_3_p(data, false, EquationData::U_INDEX_DOF);
-      FEFaceEvaluation_pres phi_pres_old_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_old_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_s_3_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_s_3_p(data, false, EquationData::P_INDEX_DOF);
-      FEFaceEvaluation_rho  phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_p(data, false, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_3_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_3_p(data, false, EquationData::RHO_INDEX_DOF);
+                            phi_u_m(data, true, EquationData::U_INDEX_DOF),
+                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
+      FEFaceEvaluation_pres phi_pres_m(data, true, EquationData::P_INDEX_DOF),
+                            phi_pres_p(data, false, EquationData::P_INDEX_DOF);
+      FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
+                            phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old_m.reinit(face);
-        phi_pres_old_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_pres_old_p.reinit(face);
-        phi_pres_old_p.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2_m.reinit(face);
-        phi_rho_s_2_m.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_rho_s_2_p.reinit(face);
-        phi_rho_s_2_p.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2_m.reinit(face);
-        phi_u_s_2_m.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_s_2_p.reinit(face);
-        phi_u_s_2_p.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2_m.reinit(face);
-        phi_pres_s_2_m.gather_evaluate(src[5], EvaluationFlags::values);
-        phi_pres_s_2_p.reinit(face);
-        phi_pres_s_2_p.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_rho_s_3_m.reinit(face);
-        phi_rho_s_3_m.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_rho_s_3_p.reinit(face);
-        phi_rho_s_3_p.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_u_s_3_m.reinit(face);
-        phi_u_s_3_m.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_u_s_3_p.reinit(face);
-        phi_u_s_3_p.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_pres_s_3_m.reinit(face);
-        phi_pres_s_3_m.gather_evaluate(src[8], EvaluationFlags::values);
-        phi_pres_s_3_p.reinit(face);
-        phi_pres_s_3_p.gather_evaluate(src[8], EvaluationFlags::values);
+        phi_rho_m.reinit(face);
+        phi_rho_p.reinit(face);
+        phi_u_m.reinit(face);
+        phi_u_p.reinit(face);
+        phi_pres_m.reinit(face);
+        phi_pres_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
@@ -1338,50 +960,32 @@ namespace Atmospheric_Flow {
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
-          const auto& u_old_m    = phi_u_old_m.get_value(q);
-          const auto& u_old_p    = phi_u_old_p.get_value(q);
-          const auto& pres_old_m = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p = phi_pres_old_p.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux_num;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_u_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_pres_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            phi_pres_p.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
-          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
+            const auto& rho_s_m  = phi_rho_m.get_value(q);
+            const auto& rho_s_p  = phi_rho_p.get_value(q);
+            const auto& u_s_m    = phi_u_m.get_value(q);
+            const auto& u_s_p    = phi_u_p.get_value(q);
+            const auto& pres_s_m = phi_pres_m.get_value(q);
+            const auto& pres_s_p = phi_pres_p.get_value(q);
 
-          /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3_m  = phi_rho_s_3_m.get_value(q);
-          const auto& rho_s_3_p  = phi_rho_s_3_p.get_value(q);
-          const auto& u_s_3_m    = phi_u_s_3_m.get_value(q);
-          const auto& u_s_3_p    = phi_u_s_3_p.get_value(q);
-          const auto& pres_s_3_m = phi_pres_s_3_m.get_value(q);
-          const auto& pres_s_3_p = phi_pres_s_3_p.get_value(q);
-
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num_explicit = b1*dt*num_flux.numerical_flux_momentum_explicit(rho_old_m, u_old_m,
-                                                                                          rho_old_p, u_old_p,
-                                                                                          n_minus) +
-                                          b2*dt*num_flux.numerical_flux_momentum_explicit(rho_s_2_m, u_s_2_m,
-                                                                                          rho_s_2_p, u_s_2_p,
-                                                                                          n_minus) +
-                                          b3*dt*num_flux.numerical_flux_momentum_explicit(rho_s_3_m, u_s_3_m,
-                                                                                          rho_s_3_p, u_s_3_p,
-                                                                                          n_minus);
-          const auto& flux_num_implicit = b1*dt*num_flux.numerical_flux_momentum_implicit(pres_old_m,
-                                                                                          pres_old_p,
-                                                                                          n_minus)
-                                        + b2*dt*num_flux.numerical_flux_momentum_implicit(pres_s_2_m,
-                                                                                          pres_s_2_p,
-                                                                                          n_minus)
-                                        + b3*dt*num_flux.numerical_flux_momentum_implicit(pres_s_3_m,
-                                                                                          pres_s_3_p,
-                                                                                          n_minus);
-          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
+            /*--- Compute the numerical flux ---*/
+            flux_num += b[s - 1]*dt*
+                        num_flux.numerical_flux_momentum_explicit(rho_s_m, u_s_m,
+                                                                  rho_s_p, u_s_p,
+                                                                  n_minus)
+                      + b_tilde[s - 1]*dt*
+                        num_flux.numerical_flux_momentum_implicit(pres_s_m, pres_s_p, n_minus);
+          }
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -1407,15 +1011,15 @@ namespace Atmospheric_Flow {
                                       Vec&                                 dst,
                                       const std::vector<Vec>&              src,
                                       const std::pair<unsigned, unsigned>& face_range) const {
-    if(IMEX_stage == 2) {
+    /*--- Intermediate stages ---*/
+    if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation_u_boundary    phi(data, true, EquationData::U_INDEX_DOF, 1);
-      FEFaceEvaluation_pres_boundary phi_pres_old(data, true, EquationData::P_INDEX_DOF, 1);
+      FEFaceEvaluation_pres_boundary phi_pres(data, true, EquationData::P_INDEX_DOF, 1);
 
       /*--- Loop over all boundary faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_pres_old.reinit(face);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
+        phi_pres.reinit(face);
 
         phi.reinit(face);
 
@@ -1423,71 +1027,35 @@ namespace Atmospheric_Flow {
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
           const auto& n_minus = phi.get_normal_vector(q);
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& pres_old   = phi_pres_old.get_value(q);
-          const auto& pres_old_D = pres_old;
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux_num;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_pres.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
-          phi.submit_value(-a21_tilde*dt*
-                            num_flux.numerical_flux_momentum_implicit(pres_old, pres_old_D, n_minus), q);
+            const auto& pres_s   = phi_pres.get_value(q);
+            const auto& pres_s_D = pres_s;
+
+            /*--- Compute the numerical flux ---*/
+            flux_num += a_tilde[IMEX_stage - 1][s - 1]*dt*
+                        num_flux.numerical_flux_momentum_implicit(pres_s, pres_s_D, n_minus);
+          }
+
+          phi.submit_value(-flux_num, q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    else if(IMEX_stage == 3) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_u_boundary    phi(data, true, EquationData::U_INDEX_DOF, 1);
-      FEFaceEvaluation_pres_boundary phi_pres_old(data, true, EquationData::P_INDEX_DOF, 1),
-                                     phi_pres_s_2(data, true, EquationData::P_INDEX_DOF, 1);
-
-      /*--- Loop over all boundary faces ---*/
-      for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_pres_old.reinit(face);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_pres_s_2.reinit(face);
-        phi_pres_s_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi.reinit(face);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_minus = phi.get_normal_vector(q);
-
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& pres_old   = phi_pres_old.get_value(q);
-          const auto& pres_old_D = pres_old;
-
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& pres_s_2   = phi_pres_s_2.get_value(q);
-          const auto& pres_s_2_D = pres_s_2;
-
-          phi.submit_value(-a31_tilde*dt*
-                            num_flux.numerical_flux_momentum_implicit(pres_old, pres_old_D, n_minus)
-                           -a32_tilde*dt*
-                            num_flux.numerical_flux_momentum_implicit(pres_s_2, pres_s_2_D, n_minus), q);
-        }
-
-        phi.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
+    /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation_u_boundary    phi(data, true, EquationData::U_INDEX_DOF, 1);
-      FEFaceEvaluation_pres_boundary phi_pres_old(data, true, EquationData::P_INDEX_DOF, 1),
-                                     phi_pres_s_2(data, true, EquationData::P_INDEX_DOF, 1),
-                                     phi_pres_s_3(data, true, EquationData::P_INDEX_DOF, 1);
+      FEFaceEvaluation_pres_boundary phi_pres(data, true, EquationData::P_INDEX_DOF, 1);
 
       /*--- Loop over all boundary faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_pres_old.reinit(face);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_pres_s_2.reinit(face);
-        phi_pres_s_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_pres_s_3.reinit(face);
-        phi_pres_s_3.gather_evaluate(src[8], EvaluationFlags::values);
+        phi_pres.reinit(face);
 
         phi.reinit(face);
 
@@ -1495,24 +1063,21 @@ namespace Atmospheric_Flow {
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
           const auto& n_minus = phi.get_normal_vector(q);
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& pres_old   = phi_pres_old.get_value(q);
-          const auto& pres_old_D = pres_old;
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux_num;
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_pres.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& pres_s_2   = phi_pres_s_2.get_value(q);
-          const auto& pres_s_2_D = pres_s_2;
+            const auto& pres_s   = phi_pres.get_value(q);
+            const auto& pres_s_D = pres_s;
 
-          /*--- Compute the quantities at the final steage---*/
-          const auto& pres_s_3   = phi_pres_s_3.get_value(q);
-          const auto& pres_s_3_D = pres_s_3;
+            /*--- Compute the numerical flux ---*/
+            flux_num += b_tilde[s - 1]*dt*
+                        num_flux.numerical_flux_momentum_implicit(pres_s, pres_s_D, n_minus);
+          }
 
-          phi.submit_value(-b1*dt*
-                            num_flux.numerical_flux_momentum_implicit(pres_old, pres_old_D, n_minus)
-                           -b2*dt*
-                            num_flux.numerical_flux_momentum_implicit(pres_s_2, pres_s_2_D, n_minus)
-                           -b3*dt*
-                            num_flux.numerical_flux_momentum_implicit(pres_s_3, pres_s_3_D, n_minus), q);
+          phi.submit_value(-flux_num, q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1609,10 +1174,7 @@ namespace Atmospheric_Flow {
     FEEvaluation_u    phi(data, EquationData::U_INDEX_DOF);
     FEEvaluation_pres phi_src(data, EquationData::P_INDEX_DOF);
 
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
-    const auto coeff = (IMEX_stage == 2) ? a22_tilde : a33_tilde;
-
+    /*--- Loop over all cells. ---*/
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_src.reinit(cell);
       phi_src.gather_evaluate(src, EvaluationFlags::values);
@@ -1621,7 +1183,7 @@ namespace Atmospheric_Flow {
 
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
         /*--- Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'. ---*/
-        phi.submit_divergence(-coeff*dt*(phi_src.get_value(q)/(Ma*Ma)), q);
+        phi.submit_divergence(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(phi_src.get_value(q)/(Ma*Ma)), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::gradients, dst);
@@ -1647,10 +1209,6 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation_pres phi_src_m(data, true, EquationData::P_INDEX_DOF),
                           phi_src_p(data, false, EquationData::P_INDEX_DOF);
 
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
-    const auto coeff = (IMEX_stage == 2) ? a22_tilde : a33_tilde;
-
     /*--- Loop over all internal faces ---*/
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_src_m.reinit(face);
@@ -1668,7 +1226,7 @@ namespace Atmospheric_Flow {
         const auto& avg_term = 0.5*(phi_src_m.get_value(q) +
                                     phi_src_p.get_value(q));
 
-        const auto& flux_num = coeff*dt*
+        const auto& flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                                (avg_term/(Ma*Ma)*n_minus);
 
         phi_m.submit_value(flux_num, q);
@@ -1697,10 +1255,6 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation_u_boundary    phi(data, true, EquationData::U_INDEX_DOF, 1);
     FEFaceEvaluation_pres_boundary phi_src(data, true, EquationData::P_INDEX_DOF, 1);
 
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
-    const auto coeff = (IMEX_stage == 2) ? a22_tilde : a33_tilde;
-
     /*--- Loop over all boundary faces ---*/
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_src.reinit(face);
@@ -1717,7 +1271,8 @@ namespace Atmospheric_Flow {
         const auto& avg_term     = 0.5*(phi_src.get_value(q) +
                                         pres_fixed_D);
 
-        phi.submit_value(coeff*dt*(avg_term/(Ma*Ma)*n_minus), q);
+        phi.submit_value(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
+                         (avg_term/(Ma*Ma)*n_minus), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1743,119 +1298,69 @@ namespace Atmospheric_Flow {
                                 Vec&                                 dst,
                                 const std::vector<Vec>&              src,
                                 const std::pair<unsigned, unsigned>& cell_range) const {
-    if(IMEX_stage == 2) {
+    /*--- Intermediate stages ---*/
+    if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_pres phi(data, EquationData::P_INDEX_DOF),
-                        phi_pres_old(data, EquationData::P_INDEX_DOF);
-      FEEvaluation_u    phi_u_old(data, EquationData::U_INDEX_DOF),
-                        phi_u_fixed(data, EquationData::U_INDEX_DOF);
-      FEEvaluation_rho  phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_2(data, EquationData::RHO_INDEX_DOF);
+      FEEvaluation_pres              phi(data, EquationData::P_INDEX_DOF);
+      std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
+      std::vector<FEEvaluation_u>    phi_u(IMEX_stage, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
+      std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
       /*--- Loop over all cells ---*/
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(cell);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_fixed.reinit(cell);
-        phi_u_fixed.gather_evaluate(src[4], EvaluationFlags::values);
-
-        phi.reinit(cell);
-
-        /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old  = phi_rho_old.get_value(q);
-          const auto& u_old    = phi_u_old.get_value(q);
-          const auto& pres_old = phi_pres_old.get_value(q);
-
-          /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop ---*/
-          const auto& rho_s_2 = phi_rho_s_2.get_value(q);
-          const auto& u_fixed = phi_u_fixed.get_value(q);
-
-          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*pres_old +
-                           rho_old*(0.5*(Ma*Ma)*scalar_product(u_old, u_old)) -
-                           rho_s_2*(0.5*(Ma*Ma)*scalar_product(u_fixed, u_fixed)) -
-                           a21_tilde*dt*((Ma*Ma)/(Fr*Fr)*rho_old*u_old[dim - 1]) -
-                           a22_tilde*dt*((Ma*Ma)/(Fr*Fr)*rho_s_2*u_fixed[dim - 1]), q);
-          phi.submit_gradient(a21*dt*(0.5*(Ma*Ma)*scalar_product(u_old, u_old)*rho_old*u_old) +
-                              a21_tilde*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                            pres_old*u_old), q);
-          /*--- The specific enthalpy is computed with the generic relation e + p/rho ---*/
+        for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+          phi_rho[s - 1].reinit(cell);
+          phi_rho[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+          phi_u[s - 1].reinit(cell);
+          phi_u[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+          phi_pres[s - 1].reinit(cell);
+          phi_pres[s - 1].gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
         }
-
-        phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
-      }
-    }
-    else if(IMEX_stage == 3) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_pres phi(data, EquationData::P_INDEX_DOF),
-                        phi_pres_old(data, EquationData::P_INDEX_DOF),
-                        phi_pres_s_2(data, EquationData::P_INDEX_DOF);
-      FEEvaluation_u    phi_u_old(data, EquationData::U_INDEX_DOF),
-                        phi_u_s_2(data, EquationData::U_INDEX_DOF),
-                        phi_u_fixed(data, EquationData::U_INDEX_DOF);
-      FEEvaluation_rho  phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_2(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_3(data, EquationData::RHO_INDEX_DOF);
-
-      /*--- Loop over all cells ---*/
-      for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(cell);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2.reinit(cell);
-        phi_u_s_2.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2.reinit(cell);
-        phi_pres_s_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_rho_s_3.reinit(cell);
-        phi_rho_s_3.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_u_fixed.reinit(cell);
-        phi_u_fixed.gather_evaluate(src[7], EvaluationFlags::values);
+        phi_rho.back().reinit(cell);
+        phi_rho.back().gather_evaluate(src[3*(IMEX_stage - 1)], EvaluationFlags::values);
+        phi_u.back().reinit(cell);
+        phi_u.back().gather_evaluate(src[3*(IMEX_stage - 1) + 1], EvaluationFlags::values);
 
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old  = phi_rho_old.get_value(q);
-          const auto& u_old    = phi_u_old.get_value(q);
-          const auto& pres_old = phi_pres_old.get_value(q);
+          /*--- Compute the quantities at the previous step (always necessary).
+                Notice that this is ok because of ESDIRK method. ---*/
+          const auto& rho_old  = phi_rho.front().get_value(q);
+          const auto& u_old    = phi_u.front().get_value(q);
+          const auto& pres_old = phi_pres.front().get_value(q);
+          const auto& rhoE_old = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old
+                               + rho_old*(0.5*(Ma*Ma)*scalar_product(u_old, u_old));
 
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2  = phi_rho_s_2.get_value(q);
-          const auto& u_s_2    = phi_u_s_2.get_value(q);
-          const auto& pres_s_2 = phi_pres_s_2.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux;
+          VectorizedArray<Number> gravity_term = make_vectorized_array<Number>(0.0);
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            const auto& rho_s  = phi_rho[s - 1].get_value(q);
+            const auto& u_s    = phi_u[s - 1].get_value(q);
+            const auto& pres_s = phi_pres[s - 1].get_value(q);
 
-          /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop ---*/
-          const auto& rho_s_3  = phi_rho_s_3.get_value(q);
-          const auto& u_fixed  = phi_u_fixed.get_value(q);
+            gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*
+                            ((Ma*Ma)/(Fr*Fr)*rho_s*u_s[dim - 1]);
 
-          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*pres_old +
-                           rho_old*(0.5*(Ma*Ma)*scalar_product(u_old, u_old)) -
-                           rho_s_3*(0.5*(Ma*Ma)*scalar_product(u_fixed, u_fixed)) -
-                           a31_tilde*dt*((Ma*Ma)/(Fr*Fr)*rho_old*u_old[dim - 1]) -
-                           a32_tilde*dt*((Ma*Ma)/(Fr*Fr)*rho_s_2*u_s_2[dim - 1]) -
-                           a33_tilde*dt*((Ma*Ma)/(Fr*Fr)*rho_s_3*u_fixed[dim - 1]), q);
-          phi.submit_gradient(a31*dt*(0.5*(Ma*Ma)*scalar_product(u_old, u_old)*rho_old*u_old) +
-                              a31_tilde*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                            pres_old*u_old) +
-                              a32*dt*(0.5*(Ma*Ma)*scalar_product(u_s_2, u_s_2)*rho_s_2*u_s_2) +
-                              a32_tilde*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                            pres_s_2*u_s_2), q);
+            flux += a[IMEX_stage - 1][s - 1]*dt*
+                    (rho_s*(0.5*(Ma*Ma)*scalar_product(u_s, u_s))*u_s)
+                  + a_tilde[IMEX_stage - 1][s - 1]*dt*
+                    (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_s*u_s));
+          }
+
+          /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop.
+                Add last contribution of the gravity term (implicit treatment) ---*/
+          const auto& rho_for_fixed_s = phi_rho.back().get_value(q);
+          const auto& u_fixed_s       = phi_u.back().get_value(q);
+          gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
+                          ((Ma*Ma)/(Fr*Fr)*rho_for_fixed_s*u_fixed_s[dim - 1]);
+
+          phi.submit_value(rhoE_old -
+                           rho_for_fixed_s*(0.5*(Ma*Ma)*scalar_product(u_fixed_s, u_fixed_s)) -
+                           gravity_term, q);
+          phi.submit_gradient(flux, q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -1863,85 +1368,63 @@ namespace Atmospheric_Flow {
     }
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEEvaluation_pres phi(data, EquationData::P_INDEX_DOF),
-                        phi_pres_old(data, EquationData::P_INDEX_DOF),
-                        phi_pres_s_2(data, EquationData::P_INDEX_DOF),
-                        phi_pres_s_3(data, EquationData::P_INDEX_DOF);
-      FEEvaluation_u    phi_u_old(data, EquationData::U_INDEX_DOF),
-                        phi_u_s_2(data, EquationData::U_INDEX_DOF),
-                        phi_u_s_3(data, EquationData::U_INDEX_DOF),
-                        phi_u_curr(data, EquationData::U_INDEX_DOF);
-      FEEvaluation_rho  phi_rho_old(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_2(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_s_3(data, EquationData::RHO_INDEX_DOF),
-                        phi_rho_curr(data, EquationData::RHO_INDEX_DOF);
+      FEEvaluation_pres              phi(data, EquationData::P_INDEX_DOF);
+      std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
+      std::vector<FEEvaluation_u>    phi_u(IMEX_stage, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
+      std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
       /*--- Loop over all cells ---*/
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        phi_rho_old.reinit(cell);
-        phi_rho_old.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old.reinit(cell);
-        phi_u_old.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old.reinit(cell);
-        phi_pres_old.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2.reinit(cell);
-        phi_rho_s_2.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2.reinit(cell);
-        phi_u_s_2.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2.reinit(cell);
-        phi_pres_s_2.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_rho_s_3.reinit(cell);
-        phi_rho_s_3.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_u_s_3.reinit(cell);
-        phi_u_s_3.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_pres_s_3.reinit(cell);
-        phi_pres_s_3.gather_evaluate(src[8], EvaluationFlags::values);
-
-        phi_rho_curr.reinit(cell);
-        phi_rho_curr.gather_evaluate(src[9], EvaluationFlags::values);
-        phi_u_curr.reinit(cell);
-        phi_u_curr.gather_evaluate(src[10], EvaluationFlags::values);
+        for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+          phi_rho[s - 1].reinit(cell);
+          phi_rho[s - 1].gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+          phi_u[s - 1].reinit(cell);
+          phi_u[s - 1].gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+          phi_pres[s - 1].reinit(cell);
+          phi_pres[s - 1].gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+        }
+        phi_rho.back().reinit(cell);
+        phi_rho.back().gather_evaluate(src[3*(IMEX_stage - 1)], EvaluationFlags::values);
+        phi_u.back().reinit(cell);
+        phi_u.back().gather_evaluate(src[3*(IMEX_stage - 1) + 1], EvaluationFlags::values);
 
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old  = phi_rho_old.get_value(q);
-          const auto& u_old    = phi_u_old.get_value(q);
-          const auto& pres_old = phi_pres_old.get_value(q);
+          /*--- Compute the quantities at the previous step (always necessary).
+                Notice that this is ok because of ESDIRK method. ---*/
+          const auto& rho_old  = phi_rho.front().get_value(q);
+          const auto& u_old    = phi_u.front().get_value(q);
+          const auto& pres_old = phi_pres.front().get_value(q);
+          const auto& rhoE_old = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old
+                               + rho_old*(0.5*(Ma*Ma)*scalar_product(u_old, u_old));
 
-          /*--- Compute the quantities at the second stage ---*/
-          const auto& rho_s_2  = phi_rho_s_2.get_value(q);
-          const auto& u_s_2    = phi_u_s_2.get_value(q);
-          const auto& pres_s_2 = phi_pres_s_2.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          Tensor<1, dim, VectorizedArray<Number>> flux;
+          VectorizedArray<Number> gravity_term = make_vectorized_array<Number>(0.0);
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            const auto& rho_s  = phi_rho[s - 1].get_value(q);
+            const auto& u_s    = phi_u[s - 1].get_value(q);
+            const auto& pres_s = phi_pres[s - 1].get_value(q);
 
-          /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3  = phi_rho_s_3.get_value(q);
-          const auto& u_s_3    = phi_u_s_3.get_value(q);
-          const auto& pres_s_3 = phi_pres_s_3.get_value(q);
+            gravity_term += b_tilde[s - 1]*dt*
+                            ((Ma*Ma)/(Fr*Fr)*rho_s*u_s[dim - 1]);
 
-          /*--- Assign to rhs the contribution of the (already updated) kinetic energy ---*/
-          const auto& rho_curr = phi_rho_curr.get_value(q);
-          const auto& u_curr   = phi_u_curr.get_value(q);
+            flux += b[s - 1]*dt*
+                    (rho_s*(0.5*(Ma*Ma)*scalar_product(u_s, u_s))*u_s)
+                  + b_tilde[s - 1]*dt*
+                    (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_s*u_s));
+          }
 
-          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*pres_old +
-                           rho_old*(0.5*(Ma*Ma)*scalar_product(u_old, u_old)) -
+          /*--- We assign to the rhs the contribution due to the (already updated) kinetic energy ---*/
+          const auto& rho_curr = phi_rho.back().get_value(q);
+          const auto& u_curr   = phi_u.back().get_value(q);
+
+          phi.submit_value(rhoE_old -
                            rho_curr*(0.5*(Ma*Ma)*scalar_product(u_curr, u_curr)) -
-                           b1*dt*((Ma*Ma)/(Fr*Fr)*rho_old*u_old[dim - 1]) -
-                           b2*dt*((Ma*Ma)/(Fr*Fr)*rho_s_2*u_s_2[dim - 1]) -
-                           b3*dt*((Ma*Ma)/(Fr*Fr)*rho_s_3*u_s_3[dim - 1]), q);
-          phi.submit_gradient(b1*dt*(0.5*(Ma*Ma)*scalar_product(u_old, u_old)*rho_old*u_old) +
-                              b1*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                     pres_old*u_old) +
-                              b2*dt*(0.5*(Ma*Ma)*scalar_product(u_s_2, u_s_2)*rho_s_2*u_s_2) +
-                              b2*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                     pres_s_2*u_s_2) +
-                              b3*dt*(0.5*(Ma*Ma)*scalar_product(u_s_3, u_s_3)*rho_s_3*u_s_3) +
-                              b3*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                     pres_s_3*u_s_3), q);
+                           gravity_term, q);
+          phi.submit_gradient(flux, q);
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
@@ -1963,145 +1446,26 @@ namespace Atmospheric_Flow {
                                 Vec&                                 dst,
                                 const std::vector<Vec>&              src,
                                 const std::pair<unsigned, unsigned>& face_range) const {
-    if(IMEX_stage == 2) {
+    /*--- Intermediate stages ---*/
+    if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation_pres phi_m(data, true, EquationData::P_INDEX_DOF),
                             phi_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_old_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_old_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_fixed_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_fixed_p(data, false, EquationData::P_INDEX_DOF);
-      FEFaceEvaluation_u    phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_old_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_fixed_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_fixed_p(data, false, EquationData::U_INDEX_DOF);
-      FEFaceEvaluation_rho  phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF);
+                            phi_pres_m(data, true, EquationData::P_INDEX_DOF),
+                            phi_pres_p(data, false, EquationData::P_INDEX_DOF);
+      FEFaceEvaluation_u    phi_u_m(data, true, EquationData::U_INDEX_DOF),
+                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
+      FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
+                            phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old_m.reinit(face);
-        phi_pres_old_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_pres_old_p.reinit(face);
-        phi_pres_old_p.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_u_fixed_m.reinit(face);
-        phi_u_fixed_m.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_fixed_p.reinit(face);
-        phi_u_fixed_p.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_fixed_m.reinit(face);
-        phi_pres_fixed_m.gather_evaluate(src[5], EvaluationFlags::values);
-        phi_pres_fixed_p.reinit(face);
-        phi_pres_fixed_p.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_m.reinit(face);
-        phi_p.reinit(face);
-
-        /*--- Loop over quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
-
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
-          const auto& u_old_m    = phi_u_old_m.get_value(q);
-          const auto& u_old_p    = phi_u_old_p.get_value(q);
-          const auto& pres_old_m = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p = phi_pres_old_p.get_value(q);
-
-          /*--- Compute the quantities at the current stage ---*/
-          const auto& u_fixed_m        = phi_u_fixed_m.get_value(q);
-          const auto& u_fixed_p        = phi_u_fixed_p.get_value(q);
-          const auto& pres_fixed_m     = phi_pres_fixed_m.get_value(q);
-          const auto& pres_fixed_p     = phi_pres_fixed_p.get_value(q);
-
-          const auto& lambda_fixed     = num_flux.compute_lambda(u_fixed_m, u_fixed_p, n_minus);
-          const auto& jump_rho_e_fixed = 1.0/(EquationData::Cp_Cv - 1.0)*
-                                         (pres_fixed_m - pres_fixed_p);
-
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num_explicit = a21*dt*num_flux.numerical_flux_energy_explicit(rho_old_m, u_old_m,
-                                                                                         rho_old_p, u_old_p,
-                                                                                         n_minus);
-          const auto& flux_num_implicit = a21_tilde*dt*num_flux.numerical_flux_energy_implicit(u_old_m, pres_old_m,
-                                                                                               u_old_p, pres_old_p,
-                                                                                               n_minus)
-                                        + a22_tilde*dt*(0.5*lambda_fixed*jump_rho_e_fixed);
-          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
-
-          phi_m.submit_value(-flux_num, q);
-          phi_p.submit_value(flux_num, q);
-        }
-
-        phi_m.integrate_scatter(EvaluationFlags::values, dst);
-        phi_p.integrate_scatter(EvaluationFlags::values, dst);
-      }
-    }
-    else if(IMEX_stage == 3) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_pres phi_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_old_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_old_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_fixed_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_fixed_p(data, false, EquationData::P_INDEX_DOF);
-      FEFaceEvaluation_u    phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_old_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_fixed_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_fixed_p(data, false, EquationData::U_INDEX_DOF);
-      FEFaceEvaluation_rho  phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_p(data, false, EquationData::RHO_INDEX_DOF);
-
-      /*--- Loop over all internal faces ---*/
-      for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old_m.reinit(face);
-        phi_pres_old_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_pres_old_p.reinit(face);
-        phi_pres_old_p.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2_m.reinit(face);
-        phi_rho_s_2_m.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_rho_s_2_p.reinit(face);
-        phi_rho_s_2_p.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2_m.reinit(face);
-        phi_u_s_2_m.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_s_2_p.reinit(face);
-        phi_u_s_2_p.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2_m.reinit(face);
-        phi_pres_s_2_m.gather_evaluate(src[5], EvaluationFlags::values);
-        phi_pres_s_2_p.reinit(face);
-        phi_pres_s_2_p.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_u_fixed_m.reinit(face);
-        phi_u_fixed_m.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_u_fixed_p.reinit(face);
-        phi_u_fixed_p.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_pres_fixed_m.reinit(face);
-        phi_pres_fixed_m.gather_evaluate(src[8], EvaluationFlags::values);
-        phi_pres_fixed_p.reinit(face);
-        phi_pres_fixed_p.gather_evaluate(src[8], EvaluationFlags::values);
+        phi_rho_m.reinit(face);
+        phi_rho_p.reinit(face);
+        phi_u_m.reinit(face);
+        phi_u_p.reinit(face);
+        phi_pres_m.reinit(face);
+        phi_pres_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
@@ -2110,47 +1474,53 @@ namespace Atmospheric_Flow {
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
-          const auto& u_old_m    = phi_u_old_m.get_value(q);
-          const auto& u_old_p    = phi_u_old_p.get_value(q);
-          const auto& pres_old_m = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p = phi_pres_old_p.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_u_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_pres_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            phi_pres_p.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
-          /*--- Compute the quantities at the previous stage ---*/
-          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
-          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
+            const auto& rho_s_m  = phi_rho_m.get_value(q);
+            const auto& rho_s_p  = phi_rho_p.get_value(q);
+            const auto& u_s_m    = phi_u_m.get_value(q);
+            const auto& u_s_p    = phi_u_p.get_value(q);
+            const auto& pres_s_m = phi_pres_m.get_value(q);
+            const auto& pres_s_p = phi_pres_p.get_value(q);
 
-          /*--- Compute the quantities at the current stage ---*/
-          const auto& u_fixed_m        = phi_u_fixed_m.get_value(q);
-          const auto& u_fixed_p        = phi_u_fixed_p.get_value(q);
-          const auto& pres_fixed_m     = phi_pres_fixed_m.get_value(q);
-          const auto& pres_fixed_p     = phi_pres_fixed_p.get_value(q);
+            /*--- Compute the numerical flux ---*/
+            flux_num += a[IMEX_stage - 1][s - 1]*dt*
+                        num_flux.numerical_flux_energy_explicit(rho_s_m, u_s_m,
+                                                                rho_s_p, u_s_p,
+                                                                n_minus)
+                      + a_tilde[IMEX_stage - 1][s - 1]*dt*
+                        num_flux.numerical_flux_energy_implicit(u_s_m, pres_s_m,
+                                                                u_s_p, pres_s_p,
+                                                                n_minus);
+          }
 
-          const auto& lambda_fixed     = num_flux.compute_lambda(u_fixed_m, u_fixed_p, n_minus);
-          const auto& jump_rho_e_fixed = 1.0/(EquationData::Cp_Cv - 1.0)*
-                                         (pres_fixed_m - pres_fixed_p);
+          /*--- Compute the contribution at the current stage ---*/
+          phi_u_m.gather_evaluate(src[3*(IMEX_stage - 1) + 1], EvaluationFlags::values);
+          phi_u_p.gather_evaluate(src[3*(IMEX_stage - 1) + 1], EvaluationFlags::values);
+          phi_pres_m.gather_evaluate(src[3*(IMEX_stage - 1) + 2], EvaluationFlags::values);
+          phi_pres_p.gather_evaluate(src[3*(IMEX_stage - 1) + 2], EvaluationFlags::values);
 
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num_explicit = a31*dt*num_flux.numerical_flux_energy_explicit(rho_old_m, u_old_m,
-                                                                                         rho_old_p, u_old_p,
-                                                                                         n_minus)
-                                        + a32*dt*num_flux.numerical_flux_energy_explicit(rho_s_2_m, u_s_2_m,
-                                                                                         rho_s_2_p, u_s_2_p,
-                                                                                         n_minus);
-          const auto& flux_num_implicit = a31_tilde*dt*num_flux.numerical_flux_energy_implicit(u_old_m, pres_old_m,
-                                                                                               u_old_p, pres_old_p,
-                                                                                               n_minus)
-                                        + a32_tilde*dt*num_flux.numerical_flux_energy_implicit(u_s_2_m, pres_s_2_m,
-                                                                                               u_s_2_p, pres_s_2_p,
-                                                                                               n_minus)
-                                        + a33_tilde*dt*(0.5*lambda_fixed*jump_rho_e_fixed);
-          const auto& flux_num          = flux_num_explicit + flux_num_implicit;
+          const auto& u_fixed_s_m    = phi_u_m.get_value(q);
+          const auto& u_fixed_s_p    = phi_u_p.get_value(q);
+          const auto& pres_fixed_s_m = phi_pres_m.get_value(q);
+          const auto& pres_fixed_s_p = phi_pres_p.get_value(q);
+
+          /*--- Compute the stabilization term ---*/
+          const auto& lambda_fixed_s     = num_flux.compute_lambda(u_fixed_s_m, u_fixed_s_p, n_minus);
+          const auto& jump_rho_e_fixed_s = 1.0/(EquationData::Cp_Cv - 1.0)*
+                                           (pres_fixed_s_m - pres_fixed_s_p);
+
+          flux_num += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
+                      (0.5*lambda_fixed_s*jump_rho_e_fixed_s);
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -2160,69 +1530,26 @@ namespace Atmospheric_Flow {
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
+    /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
       FEFaceEvaluation_pres phi_m(data, true, EquationData::P_INDEX_DOF),
                             phi_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_old_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_old_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_s_2_p(data, false, EquationData::P_INDEX_DOF),
-                            phi_pres_s_3_m(data, true, EquationData::P_INDEX_DOF),
-                            phi_pres_s_3_p(data, false, EquationData::P_INDEX_DOF);
-      FEFaceEvaluation_u    phi_u_old_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_old_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_s_2_p(data, false, EquationData::U_INDEX_DOF),
-                            phi_u_s_3_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_s_3_p(data, false, EquationData::U_INDEX_DOF);
-      FEFaceEvaluation_rho  phi_rho_old_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_old_p(data, false, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_2_p(data, false, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_3_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_s_3_p(data, false, EquationData::RHO_INDEX_DOF);
+                            phi_pres_m(data, true, EquationData::P_INDEX_DOF),
+                            phi_pres_p(data, false, EquationData::P_INDEX_DOF);
+      FEFaceEvaluation_u    phi_u_m(data, true, EquationData::U_INDEX_DOF),
+                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
+      FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
+                            phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
-      /*--- loop over all internal faces ---*/
+      /*--- Loop over all internal faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
-        phi_rho_old_m.reinit(face);
-        phi_rho_old_m.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_rho_old_p.reinit(face);
-        phi_rho_old_p.gather_evaluate(src[0], EvaluationFlags::values);
-        phi_u_old_m.reinit(face);
-        phi_u_old_m.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_u_old_p.reinit(face);
-        phi_u_old_p.gather_evaluate(src[1], EvaluationFlags::values);
-        phi_pres_old_m.reinit(face);
-        phi_pres_old_m.gather_evaluate(src[2], EvaluationFlags::values);
-        phi_pres_old_p.reinit(face);
-        phi_pres_old_p.gather_evaluate(src[2], EvaluationFlags::values);
-
-        phi_rho_s_2_m.reinit(face);
-        phi_rho_s_2_m.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_rho_s_2_p.reinit(face);
-        phi_rho_s_2_p.gather_evaluate(src[3], EvaluationFlags::values);
-        phi_u_s_2_m.reinit(face);
-        phi_u_s_2_m.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_u_s_2_p.reinit(face);
-        phi_u_s_2_p.gather_evaluate(src[4], EvaluationFlags::values);
-        phi_pres_s_2_m.reinit(face);
-        phi_pres_s_2_m.gather_evaluate(src[5], EvaluationFlags::values);
-        phi_pres_s_2_p.reinit(face);
-        phi_pres_s_2_p.gather_evaluate(src[5], EvaluationFlags::values);
-
-        phi_rho_s_3_m.reinit(face);
-        phi_rho_s_3_m.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_rho_s_3_p.reinit(face);
-        phi_rho_s_3_p.gather_evaluate(src[6], EvaluationFlags::values);
-        phi_u_s_3_m.reinit(face);
-        phi_u_s_3_m.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_u_s_3_p.reinit(face);
-        phi_u_s_3_p.gather_evaluate(src[7], EvaluationFlags::values);
-        phi_pres_s_3_m.reinit(face);
-        phi_pres_s_3_m.gather_evaluate(src[8], EvaluationFlags::values);
-        phi_pres_s_3_p.reinit(face);
-        phi_pres_s_3_p.gather_evaluate(src[8], EvaluationFlags::values);
+        phi_rho_m.reinit(face);
+        phi_rho_p.reinit(face);
+        phi_u_m.reinit(face);
+        phi_u_p.reinit(face);
+        phi_pres_m.reinit(face);
+        phi_pres_p.reinit(face);
 
         phi_m.reinit(face);
         phi_p.reinit(face);
@@ -2231,49 +1558,34 @@ namespace Atmospheric_Flow {
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
-          /*--- Compute the quantities at the previous step ---*/
-          const auto& rho_old_m  = phi_rho_old_m.get_value(q);
-          const auto& rho_old_p  = phi_rho_old_p.get_value(q);
-          const auto& u_old_m    = phi_u_old_m.get_value(q);
-          const auto& u_old_p    = phi_u_old_p.get_value(q);
-          const auto& pres_old_m = phi_pres_old_m.get_value(q);
-          const auto& pres_old_p = phi_pres_old_p.get_value(q);
+          /*--- Compute the quantities at the previous stages ---*/
+          VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
+          for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
+            /*--- Retrieve the useful fields ---*/
+            phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
+            phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_u_p.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
+            phi_pres_m.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
+            phi_pres_p.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
-          /*--- Compute the quantities at the second stage ---*/
-          const auto& rho_s_2_m  = phi_rho_s_2_m.get_value(q);
-          const auto& rho_s_2_p  = phi_rho_s_2_p.get_value(q);
-          const auto& u_s_2_m    = phi_u_s_2_m.get_value(q);
-          const auto& u_s_2_p    = phi_u_s_2_p.get_value(q);
-          const auto& pres_s_2_m = phi_pres_s_2_m.get_value(q);
-          const auto& pres_s_2_p = phi_pres_s_2_p.get_value(q);
+            const auto& rho_s_m  = phi_rho_m.get_value(q);
+            const auto& rho_s_p  = phi_rho_p.get_value(q);
+            const auto& u_s_m    = phi_u_m.get_value(q);
+            const auto& u_s_p    = phi_u_p.get_value(q);
+            const auto& pres_s_m = phi_pres_m.get_value(q);
+            const auto& pres_s_p = phi_pres_p.get_value(q);
 
-          /*--- Compute the quantities at the final stage ---*/
-          const auto& rho_s_3_m  = phi_rho_s_3_m.get_value(q);
-          const auto& rho_s_3_p  = phi_rho_s_3_p.get_value(q);
-          const auto& u_s_3_m    = phi_u_s_3_m.get_value(q);
-          const auto& u_s_3_p    = phi_u_s_3_p.get_value(q);
-          const auto& pres_s_3_m = phi_pres_s_3_m.get_value(q);
-          const auto& pres_s_3_p = phi_pres_s_3_p.get_value(q);
-
-          /*--- Compute the numerical flux ---*/
-          const auto& flux_num = b1*dt*num_flux.numerical_flux_energy_explicit(rho_old_m, u_old_m,
-                                                                               rho_old_p, u_old_p,
-                                                                               n_minus)
-                               + b1*dt*num_flux.numerical_flux_energy_implicit(u_old_m, pres_old_m,
-                                                                               u_old_p, pres_old_p,
-                                                                               n_minus)
-                               + b2*dt*num_flux.numerical_flux_energy_explicit(rho_s_2_m, u_s_2_m,
-                                                                               rho_s_2_p, u_s_2_p,
-                                                                               n_minus)
-                               + b2*dt*num_flux.numerical_flux_energy_implicit(u_s_2_m, pres_s_2_m,
-                                                                               u_s_2_p, pres_s_2_p,
-                                                                               n_minus)
-                               + b3*dt*num_flux.numerical_flux_energy_explicit(rho_s_3_m, u_s_3_m,
-                                                                               rho_s_3_p, u_s_3_p,
-                                                                               n_minus)
-                               + b3*dt*num_flux.numerical_flux_energy_implicit(u_s_3_m, pres_s_3_m,
-                                                                               u_s_3_p, pres_s_3_p,
-                                                                               n_minus);
+            /*--- Compute the numerical flux ---*/
+            flux_num += b[s - 1]*dt*
+                        num_flux.numerical_flux_energy_explicit(rho_s_m, u_s_m,
+                                                                rho_s_p, u_s_p,
+                                                                n_minus)
+                      + b_tilde[s - 1]*dt*
+                        num_flux.numerical_flux_energy_implicit(u_s_m, pres_s_m,
+                                                                u_s_p, pres_s_p,
+                                                                n_minus);
+          }
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -2398,10 +1710,6 @@ namespace Atmospheric_Flow {
                       phi_pres_fixed(data, EquationData::P_INDEX_DOF);
     FEEvaluation_u    phi_src(data, EquationData::U_INDEX_DOF);
 
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
-    const auto coeff = (IMEX_stage == 2) ? a22_tilde : a33_tilde;
-
     /*--- Loop over all cells ---*/
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_pres_fixed.reinit(cell);
@@ -2416,8 +1724,9 @@ namespace Atmospheric_Flow {
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
         const auto& pres_fixed = phi_pres_fixed.get_value(q);
 
-        phi.submit_gradient(-coeff*dt*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                                       pres_fixed*phi_src.get_value(q)), q);
+        phi.submit_gradient(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
+                            (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
+                             (pres_fixed*phi_src.get_value(q))), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::gradients, dst);
@@ -2445,10 +1754,6 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation_u    phi_src_m(data, true, EquationData::U_INDEX_DOF),
                           phi_src_p(data, false, EquationData::U_INDEX_DOF);
 
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
-    const auto coeff = (IMEX_stage == 2) ? a22_tilde : a33_tilde;
-
     /*--- Loop over all faces ---*/
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_pres_fixed_m.reinit(face);
@@ -2475,7 +1780,7 @@ namespace Atmospheric_Flow {
                                         (pres_fixed_m*phi_src_m.get_value(q) +
                                          pres_fixed_p*phi_src_p.get_value(q));
 
-        const auto& flux_num          = coeff*dt*
+        const auto& flux_num          = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                                         scalar_product(avg_flux_enthalpy, n_minus);
 
         phi_m.submit_value(flux_num, q);
@@ -2511,7 +1816,7 @@ namespace Atmospheric_Flow {
                             this, dst, src, false);
     }
     else if(Euler_stage == EquationData::P_INDEX_SYSTEM) {
-      if(IMEX_stage <= EquationData::n_stages) {
+      if(IMEX_stage <= n_stages) {
         this->data->cell_loop(&EULEROperator::assemble_cell_term_internal_energy,
                               this, dst, src, false);
 
@@ -2729,10 +2034,7 @@ namespace Atmospheric_Flow {
 
     AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
 
-    /*--- This term changes between second and third stage of the IMEX scheme, but its structure not, so we do not need
-          to explicitly distinguish the two cases as done for the rhs. ---*/
-    const auto coeff = (IMEX_stage == 2) ? a22_tilde : a33_tilde;
-
+    /*--- Loop over all cells ---*/
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_pres_fixed.reinit(cell);
       phi_pres_fixed.gather_evaluate(pres_fixed, EvaluationFlags::values);
@@ -2759,7 +2061,7 @@ namespace Atmospheric_Flow {
           const auto& rho_for_fixed = phi_rho_for_fixed.get_value(q);
 
           phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
-          phi.submit_gradient((coeff*dt/Ma)*(coeff*dt/Ma)*
+          phi.submit_gradient((a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt/Ma)*(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt/Ma)*
                               (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_fixed/rho_for_fixed)*phi.get_gradient(q)), q);
         }
 
@@ -2850,7 +2152,7 @@ namespace Atmospheric_Flow {
     else if(Euler_stage == EquationData::P_INDEX_SYSTEM) {
       this->data->initialize_dof_vector(inverse_diagonal, EquationData::P_INDEX_DOF);
 
-      if(IMEX_stage <= EquationData::n_stages) {
+      if(IMEX_stage <= n_stages) {
         this->data->cell_loop(&EULEROperator::assemble_diagonal_cell_term_pressure,
                               this, inverse_diagonal, dummy, false);
       }

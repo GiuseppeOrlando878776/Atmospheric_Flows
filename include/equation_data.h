@@ -17,8 +17,6 @@ constexpr int my_ceil(const T num) {
 // the physics and the numerical discretization
 //
 namespace EquationData {
-  static const unsigned n_stages = 3; /*--- Number of stages of the IMEX scheme ---*/
-
   static const unsigned n_vars = 3; /*--- Number of variables for which we solve a linear system ---*/
 
   /*--- Define auxiliary indices related to the dof handlers order and to linear systems under consideration ---*/
