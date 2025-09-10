@@ -235,17 +235,17 @@ protected:
   void output_results(const unsigned step); /*--- Function to save the results ---*/
 
   // Auxiliary routines for post-processing
-  Number get_max_velocity(); /*--- Get maximum velocity to compute the Courant number ---*/
+  Number get_max_velocity() const; /*--- Get maximum velocity to compute the Courant number ---*/
 
-  Number get_min_density(); /*--- Get minimum density ---*/
+  Number get_min_density() const; /*--- Get minimum density ---*/
 
-  Number get_max_density(); /*--- Get maximum density ---*/
+  Number get_max_density() const; /*--- Get maximum density ---*/
 
-  Number compute_max_celerity(); /*--- Compute maximum celerity for acoustic Courant number ---*/
+  Number compute_max_celerity() const; /*--- Compute maximum celerity for acoustic Courant number ---*/
 
-  std::pair<std::pair<Number, Number>, Number> compute_max_Cu_x_y_z(); /*--- Get maximum Courant numbers along x, y, and z ---*/
+  std::array<Number, dim> compute_max_Cu_per_direction() const; /*--- Get maximum Courant numbers along all the directions ---*/
 
-  std::pair<std::pair<Number, Number>, Number> compute_max_C_x_y_z(); /*--- Get maximum acoustic Courant numbers along x, y, and z ---*/
+  std::array<Number, dim> compute_max_C_per_direction() const; /*--- Get maximum acoustic Courant numbers along all the directions ---*/
 
 private:
   using MatrixType = EULEROperator<dim,
@@ -265,6 +265,8 @@ private:
       rhs_u_precomputed,
       rhs_pres_precomputed,
       extra_rhs_u; /*--- Auxiliary vectors for the Schur complement ---*/
+
+  Number Ma; /*--- Mach number for post-processing ---*/
 
   // Auxiliary routines to numerically solve the problem
   void update_density(); /*--- Function to update the density ---*/
@@ -359,7 +361,8 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   time_restart(static_cast<Number>(data.time_restart)),
   as_initial_conditions(data.as_initial_conditions),
   euler_matrix(data, explicit_RK, implicit_RK),
-  rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)) {
+  rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)),
+  Ma(euler_matrix.get_Mach()) {
     AssertThrow(!((dt <= static_cast<Number>(0.0)) || (dt > T)),
                 ExcInvalidTimeStep(dt, T));
 
@@ -454,7 +457,7 @@ void EulerSolver<dim>::setup_dofs() {
         << std::endl
         << "dim (X_h) = " << dof_handler_density.n_dofs()
         << std::endl
-        << "Ma        = " << euler_matrix.get_Mach()
+        << "Ma        = " << Ma
         << std::endl
         << "Fr        = " << euler_matrix.get_Froude()
         << std::endl
@@ -936,7 +939,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
 // in order to compute the CFL
 //
 template<unsigned dim>
-typename EulerSolver<dim>::Number EulerSolver<dim>::get_max_velocity() {
+typename EulerSolver<dim>::Number EulerSolver<dim>::get_max_velocity() const {
   const unsigned n_q_points = quadrature_velocity.size();
   FEValues<dim> fe_values_velocity(mapping, fe_velocity, quadrature_velocity, update_values);
   std::vector<Vector<Number>> velocity_values(n_q_points, Vector<Number>(dim));
@@ -962,7 +965,7 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::get_max_velocity() {
 // The following function is used in determining the minimum density
 //
 template<unsigned dim>
-typename EulerSolver<dim>::Number EulerSolver<dim>::get_min_density() {
+typename EulerSolver<dim>::Number EulerSolver<dim>::get_min_density() const {
   const unsigned n_q_points = quadrature_density.size();
   FEValues<dim> fe_values(mapping, fe_density, quadrature_density, update_values);
   std::vector<Number> solution_values(n_q_points);
@@ -987,14 +990,14 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::get_min_density() {
 // The following function is used in determining the maximum density
 //
 template<unsigned dim>
-typename EulerSolver<dim>::Number EulerSolver<dim>::get_max_density() {
+typename EulerSolver<dim>::Number EulerSolver<dim>::get_max_density() const {
   return rho_s[IMEX_stage - 1].linfty_norm();
 }
 
 // The following function is used in determining the maximum celerity
 //
 template<unsigned dim>
-typename EulerSolver<dim>::Number EulerSolver<dim>::compute_max_celerity() {
+typename EulerSolver<dim>::Number EulerSolver<dim>::compute_max_celerity() const {
   const unsigned n_q_points = quadrature_pressure.size();
   FEValues<dim> fe_values(mapping, fe_pressure, quadrature_pressure, update_values);
   std::vector<Number> solution_values_pressure(n_q_points),
@@ -1023,17 +1026,14 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::compute_max_celerity() {
 // The following function is used in determining the maximum advective Courant numbers along the directions
 //
 template<unsigned dim>
-std::pair<std::pair<typename EulerSolver<dim>::Number,
-          typename EulerSolver<dim>::Number>,
-          typename EulerSolver<dim>::Number>
-EulerSolver<dim>::compute_max_Cu_x_y_z() {
+std::array<typename EulerSolver<dim>::Number, dim>
+EulerSolver<dim>::compute_max_Cu_per_direction() const {
   const unsigned n_q_points = quadrature_velocity.size();
   FEValues<dim> fe_values(mapping, fe_velocity, quadrature_velocity, update_values);
   std::vector<Vector<Number>> solution_values_velocity(n_q_points, Vector<Number>(dim));
 
-  auto max_Cu_x = std::numeric_limits<Number>::min();
-  auto max_Cu_y = std::numeric_limits<Number>::min();
-  auto max_Cu_z = std::numeric_limits<Number>::min();
+  std::array<Number, dim> res;
+  std::fill(res.begin(), res.end(), std::numeric_limits<Number>::min());
 
   /*--- Loop over all cells ---*/
   for(const auto& cell: dof_handler_velocity.active_cell_iterators()) {
@@ -1042,36 +1042,33 @@ EulerSolver<dim>::compute_max_Cu_x_y_z() {
       fe_values.get_function_values(u_s.front(), solution_values_velocity);
 
       for(unsigned q = 0; q < n_q_points; ++q) {
-        max_Cu_x = std::max(max_Cu_x,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](0))*dt/cell->extent_in_direction(0));
-        max_Cu_y = std::max(max_Cu_y,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](1))*dt/cell->extent_in_direction(1));
-        max_Cu_z = std::max(max_Cu_z,
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](2))*dt/cell->extent_in_direction(2));
+        for(unsigned d = 0; d < dim; ++d) {
+          res[d] = std::max(res[d],
+                            EquationData::degree_u*std::abs(solution_values_velocity[q](d))*dt/cell->extent_in_direction(0));
+        }
       }
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_Cu_x, MPI_COMM_WORLD),
-                                       Utilities::MPI::max(max_Cu_y, MPI_COMM_WORLD)),
-                        Utilities::MPI::max(max_Cu_z, MPI_COMM_WORLD));
+  for(unsigned d = 0; d < dim; ++d) {
+    res[d] = Utilities::MPI::max(res[d], MPI_COMM_WORLD);
+  }
+
+  return res;
 }
 
 // The following function is used in determining the maximum Courant number along the directions
 //
 template<unsigned dim>
-std::pair<std::pair<typename EulerSolver<dim>::Number,
-                    typename EulerSolver<dim>::Number>,
-          typename EulerSolver<dim>::Number>
-EulerSolver<dim>::compute_max_C_x_y_z() {
+std::array<typename EulerSolver<dim>::Number, dim>
+EulerSolver<dim>::compute_max_C_per_direction() const {
   const unsigned n_q_points = quadrature_pressure.size();
   FEValues<dim> fe_values(mapping, fe_pressure, quadrature_pressure, update_values);
   std::vector<Number> solution_values_pressure(n_q_points),
                       solution_values_density(n_q_points);
 
-  auto max_C_x = std::numeric_limits<Number>::min();
-  auto max_C_y = std::numeric_limits<Number>::min();
-  auto max_C_z = std::numeric_limits<Number>::min();
+  std::array<Number, dim> res;
+  std::fill(res.begin(), res.end(), std::numeric_limits<Number>::min());
 
   /*--- Loop over all cells ---*/
   for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
@@ -1083,19 +1080,19 @@ EulerSolver<dim>::compute_max_C_x_y_z() {
       for(unsigned q = 0; q < n_q_points; ++q) {
         auto local_celerity = std::sqrt(static_cast<Number>(EquationData::Cp_Cv)*
                                         (solution_values_pressure[q]/solution_values_density[q]));
-        max_C_x = std::max(max_C_x, (static_cast<Number>(1.0)/euler_matrix.get_Mach())*
-                                    EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(0));
-        max_C_y = std::max(max_C_x, (static_cast<Number>(1.0)/euler_matrix.get_Mach())*
-                                    EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(1));
-        max_C_z = std::max(max_C_z, (static_cast<Number>(1.0)/euler_matrix.get_Mach())*
-                                    EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(2));
+        for(unsigned d = 0; d < dim; ++d) {
+          res[d] = std::max(res[d], (static_cast<Number>(1.0)/Ma)*
+                                    EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(d));
+        }
       }
     }
   }
 
-  return std::make_pair(std::make_pair(Utilities::MPI::max(max_C_x, MPI_COMM_WORLD),
-                                       Utilities::MPI::max(max_C_y, MPI_COMM_WORLD)),
-                        Utilities::MPI::max(max_C_z, MPI_COMM_WORLD));
+  for(unsigned d = 0; d < dim; ++d) {
+    res[d] = Utilities::MPI::max(res[d], MPI_COMM_WORLD);
+  }
+
+  return res;
 }
 
 
@@ -1220,21 +1217,21 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned output_interval) {
 
     /*--- Compute auxiliary post-processing data ---*/
     const auto max_celerity = compute_max_celerity();
-    pcout<< "Maximum celerity = " << (static_cast<Number>(1.0)/euler_matrix.get_Mach())*max_celerity << std::endl;
-    pcout << "CFL_c = " << (static_cast<Number>(1.0)/euler_matrix.get_Mach())*dt*max_celerity*EquationData::degree_u*
+    pcout<< "Maximum celerity = " << (static_cast<Number>(1.0)/Ma)*max_celerity << std::endl;
+    pcout << "CFL_c = " << (static_cast<Number>(1.0)/Ma)*dt*max_celerity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
-    const auto max_C_x_y_z = compute_max_C_x_y_z();
-    pcout << "CFL_c_x = " << max_C_x_y_z.first.first << std::endl;
-    pcout << "CFL_c_y = " << max_C_x_y_z.first.second << std::endl;
-    pcout << "CFL_c_z = " << max_C_x_y_z.second << std::endl;
+    const auto max_C_x_y_z = compute_max_C_per_direction();
+    pcout << "CFL_c_x = " << max_C_x_y_z[0] << std::endl;
+    pcout << "CFL_c_y = " << max_C_x_y_z[1] << std::endl;
+    pcout << "CFL_c_z = " << max_C_x_y_z[2] << std::endl;
     const auto max_velocity = get_max_velocity();
     pcout<< "Maximum velocity = " << max_velocity << std::endl;
     pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
                            std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
-    const auto max_Cu_x_y_z = compute_max_Cu_x_y_z();
-    pcout << "CFL_u_x = " << max_Cu_x_y_z.first.first << std::endl;
-    pcout << "CFL_u_y = " << max_Cu_x_y_z.first.second << std::endl;
-    pcout << "CFL_u_z = " << max_Cu_x_y_z.second << std::endl;
+    const auto max_Cu_x_y_z = compute_max_Cu_per_direction();
+    pcout << "CFL_u_x = " << max_Cu_x_y_z[0] << std::endl;
+    pcout << "CFL_u_y = " << max_Cu_x_y_z[1] << std::endl;
+    pcout << "CFL_u_z = " << max_Cu_x_y_z[2] << std::endl;
 
     /*--- Save the results each 'output_interval' steps ---*/
     if(n % output_interval == 0) {

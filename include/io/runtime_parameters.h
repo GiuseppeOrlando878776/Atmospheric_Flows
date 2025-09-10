@@ -77,7 +77,7 @@ namespace RunTimeParameters {
     bool     restart;
     bool     save_for_restart;
     unsigned step_restart;
-    double        time_restart;
+    double   time_restart;
     bool     as_initial_conditions;
 
   protected:
