@@ -128,6 +128,9 @@ protected:
   Vec u_bar;
   Vec pres_bar;
 
+  // Variable for the potential temperature
+  LinearAlgebra::distributed::Vector<double> theta_old;
+
   // Damping layers functions for all the unknowns
   Vec dt_tau_rho;
   Vec dt_tau_u;
@@ -533,6 +536,9 @@ void EulerSolver<dim>::setup_dofs() {
   }
   matrix_free_storage->initialize_dof_vector(rhs_rho, EquationData::RHO_INDEX_DOF);
 
+  /*--- Initialize the variable related to the potential temperature ---*/
+  matrix_free_storage->initialize_dof_vector(theta_old, EquationData::P_INDEX_DOF);
+
   /*--- Initialize the auxiliary variable for the Schur complement ---*/
   matrix_free_storage->initialize_dof_vector(rhs_momentum, EquationData::U_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(rhs_u_precomputed, EquationData::U_INDEX_DOF);
@@ -895,6 +901,22 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   data_out.add_data_vector(dof_handler_velocity, u_s.front(), velocity_names, component_interpretation_velocity);
   pres_s.front().update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, pres_s.front(), "p", {DataComponentInterpretation::component_is_scalar});
+
+  for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
+    if(cell->is_locally_owned()) {
+      std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
+      cell->get_dof_indices(dof_indices);
+      for(unsigned idx = 0; idx < dof_indices.size(); ++idx) {
+        const auto pres = pres_s.front()(dof_indices[idx]);
+        const auto T    = pres/rho_s.front()(dof_indices[idx]);
+        const auto Pi   = std::pow(pres, (static_cast<Number>(EquationData::Cp_Cv) - static_cast<Number>(1.0))/
+                                         static_cast<Number>(EquationData::Cp_Cv));
+        theta_old(dof_indices[idx]) = T/Pi;
+      }
+    }
+  }
+  theta_old.update_ghost_values();
+  data_out.add_data_vector(dof_handler_pressure, theta_old, "theta", {DataComponentInterpretation::component_is_scalar});
 
   /*--- Save background state ---*/
   rho_bar.update_ghost_values();

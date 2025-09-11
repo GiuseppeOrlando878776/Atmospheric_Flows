@@ -27,6 +27,13 @@ namespace RunTimeParameters {
     double initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
     double final_time;   /*--- Variable to set the final time ---*/
 
+    double x_min; /*--- Left-end domain x direction ---*/
+    double x_max; /*--- Right-end domain x direction ---*/
+    double y_min; /*--- Left-end domain y direction ---*/
+    double y_max; /*--- Right-end domain y direction ---*/
+    double z_min; /*--- Left-end domain z direction ---*/
+    double z_max; /*--- Right-end domain z direction ---*/
+
     // The present code is meant to work using non-dimensional variables and using
     // the non-dimensional equations described in Orlando et al., JCP, 2022.
     // If one wishes to consider a dimensional version, it is sufficient
@@ -62,9 +69,9 @@ namespace RunTimeParameters {
     unsigned refinement_iterations; /*--- How often performin mesh adaptation ---*/
 
     /*--- Parameters related to the linear solver ---*/
-    unsigned max_iterations;  /*--- Maximum number of iterations for the linear solver ---*/
-    double   atol_iterative;  /*--- Absolute tolerance for the linear solver ---*/
-    double   rtol_iterative;  /*--- Relative tolerance for the linear solver ---*/
+    unsigned max_iterations; /*--- Maximum number of iterations for the linear solver ---*/
+    double   atol_iterative; /*--- Absolute tolerance for the linear solver ---*/
+    double   rtol_iterative; /*--- Relative tolerance for the linear solver ---*/
 
     /*--- Parameters related to the output ---*/
     bool        verbose;         /*--- Choose if being verboe or not ---*/
@@ -93,6 +100,12 @@ namespace RunTimeParameters {
   //
   Data_Storage::Data_Storage(): initial_time(0.0),
                                 final_time(1.0),
+                                x_min(0.0),
+                                x_max(1.0),
+                                y_min(0.0),
+                                y_max(1.0),
+                                z_min(0.0),
+                                z_max(1.0),
                                 Mach(1.0),
                                 Froude(0.319275428407050),
                                 L_ref(1.0),
@@ -136,6 +149,31 @@ namespace RunTimeParameters {
                         "1.0",
                         Patterns::Double(0.0),
                         "The final time of the simulation.");
+
+      prm.declare_entry("x_min",
+                        "0.0",
+                        Patterns::Double(0.0),
+                        "The left-end of the domain along x-direction.");
+      prm.declare_entry("x_max",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The right-end of the domain along x-direction.");
+      prm.declare_entry("y_min",
+                        "0.0",
+                        Patterns::Double(0.0),
+                        "The left-end of the domain along y-direction.");
+      prm.declare_entry("y_max",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The right-end of the domain along y-direction.");
+      prm.declare_entry("z_min",
+                        "0.0",
+                        Patterns::Double(0.0),
+                        "The left-end of the domain along z-direction.");
+      prm.declare_entry("z_max",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The right-end of the domain along z-direction.");
 
       prm.declare_entry("Mach",
                         "1.0",
@@ -310,6 +348,13 @@ namespace RunTimeParameters {
     {
       initial_time = prm.get_double("initial_time");
       final_time   = prm.get_double("final_time");
+
+      x_min = prm.get_double("x_min");
+      x_max = prm.get_double("x_max");
+      y_min = prm.get_double("y_min");
+      y_max = prm.get_double("y_max");
+      z_min = prm.get_double("z_min");
+      z_max = prm.get_double("z_max");
 
       Mach   = prm.get_double("Mach");
       Froude = prm.get_double("Froude");
