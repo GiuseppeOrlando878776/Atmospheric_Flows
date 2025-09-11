@@ -48,7 +48,8 @@ namespace RunTimeParameters {
     double ac; /*--- Width of the hill (not used so far) ---*/
 
     /*--- Numerical parameters ---*/
-    double dt; /*--- The time-step ---*/
+    double dt;       /*--- The time-step ---*/
+    std::string CFL; /*--- The Courant number (declare as string so as to verify if empty or not) ---*/
 
     double atol_fixed_point; /*--- Absolute tolerance for the fixed point loop ---*/
     double rtol_fixed_point; /*--- Relative tolerance for the fixed point loop ---*/
@@ -66,8 +67,10 @@ namespace RunTimeParameters {
     double   rtol_iterative;  /*--- Relative tolerance for the linear solver ---*/
 
     /*--- Parameters related to the output ---*/
-    bool     verbose;         /*--- Choose if being verboe or not ---*/
-    unsigned output_interval; /*--- Set how often save the fields ---*/
+    bool        verbose;         /*--- Choose if being verboe or not ---*/
+    unsigned    output_interval; /*--- Set how often save the fields ---*/
+    std::string n_files;         /*--- Set how often save the fields through the number of output files (potentiaally unused) ---*/
+    std::string dt_save;         /*--- Set after how much time perfoming the save (potentiaally unused) ---*/
 
     std::string dir; /*--- Directory where the data are saved. This has to be created before launching the code
                            and we assume it is a subfolder of the folder with the executable and the parameter file.
@@ -102,6 +105,7 @@ namespace RunTimeParameters {
                                 yc(1.0),
                                 ac(1.0),
                                 dt(5e-4),
+                                CFL(""),
                                 atol_fixed_point(1e-12),
                                 rtol_fixed_point(1e-10),
                                 n_global_refines(0),
@@ -113,6 +117,9 @@ namespace RunTimeParameters {
                                 rtol_iterative(1e-12),
                                 verbose(true),
                                 output_interval(15),
+                                n_files(""),
+                                dt_save(""),
+                                dir(""),
                                 restart(false),
                                 save_for_restart(false),
                                 step_restart(0),
@@ -186,6 +193,7 @@ namespace RunTimeParameters {
                         "5e-4",
                         Patterns::Double(0.0),
                         "The time step size.");
+      prm.declare_entry("CFL", "");
 
       prm.declare_entry("atol_fixed_point",
                         "1e-10",
@@ -268,19 +276,25 @@ namespace RunTimeParameters {
     prm.leave_subsection();
 
     /*--- Output related parameters ---*/
-    prm.declare_entry("verbose",
-                      "true",
-                      Patterns::Bool(),
-                      "This indicates whether the output of the solution "
-                      "process should be verbose.");
+    prm.enter_subsection("Output data");
+    {
+      prm.declare_entry("verbose",
+                        "true",
+                        Patterns::Bool(),
+                        "This indicates whether the output of the solution "
+                        "process should be verbose.");
 
-    prm.declare_entry("output_interval",
-                      "1",
-                      Patterns::Integer(1),
-                      "This indicates between how many time steps we print "
-                      "the solution.");
+      prm.declare_entry("output_interval",
+                        "1",
+                        Patterns::Integer(1),
+                        "This indicates between how many time steps we print "
+                        "the solution.");
+      prm.declare_entry("n_files", "");
+      prm.declare_entry("dt_save", "");
 
-    prm.declare_entry("saving directory", "SimTest");
+      prm.declare_entry("saving directory", "SimTest");
+    }
+    prm.leave_subsection();
   }
 
   // Function to read all declared parameters in the constructor
@@ -316,7 +330,8 @@ namespace RunTimeParameters {
     /*--- Focus now on some numerical parameters ---*/
     prm.enter_subsection("Numerical data");
     {
-      dt = prm.get_double("dt");
+      dt  = prm.get_double("dt");
+      CFL = prm.get("CFL");
 
       atol_fixed_point = prm.get_double("atol_fixed_point");
       rtol_fixed_point = prm.get_double("rtol_fixed_point");
@@ -354,11 +369,16 @@ namespace RunTimeParameters {
     prm.leave_subsection();
 
     /*--- Output related data ---*/
-    verbose = prm.get_bool("verbose");
+    prm.enter_subsection("Output data");
+    {
+      verbose = prm.get_bool("verbose");
 
-    output_interval = prm.get_integer("output_interval");
+      output_interval = prm.get_integer("output_interval");
+      n_files         = prm.get("n_files");
+      dt_save         = prm.get("dt_save");
 
-    dir = prm.get("saving directory");
+      dir = prm.get("saving directory");
+    }
   }
 
 } // namespace RunTimeParameters

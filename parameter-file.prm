@@ -26,15 +26,6 @@ subsection Data linear solvers
   set rtol_iterative = 1e-8  # relative tolerance linear solvers
 end
 
-# The directory where results are saved
-set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM_NEW_PRECON_INVERSE_MASS_MATRIX
-
-# The output frequency
-set output_interval = 100
-
-# Finally we set the verbosity level
-set verbose = true
-
 subsection Restart data
   #Set whether we are in presence of a restart or not
   set restart = false
@@ -44,4 +35,15 @@ subsection Restart data
 
   #Set if you want to use the saved data for initial conditions
   set as_initial_conditions = true
+end
+
+subsection Output data
+  # The directory where results are saved
+  set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM_NEW_PRECON_INVERSE_MASS_MATRIX
+
+  # The output frequency
+  set output_interval = 100
+
+  # Finally we set the verbosity level
+  set verbose = true
 end

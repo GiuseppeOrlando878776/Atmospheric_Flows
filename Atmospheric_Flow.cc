@@ -58,7 +58,9 @@ public:
               const TimeStepping::RungeKutta<Number>& implicit_RK); /*--- Class constructor ---*/
 
   void run(const bool verbose = false,
-           const unsigned output_interval = 10);
+           const unsigned output_interval = 10,
+           const std::string& n_files = "",
+           const std::string& dt_save_ = "");
   /*--- The run function which actually runs the simulation ---*/
 
 protected:
@@ -74,7 +76,9 @@ protected:
   const Number T;  /*--- Final time auxiliary variable ----*/
 
   // Auxiliary variables for some numerical parameters
-  Number dt; /*--- Time step auxiliary variable ---*/
+  Number dt;          /*--- Time step auxiliary variable ---*/
+  Number CFL;         /*--- Courant number auxiliary variable (not necessarily used) ---*/
+  bool   dt_from_CFL; /*--- Fix whether the time step is fixed from CFL or from input ---*/
 
   unsigned n_stages;   /*--- Number of IMEX stages ---*/
   unsigned IMEX_stage; /*--- Flag to check at which current stage of the IMEX we are ---*/
@@ -268,6 +272,8 @@ private:
 
   Number Ma; /*--- Mach number for post-processing ---*/
 
+  Number h_min; /*--- Minimum cell diameter ---*/
+
   // Auxiliary routines to numerically solve the problem
   void update_density(); /*--- Function to update the density ---*/
 
@@ -363,9 +369,21 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   euler_matrix(data, explicit_RK, implicit_RK),
   rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)),
   Ma(euler_matrix.get_Mach()) {
-    AssertThrow(!((dt <= static_cast<Number>(0.0)) || (dt > T)),
-                ExcInvalidTimeStep(dt, T));
+    /*--- Check time step coherence ---*/
+    if(data.CFL.empty()) {
+      dt = static_cast<Number>(data.dt);
+      AssertThrow(!((dt <= static_cast<Number>(0.0)) || (dt > T)),
+                  ExcInvalidTimeStep(dt, T));
 
+      dt_from_CFL = false;
+    }
+    else {
+      CFL = static_cast<Number>(std::stod(data.CFL));
+
+      dt_from_CFL = true;
+    }
+
+    /*--- Initialize structures ---*/
     matrix_free_storage = std::make_shared<MatrixFree<dim, Number>>();
 
     /*--- Clear the containers for safety ---*/
@@ -445,6 +463,8 @@ void EulerSolver<dim>::setup_dofs() {
 
   pcout << "Number of active cells: " << triangulation.n_global_active_cells() << std::endl;
   pcout << "Number of levels: "       << triangulation.n_global_levels()       << std::endl;
+  h_min = GridTools::minimal_cell_diameter(triangulation, mapping)/std::sqrt(dim);
+  pcout << "h_min = " << h_min << std::endl;
 
   /*--- Set degrees of freedom ---*/
   dof_handler_velocity.distribute_dofs(fe_velocity);
@@ -1044,7 +1064,7 @@ EulerSolver<dim>::compute_max_Cu_per_direction() const {
       for(unsigned q = 0; q < n_q_points; ++q) {
         for(unsigned d = 0; d < dim; ++d) {
           res[d] = std::max(res[d],
-                            EquationData::degree_u*std::abs(solution_values_velocity[q](d))*dt/cell->extent_in_direction(0));
+                            EquationData::degree_u*(std::abs(solution_values_velocity[q](d))*dt/cell->extent_in_direction(0)));
         }
       }
     }
@@ -1082,7 +1102,7 @@ EulerSolver<dim>::compute_max_C_per_direction() const {
                                         (solution_values_pressure[q]/solution_values_density[q]));
         for(unsigned d = 0; d < dim; ++d) {
           res[d] = std::max(res[d], (static_cast<Number>(1.0)/Ma)*
-                                    EquationData::degree_u*local_celerity*dt/cell->extent_in_direction(d));
+                                    EquationData::degree_u*(local_celerity*dt/cell->extent_in_direction(d)));
         }
       }
     }
@@ -1111,7 +1131,10 @@ EulerSolver<dim>::compute_max_C_per_direction() const {
 // we use the ConditionalOStream class to do that for us.
 //
 template<unsigned dim>
-void EulerSolver<dim>::run(const bool verbose, const unsigned output_interval) {
+void EulerSolver<dim>::run(const bool verbose,
+                           const unsigned output_interval,
+                           const std::string& n_files_,
+                           const std::string& dt_save_) {
   ConditionalOStream verbose_cout(std::cout, verbose && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
 
   /*--- Initialize and save initial state ---*/
@@ -1126,10 +1149,42 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned output_interval) {
     output_results(n);
   }
 
+  /*--- Set some potential parameters for time saving ---*/
+  if(!n_files_.empty() && !dt_save_.empty()) {
+    std::cerr << "Both number of files and time-interval saving not empty. Pick one!" << std::endl;
+    exit(1);
+  }
+  Number   dt_save; // After how much time save each file (potentially unsued)
+  unsigned n_saved = 0; // Number of files saved (potentially unused)
+  unsigned n_files = 0; // Number of files to be saved (potentially unused)
+  if(!n_files_.empty()) {
+    n_files = std::stoi(n_files_);
+    dt_save = T/static_cast<Number>(n_files);
+  }
+  else if(!dt_save_.empty()) {
+    dt_save = static_cast<Number>(std::stod(dt_save_));
+  }
+
   /*--- Time loop ---*/
   auto tot_fixed_point_iters = static_cast<Number>(0.0);
+  if(dt_from_CFL) {
+    dt = CFL*h_min/(get_max_velocity()*EquationData::degree_u);
+    euler_matrix.set_dt(dt);
+  }
   while(std::abs(T - time) > static_cast<Number>(1e-10)) {
-    time += dt;
+    if(!dt_save_.empty()) {
+      if(time + dt > (n_saved + 1)*dt_save) {
+        auto dt_tmp = (n_saved + 1)*dt_save - time;
+        euler_matrix.set_dt(dt_tmp);
+        time += dt_tmp;
+      }
+      else {
+        time += dt;
+      }
+    }
+    else {
+      time += dt;
+    }
     n++;
     pcout << "Step = " << n << " Time = " << time << std::endl;
 
@@ -1216,27 +1271,46 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned output_interval) {
     pres_s.front().scale(dt_tau_pres_aux_left_y);
 
     /*--- Compute auxiliary post-processing data ---*/
-    const auto max_celerity = compute_max_celerity();
-    pcout<< "Maximum celerity = " << (static_cast<Number>(1.0)/Ma)*max_celerity << std::endl;
-    pcout << "CFL_c = " << (static_cast<Number>(1.0)/Ma)*dt*max_celerity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
+    const auto max_celerity = (static_cast<Number>(1.0)/Ma)*compute_max_celerity();
+    pcout<< "Maximum celerity = " << max_celerity << std::endl;
+    pcout << "CFL_c = " << EquationData::degree_u*(max_celerity*dt/h_min) << std::endl;
     const auto max_C_x_y_z = compute_max_C_per_direction();
     pcout << "CFL_c_x = " << max_C_x_y_z[0] << std::endl;
     pcout << "CFL_c_y = " << max_C_x_y_z[1] << std::endl;
     pcout << "CFL_c_z = " << max_C_x_y_z[2] << std::endl;
     const auto max_velocity = get_max_velocity();
     pcout<< "Maximum velocity = " << max_velocity << std::endl;
-    pcout << "CFL_u = " << dt*max_velocity*EquationData::degree_u*
-                           std::sqrt(dim)/GridTools::minimal_cell_diameter(triangulation, mapping) << std::endl;
+    pcout << "CFL_u = " << EquationData::degree_u*(max_velocity*dt/h_min) << std::endl;
     const auto max_Cu_x_y_z = compute_max_Cu_per_direction();
     pcout << "CFL_u_x = " << max_Cu_x_y_z[0] << std::endl;
     pcout << "CFL_u_y = " << max_Cu_x_y_z[1] << std::endl;
     pcout << "CFL_u_z = " << max_Cu_x_y_z[2] << std::endl;
+    if(dt_from_CFL) {
+      dt = CFL*h_min/(max_velocity*EquationData::degree_u);
+      euler_matrix.set_dt(dt);
+    }
 
-    /*--- Save the results each 'output_interval' steps ---*/
-    if(n % output_interval == 0) {
-      verbose_cout << "Plotting Solution final" << std::endl;
-      output_results(n);
+    /*--- Save the results ---*/
+    if(n_files_.empty() && dt_save_.empty()) {
+      if(n % output_interval == 0) {
+        verbose_cout << "Plotting solution" << std::endl;
+        output_results(n);
+      }
+    }
+    else if(!dt_save_.empty()) {
+      if(std::abs(time - (n_saved + 1)*dt_save) < static_cast<Number>(1e-10)) {
+        verbose_cout << "Plotting solution" << std::endl;
+        output_results(n);
+        ++n_saved;
+        euler_matrix.set_dt(dt);
+      }
+    }
+    else {
+      if(time >= static_cast<Number>(n_saved + 1)*dt_save) {
+        verbose_cout << "Plotting solution" << std::endl;
+        output_results(n);
+        ++n_saved;
+      }
     }
 
     if(time + dt > T && T - time > static_cast<Number>(1e-10)) {
@@ -1250,9 +1324,23 @@ void EulerSolver<dim>::run(const bool verbose, const unsigned output_interval) {
   pcout << "Average fixed point iterations: "
         << static_cast<Number>(tot_fixed_point_iters)/((n_stages - 1)*n)
         << std::endl;
-  if(n % output_interval != 0) {
-    verbose_cout << "Plotting Solution final" << std::endl;
-    output_results(n);
+  if(n_files_.empty() && dt_save_.empty()) {
+    if(n % output_interval != 0) {
+      verbose_cout << "Plotting final solution" << std::endl;
+      output_results(n);
+    }
+  }
+  else if(!dt_save_.empty()) {
+    if(time < (n_saved + 1)*dt_save) {
+      verbose_cout << "Plotting final solution" << std::endl;
+      output_results(n);
+    }
+  }
+  else {
+    if(n_saved < n_files) {
+      verbose_cout << "Plotting final solution" << std::endl;
+      output_results(n);
+    }
   }
 }
 
@@ -1309,7 +1397,7 @@ int main(int argc, char *argv[]) {
 
     /*-- Run the simulation ---*/
     EulerSolver<3> test(data, explicit_RK, implicit_RK);
-    test.run(data.verbose, data.output_interval);
+    test.run(data.verbose, data.output_interval, data.n_files, data.dt_save);
 
     if(curr_rank == 0)
       std::cout << "----------------------------------------------------"
