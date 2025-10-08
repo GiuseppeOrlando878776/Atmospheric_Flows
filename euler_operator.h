@@ -112,10 +112,21 @@ namespace Atmospheric_Flow {
 
   private:
     Vec rho_for_fixed,
-        pres_fixed;
+        pres_fixed; /*--- Auxiliary vectors for fixed point loop ---*/
 
     /*--- Auxiliary function for the numerical flux ---*/
     NumericalFlux::RusanovFluxEuler<dim, VectorizedArray<Number>> num_flux;
+
+    Number Ma2;          /*--- Squared Mach number ---*/
+    Number inv_Ma2;      /*--- Inverse of squared Mach number ---*/
+    Number inv_Fr2;      /*--- Inverse of squared Froude number ---*/
+    Number Ma2_ov_Fr2;   /*--- Mach squared over Froude squared ---*/
+    Number gamma_m1;     /*--- gamma - 1 (gamma ratio specific heats) ---*/
+    Number inv_gamma_m1; /*--- Inverse gamma - 1 ---*/
+    Number inv_Gamma;    /*--- gamma/(gamma - 1) ---*/
+
+    Tensor<1, dim, VectorizedArray<Number>> e_k; /*--- Unit normal vector along vertical direction ---*/
+    Tensor<2, dim, VectorizedArray<Number>> identity; /*--- Identity tensor ---*/
 
     /*--- Assembler functions for the rhs related to the continuity equation. Here, and also in the following,
           we distinguish between the contribution for cells, faces and boundary. ---*/
@@ -258,7 +269,21 @@ namespace Atmospheric_Flow {
                 Vec>::
   EULEROperator():
     MatrixFreeOperators::Base<dim, Vec>(), Ma(), Fr(), dt(),
-    IMEX_stage(1), Euler_stage(1), num_flux() {}
+    IMEX_stage(1), Euler_stage(1), num_flux(),
+    Ma2(), inv_Ma2(), inv_Fr2(), Ma2_ov_Fr2(),
+    gamma_m1(static_cast<Number>(EquationData::Cp_Cv) - static_cast<Number>(1.0)),
+    inv_gamma_m1(static_cast<Number>(1.0)/gamma_m1),
+    inv_Gamma(static_cast<Number>(EquationData::Cp_Cv)*inv_gamma_m1)
+    {
+      /*--- We create an auxiliary vector for the unit vector along vertical direction. This will never change
+            independently on the stage, so we declare it once and for all. ---*/
+      for(unsigned d = 0; d < dim - 1; ++d) {
+        e_k[d]         = make_vectorized_array<Number>(0.0);
+        identity[d][d] = make_vectorized_array<Number>(1.0);
+      }
+      identity[dim - 1][dim - 1] = make_vectorized_array<Number>(1.0);
+      e_k[dim - 1]               = make_vectorized_array<Number>(1.0);
+    }
 
   // Constructor with runtime parameters storage
   //
@@ -278,7 +303,22 @@ namespace Atmospheric_Flow {
     Fr(static_cast<Number>(data.Froude)),
     dt(static_cast<Number>(data.dt)),
     n_stages(explicit_RK.get_n_stages()),
-    IMEX_stage(1), Euler_stage(1), num_flux(Ma) {
+    IMEX_stage(1), Euler_stage(1), num_flux(Ma),
+    Ma2(Ma*Ma), inv_Ma2(static_cast<Number>(1.0)/Ma2),
+    inv_Fr2(static_cast<Number>(1.0)/(Fr*Fr)), Ma2_ov_Fr2(Ma2*inv_Fr2),
+    gamma_m1(static_cast<Number>(EquationData::Cp_Cv) - static_cast<Number>(1.0)),
+    inv_gamma_m1(static_cast<Number>(1.0)/gamma_m1),
+    inv_Gamma(static_cast<Number>(EquationData::Cp_Cv)*inv_gamma_m1)
+    {
+      /*--- We create an auxiliary vector for the unit vector along vertical direction. This will never change
+            independently on the stage, so we declare it once and for all. ---*/
+      for(unsigned d = 0; d < dim - 1; ++d) {
+        e_k[d]         = make_vectorized_array<Number>(0.0);
+        identity[d][d] = make_vectorized_array<Number>(1.0);
+      }
+      identity[dim - 1][dim - 1] = make_vectorized_array<Number>(1.0);
+      e_k[dim - 1]               = make_vectorized_array<Number>(1.0);
+
       /*--- Initialize the RK coefficients ---*/
       explicit_RK.get_coefficients(a, b);
       implicit_RK.get_coefficients(a_tilde, b_tilde);
@@ -574,8 +614,8 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over quadrature points of each internal face ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q); /*--- Notice that the unit normal vector is the same from
-                                                                 'both sides'. ---*/
+          const auto& n_minus = phi_m.normal_vector(q); /*--- Notice that the unit normal vector is the same from
+                                                              'both sides'. ---*/
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
@@ -609,12 +649,12 @@ namespace Atmospheric_Flow {
     /*--- Final update ---*/
     else {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
-      FEFaceEvaluation_rho  phi_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_p(data, false, EquationData::RHO_INDEX_DOF),
-                            phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
-                            phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
-      FEFaceEvaluation_u    phi_u_m(data, true, EquationData::U_INDEX_DOF),
-                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
+      FEFaceEvaluation_rho phi_m(data, true, EquationData::RHO_INDEX_DOF),
+                           phi_p(data, false, EquationData::RHO_INDEX_DOF),
+                           phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
+                           phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
+      FEFaceEvaluation_u   phi_u_m(data, true, EquationData::U_INDEX_DOF),
+                           phi_u_p(data, false, EquationData::U_INDEX_DOF);
 
       /*--- Loop over all internal faces ---*/
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
@@ -628,7 +668,7 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
@@ -694,9 +734,9 @@ namespace Atmospheric_Flow {
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
                      Vec>::
-  assemble_cell_term_density(const MatrixFree<dim, Number>&               data,
-                             Vec&                                         dst,
-                             const Vec&                                   src,
+  assemble_cell_term_density(const MatrixFree<dim, Number>&       data,
+                             Vec&                                 dst,
+                             const Vec&                           src,
                              const std::pair<unsigned, unsigned>& cell_range) const {
     FEEvaluation<dim, fe_degree_rho, fe_degree_rho + 1, 1, Number> phi(data, EquationData::RHO_INDEX_DOF, 2);
 
@@ -733,17 +773,6 @@ namespace Atmospheric_Flow {
                                   Vec&                                 dst,
                                   const std::vector<Vec>&              src,
                                   const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We create an auxiliary vector for the unit vector along vertical direction. This will never change
-          independently on the stage, so we declare it once and for all. ---*/
-    Tensor<1, dim, VectorizedArray<Number>> e_k;
-    Tensor<2, dim, VectorizedArray<Number>> identity;
-    for(unsigned d = 0; d < dim - 1; ++d) {
-      e_k[d]         = make_vectorized_array<Number>(0.0);
-      identity[d][d] = make_vectorized_array<Number>(1.0);
-    }
-    identity[dim - 1][dim - 1] = make_vectorized_array<Number>(1.0);
-    e_k[dim - 1]               = make_vectorized_array<Number>(1.0);
-
     /*--- Intermediate stages ---*/
     if(IMEX_stage <= n_stages) {
       /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
@@ -785,15 +814,15 @@ namespace Atmospheric_Flow {
 
             const auto& rho_s              = phi_rho[s - 1].get_value(q);
 
-            gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*(rho_s*e_k/(Fr*Fr));
+            gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*(rho_s*e_k*inv_Fr2);
 
             flux += a[IMEX_stage - 1][s - 1]*dt*(rho_s*tensor_product_u_s) +
-                    a_tilde[IMEX_stage - 1][s - 1]*dt*(p_s_times_identity/(Ma*Ma));
+                    a_tilde[IMEX_stage - 1][s - 1]*dt*(p_s_times_identity*inv_Ma2);
           }
 
           /*--- Add last contribution of the gravity term (implicit treatment) ---*/
           const auto& rho_s = phi_rho.back().get_value(q);
-          gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(rho_s*e_k/(Fr*Fr));
+          gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(rho_s*e_k*inv_Fr2);
 
           phi.submit_value(rho_old*u_old - gravity_term, q);
           phi.submit_gradient(flux, q);
@@ -841,10 +870,10 @@ namespace Atmospheric_Flow {
 
             const auto& rho_s              = phi_rho[s - 1].get_value(q);
 
-            gravity_term += b_tilde[s - 1]*dt*(rho_s*e_k/(Fr*Fr));
+            gravity_term += b_tilde[s - 1]*dt*(rho_s*e_k*inv_Fr2);
 
             flux += b[s - 1]*dt*(rho_s*tensor_product_u_s) +
-                    b_tilde[s - 1]*dt*(p_s_times_identity/(Ma*Ma));
+                    b_tilde[s - 1]*dt*(p_s_times_identity*inv_Ma2);
           }
 
           phi.submit_value(rho_old*u_old - gravity_term, q);
@@ -895,7 +924,7 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
@@ -921,7 +950,9 @@ namespace Atmospheric_Flow {
                                                                   rho_s_p, u_s_p,
                                                                   n_minus)
                       + a_tilde[IMEX_stage - 1][s - 1]*dt*
-                        num_flux.numerical_flux_momentum_implicit(pres_s_m, pres_s_p, n_minus);
+                        num_flux.numerical_flux_momentum_implicit(pres_s_m,
+                                                                  pres_s_p,
+                                                                  n_minus);
           }
 
           phi_m.submit_value(-flux_num, q);
@@ -958,7 +989,7 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
@@ -984,7 +1015,9 @@ namespace Atmospheric_Flow {
                                                                   rho_s_p, u_s_p,
                                                                   n_minus)
                       + b_tilde[s - 1]*dt*
-                        num_flux.numerical_flux_momentum_implicit(pres_s_m, pres_s_p, n_minus);
+                        num_flux.numerical_flux_momentum_implicit(pres_s_m,
+                                                                  pres_s_p,
+                                                                  n_minus);
           }
 
           phi_m.submit_value(-flux_num, q);
@@ -1025,7 +1058,7 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_minus = phi.get_normal_vector(q);
+          const auto& n_minus = phi.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
@@ -1038,7 +1071,9 @@ namespace Atmospheric_Flow {
 
             /*--- Compute the numerical flux ---*/
             flux_num += a_tilde[IMEX_stage - 1][s - 1]*dt*
-                        num_flux.numerical_flux_momentum_implicit(pres_s, pres_s_D, n_minus);
+                        num_flux.numerical_flux_momentum_implicit(pres_s,
+                                                                  pres_s_D,
+                                                                  n_minus);
           }
 
           phi.submit_value(-flux_num, q);
@@ -1061,7 +1096,7 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          const auto& n_minus = phi.get_normal_vector(q);
+          const auto& n_minus = phi.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
@@ -1074,7 +1109,9 @@ namespace Atmospheric_Flow {
 
             /*--- Compute the numerical flux ---*/
             flux_num += b_tilde[s - 1]*dt*
-                        num_flux.numerical_flux_momentum_implicit(pres_s, pres_s_D, n_minus);
+                        num_flux.numerical_flux_momentum_implicit(pres_s,
+                                                                  pres_s_D,
+                                                                  n_minus);
           }
 
           phi.submit_value(-flux_num, q);
@@ -1183,7 +1220,7 @@ namespace Atmospheric_Flow {
 
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
         /*--- Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'. ---*/
-        phi.submit_divergence(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(phi_src.get_value(q)/(Ma*Ma)), q);
+        phi.submit_divergence(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(phi_src.get_value(q)*inv_Ma2), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::gradients, dst);
@@ -1221,13 +1258,13 @@ namespace Atmospheric_Flow {
 
       /*--- Loop over all quadrature points ---*/
       for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-        const auto& n_minus  = phi_m.get_normal_vector(q);
+        const auto& n_minus  = phi_m.normal_vector(q);
 
         const auto& avg_term = 0.5*(phi_src_m.get_value(q) +
                                     phi_src_p.get_value(q));
 
         const auto& flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
-                               (avg_term/(Ma*Ma)*n_minus);
+                               (avg_term*inv_Ma2*n_minus);
 
         phi_m.submit_value(flux_num, q);
         phi_p.submit_value(-flux_num, q);
@@ -1264,7 +1301,7 @@ namespace Atmospheric_Flow {
 
       /*--- Loop over all quadrature points ---*/
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
-        const auto& n_minus      = phi.get_normal_vector(q);
+        const auto& n_minus      = phi.normal_vector(q);
 
         const auto& pres_fixed_D = phi_src.get_value(q);
 
@@ -1272,7 +1309,7 @@ namespace Atmospheric_Flow {
                                         pres_fixed_D);
 
         phi.submit_value(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
-                         (avg_term/(Ma*Ma)*n_minus), q);
+                         (avg_term*inv_Ma2*n_minus), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1330,8 +1367,8 @@ namespace Atmospheric_Flow {
           const auto& rho_old  = phi_rho.front().get_value(q);
           const auto& u_old    = phi_u.front().get_value(q);
           const auto& pres_old = phi_pres.front().get_value(q);
-          const auto& rhoE_old = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old
-                               + rho_old*(0.5*(Ma*Ma)*scalar_product(u_old, u_old));
+          const auto& rhoE_old = inv_gamma_m1*pres_old
+                               + rho_old*(0.5*Ma2*scalar_product(u_old, u_old));
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux;
@@ -1342,12 +1379,12 @@ namespace Atmospheric_Flow {
             const auto& pres_s = phi_pres[s - 1].get_value(q);
 
             gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*
-                            ((Ma*Ma)/(Fr*Fr)*rho_s*u_s[dim - 1]);
+                            (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
 
             flux += a[IMEX_stage - 1][s - 1]*dt*
-                    (rho_s*(0.5*(Ma*Ma)*scalar_product(u_s, u_s))*u_s)
+                    (rho_s*(0.5*Ma2*scalar_product(u_s, u_s))*u_s)
                   + a_tilde[IMEX_stage - 1][s - 1]*dt*
-                    (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_s*u_s));
+                    (inv_Gamma*(pres_s*u_s));
           }
 
           /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop.
@@ -1355,10 +1392,10 @@ namespace Atmospheric_Flow {
           const auto& rho_for_fixed_s = phi_rho.back().get_value(q);
           const auto& u_fixed_s       = phi_u.back().get_value(q);
           gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
-                          ((Ma*Ma)/(Fr*Fr)*rho_for_fixed_s*u_fixed_s[dim - 1]);
+                          (Ma2_ov_Fr2*rho_for_fixed_s*u_fixed_s[dim - 1]);
 
           phi.submit_value(rhoE_old -
-                           rho_for_fixed_s*(0.5*(Ma*Ma)*scalar_product(u_fixed_s, u_fixed_s)) -
+                           rho_for_fixed_s*(0.5*Ma2*scalar_product(u_fixed_s, u_fixed_s)) -
                            gravity_term, q);
           phi.submit_gradient(flux, q);
         }
@@ -1397,8 +1434,8 @@ namespace Atmospheric_Flow {
           const auto& rho_old  = phi_rho.front().get_value(q);
           const auto& u_old    = phi_u.front().get_value(q);
           const auto& pres_old = phi_pres.front().get_value(q);
-          const auto& rhoE_old = 1.0/(EquationData::Cp_Cv - 1.0)*pres_old
-                               + rho_old*(0.5*(Ma*Ma)*scalar_product(u_old, u_old));
+          const auto& rhoE_old = inv_gamma_m1*pres_old
+                               + rho_old*(0.5*Ma2*scalar_product(u_old, u_old));
 
           /*--- Compute the quantities at the previous stages ---*/
           Tensor<1, dim, VectorizedArray<Number>> flux;
@@ -1409,12 +1446,12 @@ namespace Atmospheric_Flow {
             const auto& pres_s = phi_pres[s - 1].get_value(q);
 
             gravity_term += b_tilde[s - 1]*dt*
-                            ((Ma*Ma)/(Fr*Fr)*rho_s*u_s[dim - 1]);
+                            (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
 
             flux += b[s - 1]*dt*
-                    (rho_s*(0.5*(Ma*Ma)*scalar_product(u_s, u_s))*u_s)
+                    (rho_s*(0.5*Ma2*scalar_product(u_s, u_s))*u_s)
                   + b_tilde[s - 1]*dt*
-                    (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_s*u_s));
+                    (inv_Gamma*(pres_s*u_s));
           }
 
           /*--- We assign to the rhs the contribution due to the (already updated) kinetic energy ---*/
@@ -1422,7 +1459,7 @@ namespace Atmospheric_Flow {
           const auto& u_curr   = phi_u.back().get_value(q);
 
           phi.submit_value(rhoE_old -
-                           rho_curr*(0.5*(Ma*Ma)*scalar_product(u_curr, u_curr)) -
+                           rho_curr*(0.5*Ma2*scalar_product(u_curr, u_curr)) -
                            gravity_term, q);
           phi.submit_gradient(flux, q);
         }
@@ -1472,7 +1509,7 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
@@ -1515,8 +1552,10 @@ namespace Atmospheric_Flow {
           const auto& pres_fixed_s_p = phi_pres_p.get_value(q);
 
           /*--- Compute the stabilization term ---*/
-          const auto& lambda_fixed_s     = num_flux.compute_lambda(u_fixed_s_m, u_fixed_s_p, n_minus);
-          const auto& jump_rho_e_fixed_s = 1.0/(EquationData::Cp_Cv - 1.0)*
+          const auto& lambda_fixed_s     = num_flux.compute_lambda(u_fixed_s_m,
+                                                                   u_fixed_s_p,
+                                                                   n_minus);
+          const auto& jump_rho_e_fixed_s = inv_gamma_m1*
                                            (pres_fixed_s_m - pres_fixed_s_p);
 
           flux_num += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
@@ -1556,7 +1595,7 @@ namespace Atmospheric_Flow {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-          const auto& n_minus = phi_m.get_normal_vector(q);
+          const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
@@ -1648,7 +1687,7 @@ namespace Atmospheric_Flow {
 
       /*--- Loop over all quadrature points to fill the inverse of the coefficient ---*/
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
-        inverse_jxw[q] *= (EquationData::Cp_Cv - 1.0);
+        inverse_jxw[q] *= gamma_m1;
       }
 
       inverse.apply(inverse_jxw, 1,
@@ -1682,7 +1721,7 @@ namespace Atmospheric_Flow {
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
         /*--- For an ideal gas the part associated to the internal energy for a pressure based
               is just a modification of the mass matrix ---*/
-        phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
+        phi.submit_value(inv_gamma_m1*phi.get_value(q), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1725,8 +1764,7 @@ namespace Atmospheric_Flow {
         const auto& pres_fixed = phi_pres_fixed.get_value(q);
 
         phi.submit_gradient(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
-                            (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*
-                             (pres_fixed*phi_src.get_value(q))), q);
+                            (inv_Gamma*(pres_fixed*phi_src.get_value(q))), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::gradients, dst);
@@ -1771,12 +1809,12 @@ namespace Atmospheric_Flow {
 
       /*--- Loop over all quadrature points ---*/
       for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
-        const auto& n_minus           = phi_m.get_normal_vector(q);
+        const auto& n_minus           = phi_m.normal_vector(q);
 
         const auto& pres_fixed_m      = phi_pres_fixed_m.get_value(q);
         const auto& pres_fixed_p      = phi_pres_fixed_p.get_value(q);
 
-        const auto& avg_flux_enthalpy = 0.5*(EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0))*
+        const auto& avg_flux_enthalpy = 0.5*inv_Gamma*
                                         (pres_fixed_m*phi_src_m.get_value(q) +
                                          pres_fixed_p*phi_src_p.get_value(q));
 
@@ -2060,9 +2098,9 @@ namespace Atmospheric_Flow {
 
           const auto& rho_for_fixed = phi_rho_for_fixed.get_value(q);
 
-          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
-          phi.submit_gradient((a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt/Ma)*(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt/Ma)*
-                              (EquationData::Cp_Cv/(EquationData::Cp_Cv - 1.0)*(pres_fixed/rho_for_fixed)*phi.get_gradient(q)), q);
+          phi.submit_value(inv_gamma_m1*phi.get_value(q), q);
+          phi.submit_gradient((a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt)*(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt)*inv_Ma2*
+                              (inv_Gamma*(pres_fixed/rho_for_fixed)*phi.get_gradient(q)), q);
         }
 
         phi.integrate(EvaluationFlags::values | EvaluationFlags::gradients);
@@ -2109,7 +2147,7 @@ namespace Atmospheric_Flow {
         phi.evaluate(EvaluationFlags::values);
 
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          phi.submit_value(1.0/(EquationData::Cp_Cv - 1.0)*phi.get_value(q), q);
+          phi.submit_value(inv_gamma_m1*phi.get_value(q), q);
         }
 
         phi.integrate(EvaluationFlags::values);

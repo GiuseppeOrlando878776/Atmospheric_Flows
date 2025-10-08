@@ -46,20 +46,39 @@ namespace Physics {
                                                 const Number& p) const; /*--- Physical flux energy equation ---*/
 
   protected:
-    const value_type Ma; /*--- Mach number ---*/
+    value_type Ma;           /*--- Mach number ---*/
+    value_type Ma2;          /*--- Squared Mach number ---*/
+    value_type inv_Ma2;      /*--- Inverse squared Mach number ---*/
+    value_type inv_gamma_m1; /*--- Inverse gamma - 1 (gamma ratio specific heats) ---*/
+
+    Tensor<2, dim, Number> identity; /*--- Identity tensor ---*/
   };
 
   // Default class constructor
   //
   template<unsigned dim, typename Number>
   PhysicalFluxEuler<dim, Number>::PhysicalFluxEuler():
-    Ma() {}
+    Ma(), Ma2(), inv_Ma2(),
+    inv_gamma_m1(static_cast<value_type>(1.0)/
+                 (static_cast<value_type>(EquationData::Cp_Cv) - static_cast<value_type>(1.0)))
+    {
+      for(unsigned d = 0; d < dim; ++d) {
+        identity[d][d] = Number(1.0);
+      }
+    }
 
   // Class constructor
   //
   template<unsigned dim, typename Number>
   PhysicalFluxEuler<dim, Number>::PhysicalFluxEuler(const value_type Ma_):
-    Ma(Ma_) {}
+    Ma(Ma_), Ma2(Ma_*Ma_), inv_Ma2(static_cast<value_type>(1.0)/Ma2),
+    inv_gamma_m1(static_cast<value_type>(1.0)/
+                 (static_cast<value_type>(EquationData::Cp_Cv) - static_cast<value_type>(1.0)))
+    {
+      for(unsigned d = 0; d < dim; ++d) {
+        identity[d][d] = Number(1.0);
+      }
+    }
 
   // Getter of the Mach number
   //
@@ -94,8 +113,7 @@ namespace Physics {
     }
 
     /*--- Return the momentum flux ---*/
-    return outer_product(rho*u, u) +
-           static_cast<value_type>(1.0)/(Ma*Ma)*(p*identity);
+    return outer_product(rho*u, u) + inv_Ma2*(p*identity);
   }
 
   // Physical flux of the energy equation
@@ -106,15 +124,13 @@ namespace Physics {
                                               const Tensor<1, dim, Number>& u,
                                               const Number& p) const {
     /*--- Compute internal enrgy ---*/
-    const auto& e = static_cast<value_type>(1.0)/
-                    (static_cast<value_type>(EquationData::Cp_Cv) - static_cast<value_type>(1.0))*
-                    (p/rho);
+    const auto& e = inv_gamma_m1*(p/rho);
 
     /*--- Compute kinetic energy ---*/
     const auto& k = static_cast<value_type>(0.5)*scalar_product(u, u);
 
     /*--- Return the energy flux ---*/
-    return ((rho*e + p) + (Ma*Ma)*(rho*k))*u;
+    return ((rho*e + p) + Ma2*(rho*k))*u;
   }
 
 } // namespace PhysicalFlux

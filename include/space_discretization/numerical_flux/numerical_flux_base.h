@@ -20,7 +20,7 @@ namespace NumericalFlux {
   template<unsigned dim, typename Number>
   class NumericalFluxEuler: public Physics::PhysicalFluxEuler<dim, Number> {
   public:
-    using value_type = typename Physics::PhysicalFluxEuler<dim, Number>::value_type; /*--- Arythmetic type for this class ---*/
+    using value_type = typename Physics::PhysicalFluxEuler<dim, Number>::value_type; /*--- Arithmetic type for this class ---*/
 
     NumericalFluxEuler() = default;
 

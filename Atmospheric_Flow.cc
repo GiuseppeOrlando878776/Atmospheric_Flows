@@ -273,7 +273,8 @@ private:
       rhs_pres_precomputed,
       extra_rhs_u; /*--- Auxiliary vectors for the Schur complement ---*/
 
-  Number Ma; /*--- Mach number for post-processing ---*/
+  Number Ma;     /*--- Mach number for post-processing ---*/
+  Number inv_Ma; /*--- Inverse Mach number for post-processing ---*/
 
   Number h_min; /*--- Minimum cell diameter ---*/
 
@@ -323,7 +324,7 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   dof_handler_density(triangulation),
   dof_handler_velocity(triangulation),
   dof_handler_pressure(triangulation),
-  mapping(GalChenMapping::degree_mapping, true),
+  mapping(GalChenMapping::degree_mapping),
   quadrature_density(EquationData::degree_rho + 1),
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_pressure(EquationData::degree_p + 1),
@@ -371,7 +372,8 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   as_initial_conditions(data.as_initial_conditions),
   euler_matrix(data, explicit_RK, implicit_RK),
   rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)),
-  Ma(euler_matrix.get_Mach()) {
+  Ma(euler_matrix.get_Mach()), inv_Ma(static_cast<Number>(1.0)/Ma)
+  {
     /*--- Check time step coherence ---*/
     if(data.CFL.empty()) {
       dt = static_cast<Number>(data.dt);
@@ -1086,7 +1088,7 @@ EulerSolver<dim>::compute_max_Cu_per_direction() const {
       for(unsigned q = 0; q < n_q_points; ++q) {
         for(unsigned d = 0; d < dim; ++d) {
           res[d] = std::max(res[d],
-                            EquationData::degree_u*(std::abs(solution_values_velocity[q](d))*dt/cell->extent_in_direction(0)));
+                            EquationData::degree_u*(std::abs(solution_values_velocity[q](d))*dt/cell->extent_in_direction(d)));
         }
       }
     }
@@ -1123,8 +1125,8 @@ EulerSolver<dim>::compute_max_C_per_direction() const {
         auto local_celerity = std::sqrt(static_cast<Number>(EquationData::Cp_Cv)*
                                         (solution_values_pressure[q]/solution_values_density[q]));
         for(unsigned d = 0; d < dim; ++d) {
-          res[d] = std::max(res[d], (static_cast<Number>(1.0)/Ma)*
-                                    EquationData::degree_u*(local_celerity*dt/cell->extent_in_direction(d)));
+          res[d] = std::max(res[d],
+                            inv_Ma*EquationData::degree_u*(local_celerity*dt/cell->extent_in_direction(d)));
         }
       }
     }
@@ -1293,7 +1295,7 @@ void EulerSolver<dim>::run(const bool verbose,
     pres_s.front().scale(dt_tau_pres_aux_left_y);
 
     /*--- Compute auxiliary post-processing data ---*/
-    const auto max_celerity = (static_cast<Number>(1.0)/Ma)*compute_max_celerity();
+    const auto max_celerity = inv_Ma*compute_max_celerity();
     pcout<< "Maximum celerity = " << max_celerity << std::endl;
     pcout << "CFL_c = " << EquationData::degree_u*(max_celerity*dt/h_min) << std::endl;
     const auto max_C_x_y_z = compute_max_C_per_direction();
@@ -1421,14 +1423,16 @@ int main(int argc, char *argv[]) {
     EulerSolver<3> test(data, explicit_RK, implicit_RK);
     test.run(data.verbose, data.output_interval, data.n_files, data.dt_save);
 
-    if(curr_rank == 0)
+    if(curr_rank == 0) {
       std::cout << "----------------------------------------------------"
                 << std::endl
                 << "Apparently everything went fine!" << std::endl
                 << "Don't forget to brush your teeth :-)" << std::endl
                 << std::endl;
+    }
 
     return 0;
+
   }
   catch(std::exception& exc) {
     std::cerr << std::endl

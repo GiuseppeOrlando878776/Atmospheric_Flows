@@ -19,7 +19,7 @@ namespace NumericalFlux {
   template<unsigned dim, typename Number>
   class RusanovFluxEuler: public NumericalFluxEuler<dim, Number> {
   public:
-    using value_type = typename Physics::PhysicalFluxEuler<dim, Number>::value_type; /*--- Arythmetic type for this class ---*/
+    using value_type = typename Physics::PhysicalFluxEuler<dim, Number>::value_type; /*--- Arithmetic type for this class ---*/
 
     RusanovFluxEuler() = default;
 
@@ -69,13 +69,15 @@ namespace NumericalFlux {
                                                                                                                for the implicit part ---*/
 
   private:
+    Number inv_Gamma; /*--- gamma/(gamma - 1) ---*/
   };
 
   // Class constructor
   //
   template<unsigned dim, typename Number>
   RusanovFluxEuler<dim, Number>::RusanovFluxEuler(const value_type Ma_):
-    NumericalFluxEuler<dim, Number>(Ma_) {}
+    NumericalFluxEuler<dim, Number>(Ma_),
+    inv_Gamma(static_cast<value_type>(EquationData::Cp_Cv)*this->inv_gamma_m1) {}
 
   // Stabilization parameter of the Rusanov flux
   //
@@ -142,7 +144,7 @@ namespace NumericalFlux {
                          numerical_flux_momentum_implicit(const Number& pres_m,
                                                           const Number& pres_p,
                                                           const Tensor<1, dim, Number>& n_minus) const {
-    return (static_cast<value_type>(0.5)*(pres_m + pres_p))/(this->Ma*this->Ma)*n_minus;
+    return (static_cast<value_type>(0.5)*(pres_m + pres_p))*(this->inv_Ma2)*n_minus;
   }
 
   // Numerical flux explicit part energy equation
@@ -165,8 +167,8 @@ namespace NumericalFlux {
                                rho_p*(static_cast<value_type>(0.5)*scalar_product(u_p, u_p));
 
     /*--- Return the numerical flux ---*/
-    return (this->Ma*this->Ma)*(scalar_product(avg_kinetic, n_minus) +
-                                static_cast<value_type>(0.5)*lambda*jump_rho_kin);
+    return (this->Ma2)*(scalar_product(avg_kinetic, n_minus) +
+                        static_cast<value_type>(0.5)*lambda*jump_rho_kin);
   }
 
   // Numerical flux explicit part energy equation
@@ -179,16 +181,12 @@ namespace NumericalFlux {
                                         const Number& pres_p,
                                         const Tensor<1, dim, Number>& n_minus) const {
     /*--- Start with centered contribution ---*/
-    const auto& avg_enthalpy = static_cast<value_type>(0.5)*
-                               (static_cast<value_type>(EquationData::Cp_Cv)/
-                                (static_cast<value_type>(EquationData::Cp_Cv) - static_cast<value_type>(1.0)))*
+    const auto& avg_enthalpy = static_cast<value_type>(0.5)*inv_Gamma*
                                (pres_m*u_m + pres_p*u_p);
 
     /*--- Focus on stabilization term ---*/
     const auto& lambda     = compute_lambda(u_m, u_p, n_minus);
-    const auto& jump_rho_e = static_cast<value_type>(1.0)/
-                             (static_cast<value_type>(EquationData::Cp_Cv) - static_cast<value_type>(1.0))*
-                             (pres_m - pres_p);
+    const auto& jump_rho_e = this->inv_gamma_m1*(pres_m - pres_p);
 
     /*--- Return the numerical flux ---*/
     return scalar_product(avg_enthalpy, n_minus) +

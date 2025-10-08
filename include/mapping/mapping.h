@@ -17,9 +17,10 @@
 namespace GalChenMapping {
   using namespace dealii;
 
-  static const unsigned degree_mapping          = 2;                                                             /*--- Mapping degree ---*/
-  static const unsigned extra_quadrature_degree = (degree_mapping == 1) ? 0 : my_ceil(0.5*(degree_mapping - 2)); /*--- Extra accuracy
-                                                                                                                       for quadratures ---*/
+  static const unsigned degree_mapping          = 2; /*--- Mapping degree ---*/
+  static const unsigned extra_quadrature_degree = (degree_mapping == 1) ?
+                                                  0 : my_ceil(0.5*(degree_mapping - 2)); /*--- Extra accuracy
+                                                                                               for quadratures ---*/
 
   static const double h  = 400.0;   /*--- Hill height ---*/
   static const double xc = 30000.0; /*--- x-Center of the hill ---*/
