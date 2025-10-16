@@ -129,7 +129,7 @@ protected:
   Vec pres_bar;
 
   // Variable for the potential temperature
-  LinearAlgebra::distributed::Vector<double> theta_old;
+  Vec theta_old;
 
   // Damping layers functions for all the unknowns
   Vec dt_tau_rho;
@@ -775,7 +775,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
 
   /*--- Solve the linear system for the pressure---*/
   SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm());
-  SolverGMRES<LinearAlgebra::distributed::Vector<Number>> gmres(solver_control);
+  SolverGMRES<Vec> gmres(solver_control);
 
   gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
 }
@@ -976,6 +976,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   rho_s.front().zero_out_ghost_values();
   u_s.front().zero_out_ghost_values();
   pres_s.front().zero_out_ghost_values();
+  theta_old.zero_out_ghost_values();
 }
 
 

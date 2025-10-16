@@ -37,8 +37,10 @@ namespace Atmospheric_Flow {
                   const TimeStepping::RungeKutta<Number>& explicit_RK,
                   const TimeStepping::RungeKutta<Number>& implicit_RK); /*--- Constructor with some input related data ---*/
 
-    void set_dt(const Number time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
-                                               in case of modifications of the time step. ---*/
+    template<typename T>
+    inline DEAL_II_ALWAYS_INLINE
+    void set_dt(const T time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
+                                          in case of modifications of the time step. ---*/
 
     inline DEAL_II_ALWAYS_INLINE
     Number get_Mach() const; /*--- Getter of the Mach number. This is useful for debugging purpose. ---*/
@@ -337,13 +339,14 @@ namespace Atmospheric_Flow {
            unsigned fe_degree_u, unsigned fe_degree_rho, unsigned fe_degree_p,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
+  template<typename T>
   inline DEAL_II_ALWAYS_INLINE
   void EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
                      Vec>::
-  set_dt(const Number time_step) {
-    dt = time_step;
+  set_dt(const T time_step) {
+    dt = static_cast<Number>(time_step);
   }
 
   // Getter of Mach number
