@@ -1,4 +1,5 @@
 /*--- Author: Giuseppe Orlando, 2025. ---*/
+#pragma once
 
 // @sect{Include files}
 
@@ -61,6 +62,8 @@ namespace RunTimeParameters {
     double atol_fixed_point; /*--- Absolute tolerance for the fixed point loop ---*/
     double rtol_fixed_point; /*--- Relative tolerance for the fixed point loop ---*/
 
+    double l_mixing; /*--- Mixing length (in the case of turbulent simulations) ---*/
+
     /*--- Mesh parameters ---*/
     unsigned n_global_refines;    /*--- Number of global refinements for the initial (coarse) mesh ---*/
     unsigned max_loc_refinements; /*--- Maximum number of refinements allowed ---*/
@@ -121,6 +124,7 @@ namespace RunTimeParameters {
                                 CFL(""),
                                 atol_fixed_point(1e-12),
                                 rtol_fixed_point(1e-10),
+                                l_mixing(1.0),
                                 n_global_refines(0),
                                 max_loc_refinements(0),
                                 min_loc_refinements(0),
@@ -241,6 +245,11 @@ namespace RunTimeParameters {
                         "1e-10",
                         Patterns::Double(0.0),
                         "Relative tolerance for the fixed point loop.");
+
+      prm.declare_entry("l_mixing",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Mixing length in the case of turbulent simulations.");
     }
     prm.leave_subsection();
 
@@ -380,6 +389,8 @@ namespace RunTimeParameters {
 
       atol_fixed_point = prm.get_double("atol_fixed_point");
       rtol_fixed_point = prm.get_double("rtol_fixed_point");
+
+      l_mixing = prm.get_double("l_mixing");
     }
     prm.leave_subsection();
 
