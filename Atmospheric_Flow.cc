@@ -275,6 +275,8 @@ private:
 
   Number Ma;     /*--- Mach number for post-processing ---*/
   Number inv_Ma; /*--- Inverse Mach number for post-processing ---*/
+  Number gamma;  /*--- gamma (i.e. Cp/Cv) ---*/
+  Number Gamma;  /*--- (gamma - 1)/gamma ---*/
 
   Number h_min; /*--- Minimum cell diameter ---*/
 
@@ -372,7 +374,9 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   as_initial_conditions(data.as_initial_conditions),
   euler_matrix(data, explicit_RK, implicit_RK),
   rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)),
-  Ma(euler_matrix.get_Mach()), inv_Ma(static_cast<Number>(1.0)/Ma)
+  Ma(euler_matrix.get_Mach()), inv_Ma(static_cast<Number>(1.0)/Ma),
+  gamma(static_cast<Number>(EquationData::Cp_Cv)),
+  Gamma((gamma - static_cast<Number>(1.0))/gamma)
   {
     /*--- Check time step coherence ---*/
     if(data.CFL.empty()) {
@@ -911,8 +915,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
       for(unsigned idx = 0; idx < dof_indices.size(); ++idx) {
         const auto pres = pres_s.front()(dof_indices[idx]);
         const auto T    = pres/rho_s.front()(dof_indices[idx]);
-        const auto Pi   = std::pow(pres, (static_cast<Number>(EquationData::Cp_Cv) - static_cast<Number>(1.0))/
-                                         static_cast<Number>(EquationData::Cp_Cv));
+        const auto Pi   = std::pow(pres, Gamma);
         theta_old(dof_indices[idx]) = T/Pi;
       }
     }
@@ -1059,8 +1062,7 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::compute_max_celerity() const
 
       for(unsigned q = 0; q < n_q_points; ++q) {
         max_local_celerity = std::max(max_local_celerity,
-                                      std::sqrt(static_cast<Number>(EquationData::Cp_Cv)*
-                                                (solution_values_pressure[q]/solution_values_density[q])));
+                                      std::sqrt(gamma*(solution_values_pressure[q]/solution_values_density[q])));
       }
     }
   }
@@ -1123,8 +1125,7 @@ EulerSolver<dim>::compute_max_C_per_direction() const {
       fe_values.get_function_values(rho_s.front(), solution_values_density);
 
       for(unsigned q = 0; q < n_q_points; ++q) {
-        auto local_celerity = std::sqrt(static_cast<Number>(EquationData::Cp_Cv)*
-                                        (solution_values_pressure[q]/solution_values_density[q]));
+        auto local_celerity = std::sqrt(gamma*(solution_values_pressure[q]/solution_values_density[q]));
         for(unsigned d = 0; d < dim; ++d) {
           res[d] = std::max(res[d],
                             inv_Ma*EquationData::degree_u*(local_celerity*dt/cell->extent_in_direction(d)));
