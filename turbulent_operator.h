@@ -92,6 +92,8 @@ namespace Turbulent_Diffusivity {
     Number inv_Fr2;   /*--- Inverse of squared Froude number ---*/
     Number l2_mixing; /*--- Square of mixing length ---*/
 
+    Tensor<1, dim, VectorizedArray<Number>> tmp_diagonal_velocity; /*--- Auxiliary vector to compute the diagonal of the velocity matrix ----*/
+
     /*--- Assembler functions for the rhs related to the velocity equation. Here, and also in the following,
           we distinguish between the contribution for cells, faces and boundary. ---*/
     void assemble_rhs_cell_term_velocity(const MatrixFree<dim, Number>&       data,
@@ -195,7 +197,14 @@ namespace Turbulent_Diffusivity {
   TurbulentOperator():
     MatrixFreeOperators::Base<dim, Vec>(),
     dt(), n_stages(), IMEX_stage(1), NS_stage(1),
-    inv_Fr2(), l2_mixing() {}
+    inv_Fr2(), l2_mixing()
+    {
+      /*--- We create an auxiliary vector that will never change
+            independently on the stage, so we declare it once and for all. ---*/
+      for(unsigned d = 0; d < dim; ++d) {
+        tmp_diagonal_velocity[d] = make_vectorized_array<Number>(1.0);
+      }
+    }
 
   // Constructor with runtime parameters storage
   //
@@ -1168,12 +1177,8 @@ namespace Turbulent_Diffusivity {
     FEEvaluation_theta phi_theta_curr(data, EquationData::THETA_INDEX_DOF);
 
     /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-          a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp' does. ---*/
+          a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp_diagonal_velocity' does. ---*/
     AlignedVector<Tensor<1, dim, VectorizedArray<Number>>> diagonal(phi.dofs_per_component);
-    Tensor<1, dim, VectorizedArray<Number>> tmp;
-    for(unsigned d = 0; d < dim; ++d) {
-      tmp[d] = make_vectorized_array<Number>(1.0);
-    }
 
     /*--- Loop over all cells ---*/
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
@@ -1189,7 +1194,7 @@ namespace Turbulent_Diffusivity {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
         }
-        phi.submit_dof_value(tmp, i);
+        phi.submit_dof_value(tmp_diagonal_velocity, i);
         phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
         /*--- Loop over all quadrature points. ---*/
@@ -1261,10 +1266,6 @@ namespace Turbulent_Diffusivity {
 
     AlignedVector<Tensor<1, dim, VectorizedArray<Number>>> diagonal_m(phi_m.dofs_per_component),
                                                            diagonal_p(phi_p.dofs_per_component);
-    Tensor<1, dim, VectorizedArray<Number>> tmp;
-    for(unsigned d = 0; d < dim; ++d) {
-      tmp[d] = make_vectorized_array<Number>(1.0);
-    }
 
     /*--- Loop over all internal faces ---*/
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
@@ -1290,9 +1291,9 @@ namespace Turbulent_Diffusivity {
           phi_m.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
           phi_p.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
         }
-        phi_m.submit_dof_value(tmp, i);
+        phi_m.submit_dof_value(tmp_diagonal_velocity, i);
         phi_m.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
-        phi_p.submit_dof_value(tmp, i);
+        phi_p.submit_dof_value(tmp_diagonal_velocity, i);
         phi_p.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
         /*--- Loop over all quadrature points ---*/

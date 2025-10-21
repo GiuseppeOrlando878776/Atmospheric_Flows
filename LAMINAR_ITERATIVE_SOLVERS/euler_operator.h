@@ -132,6 +132,7 @@ namespace Atmospheric_Flow {
 
     Tensor<1, dim, VectorizedArray<Number>> e_k; /*--- Unit normal vector along vertical direction ---*/
     Tensor<2, dim, VectorizedArray<Number>> identity; /*--- Identity tensor ---*/
+    Tensor<1, dim, VectorizedArray<Number>> tmp_diagonal_velocity; /*--- Auxiliary vector to compute the diagonal of the velocity matrix ----*/
 
     /*--- Assembler functions for the rhs related to the continuity equation. Here, and also in the following,
           we distinguish between the contribution for cells, faces and boundary. ---*/
@@ -275,14 +276,16 @@ namespace Atmospheric_Flow {
     inv_gamma_m1(static_cast<Number>(1.0)/gamma_m1),
     inv_Gamma(static_cast<Number>(EquationData::Cp_Cv)*inv_gamma_m1)
     {
-      /*--- We create an auxiliary vector for the unit vector along vertical direction. This will never change
+      /*--- We create auxiliary vectors and tensors that will never change
             independently on the stage, so we declare it once and for all. ---*/
       for(unsigned d = 0; d < dim - 1; ++d) {
-        e_k[d]         = make_vectorized_array<Number>(0.0);
-        identity[d][d] = make_vectorized_array<Number>(1.0);
+        e_k[d]                   = make_vectorized_array<Number>(0.0);
+        identity[d][d]           = make_vectorized_array<Number>(1.0);
+        tmp_diagonal_velocity[d] = make_vectorized_array<Number>(1.0);
       }
-      identity[dim - 1][dim - 1] = make_vectorized_array<Number>(1.0);
-      e_k[dim - 1]               = make_vectorized_array<Number>(1.0);
+      identity[dim - 1][dim - 1]     = make_vectorized_array<Number>(1.0);
+      e_k[dim - 1]                   = make_vectorized_array<Number>(1.0);
+      tmp_diagonal_velocity[dim - 1] = make_vectorized_array<Number>(1.0);
     }
 
   // Constructor with runtime parameters storage
@@ -310,14 +313,16 @@ namespace Atmospheric_Flow {
     inv_gamma_m1(static_cast<Number>(1.0)/gamma_m1),
     inv_Gamma(static_cast<Number>(EquationData::Cp_Cv)*inv_gamma_m1)
     {
-      /*--- We create an auxiliary vector for the unit vector along vertical direction. This will never change
+      /*--- We create auxiliary vectors and tensors that will never change
             independently on the stage, so we declare it once and for all. ---*/
       for(unsigned d = 0; d < dim - 1; ++d) {
-        e_k[d]         = make_vectorized_array<Number>(0.0);
-        identity[d][d] = make_vectorized_array<Number>(1.0);
+        e_k[d]                   = make_vectorized_array<Number>(0.0);
+        identity[d][d]           = make_vectorized_array<Number>(1.0);
+        tmp_diagonal_velocity[d] = make_vectorized_array<Number>(1.0);
       }
-      identity[dim - 1][dim - 1] = make_vectorized_array<Number>(1.0);
-      e_k[dim - 1]               = make_vectorized_array<Number>(1.0);
+      identity[dim - 1][dim - 1]     = make_vectorized_array<Number>(1.0);
+      e_k[dim - 1]                   = make_vectorized_array<Number>(1.0);
+      tmp_diagonal_velocity[dim - 1] = make_vectorized_array<Number>(1.0);
 
       /*--- Initialize the RK coefficients ---*/
       explicit_RK.get_coefficients(a, b);
@@ -1984,14 +1989,10 @@ namespace Atmospheric_Flow {
     FEEvaluation_rho phi_rho_for_fixed(data, EquationData::RHO_INDEX_DOF);
 
     /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-          a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp' does.
+          a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp_diagonal_velocity' does.
           Moreover, since here we have just one 'src' vector, but we also need to deal with the current density,
           we employ the auxiliary vector 'rho_for_fixed' where we setted this information ---*/
     AlignedVector<Tensor<1, dim, VectorizedArray<Number>>> diagonal(phi.dofs_per_component);
-    Tensor<1, dim, VectorizedArray<Number>> tmp;
-    for(unsigned d = 0; d < dim; ++d) {
-      tmp[d] = make_vectorized_array<Number>(1.0);
-    }
 
     /*--- Loop over all cells ---*/
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
@@ -2005,7 +2006,7 @@ namespace Atmospheric_Flow {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
         }
-        phi.submit_dof_value(tmp, i);
+        phi.submit_dof_value(tmp_diagonal_velocity, i);
         phi.evaluate(EvaluationFlags::values);
 
         /*--- Loop over all quadrature points ---*/
