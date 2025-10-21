@@ -829,7 +829,7 @@ void EulerSolver<dim>::update_density() {
                                       Number_MG>> preconditioner(dof_handler_density, mg, mg_transfer);
 
   /*--- Solve the system for the density ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_rho.l2_norm());
+  SolverControl solver_control(max_its, rtol_iterative*rhs_rho.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
   rho_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), rho_s[IMEX_stage - 2]);
@@ -868,7 +868,7 @@ void EulerSolver<dim>::precompute_rhs_pressure() {
                  MGTransferMatrixFree<dim, Number_MG>> preconditioner(dof_handler_velocity, mg, mg_transfer);
 
   /*--- Solve to compute first contribution to rhs --*/
-  SolverControl solver_control_schur(max_its, static_cast<Number>(1e-12)*rhs_momentum.l2_norm());
+  SolverControl solver_control_schur(max_its, static_cast<Number>(1e-12)*rhs_momentum.l2_norm(), false, true);
   SolverCG<Vec> cg_schur(solver_control_schur);
 
   cg_schur.solve(euler_matrix, rhs_u_precomputed, rhs_momentum, preconditioner);
@@ -911,7 +911,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   preconditioner_Jacobi.initialize(euler_matrix);
 
   /*--- Solve the linear system for the pressure---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm());
+  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
   gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
@@ -987,7 +987,7 @@ void EulerSolver<dim>::update_velocity() {
                                       Number_MG>> preconditioner(dof_handler_velocity, mg, mg_transfer);
 
   /*--- Solve the system for the velocity ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_u.l2_norm());
+  SolverControl solver_control(max_its, rtol_iterative*rhs_u.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
   if(IMEX_stage <= n_stages) {
@@ -1034,7 +1034,7 @@ void EulerSolver<dim>::update_pressure() {
                                       Number_MG>> preconditioner(dof_handler_pressure, mg, mg_transfer);
 
   /*--- Solve the system for the pressure ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm());
+  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
   pres_s.front().equ(static_cast<Number>(1.0), pres_s.back());

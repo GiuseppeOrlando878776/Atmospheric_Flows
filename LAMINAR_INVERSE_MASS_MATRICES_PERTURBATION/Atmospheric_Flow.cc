@@ -110,6 +110,7 @@ protected:
 
   // Variables for the density
   std::vector<Vec> rho_s;
+  std::vector<Vec> rho_prime_s;
   Vec rhs_rho;
 
   // Variables for the velocity
@@ -119,7 +120,9 @@ protected:
 
   // Variables for the pressure
   std::vector<Vec> pres_s;
+  std::vector<Vec> pres_prime_s;
   Vec pres_fixed;
+  Vec pres_prime_fixed;
   Vec dpres_fixed;
   Vec rhs_pres;
 
@@ -331,8 +334,10 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_pressure(EquationData::degree_p + 1),
   rho_s(n_stages + 1),
+  rho_prime_s(n_stages),
   u_s(n_stages + 1),
   pres_s(n_stages),
+  pres_prime_s(n_stages),
   dof_handlers(EquationData::n_vars),
   constraints(EquationData::n_vars),
   push_forward(),
@@ -532,13 +537,20 @@ void EulerSolver<dim>::setup_dofs() {
   for(std::size_t idx = 0; idx < pres_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(pres_s[idx], EquationData::P_INDEX_DOF);
   }
+  for(std::size_t idx = 0; idx < pres_prime_s.size(); ++idx) {
+    matrix_free_storage->initialize_dof_vector(pres_prime_s[idx], EquationData::P_INDEX_DOF);
+  }
   matrix_free_storage->initialize_dof_vector(pres_fixed, EquationData::P_INDEX_DOF);
+  matrix_free_storage->initialize_dof_vector(pres_prime_fixed, EquationData::P_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(dpres_fixed, EquationData::P_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(rhs_pres, EquationData::P_INDEX_DOF);
 
   /*--- Initialize the variables related to the density ---*/
   for(std::size_t idx = 0; idx < rho_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(rho_s[idx], EquationData::RHO_INDEX_DOF);
+  }
+  for(std::size_t idx = 0; idx < rho_prime_s.size(); ++idx) {
+    matrix_free_storage->initialize_dof_vector(rho_prime_s[idx], EquationData::RHO_INDEX_DOF);
   }
   matrix_free_storage->initialize_dof_vector(rhs_rho, EquationData::RHO_INDEX_DOF);
 
@@ -681,6 +693,12 @@ void EulerSolver<dim>::initialize() {
     VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u_s.front());
     VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_s.front());
   }
+
+  /*--- Initialize density and pressure perturbation ---*/
+  rho_prime_s.front().equ(static_cast<Number>(1.0), rho_s.front());
+  rho_prime_s.front().add(static_cast<Number>(-1.0), rho_bar);
+  pres_prime_s.front().equ(static_cast<Number>(1.0), pres_s.front());
+  pres_prime_s.front().add(static_cast<Number>(-1.0), pres_bar);
 }
 
 
@@ -731,9 +749,10 @@ void EulerSolver<dim>::precompute_rhs_pressure() {
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
     vectors_rhs_momentum_equation.push_back(rho_s[idx_s]);
     vectors_rhs_momentum_equation.push_back(u_s[idx_s]);
-    vectors_rhs_momentum_equation.push_back(pres_s[idx_s]);
+    vectors_rhs_momentum_equation.push_back(pres_prime_s[idx_s]);
+    vectors_rhs_momentum_equation.push_back(rho_prime_s[idx_s]);
   }
-  vectors_rhs_momentum_equation.push_back(rho_s[IMEX_stage - 1]);
+  vectors_rhs_momentum_equation.push_back(rho_prime_s[IMEX_stage - 1]);
 
   euler_matrix.vmult_rhs_momentum(rhs_momentum, vectors_rhs_momentum_equation);
 
@@ -758,10 +777,11 @@ void EulerSolver<dim>::pressure_fixed_point() {
     vectors_rhs_energy_equation.push_back(rho_s[idx_s]);
     vectors_rhs_energy_equation.push_back(u_s[idx_s]);
     vectors_rhs_energy_equation.push_back(pres_s[idx_s]);
+    vectors_rhs_energy_equation.push_back(pres_prime_s[idx_s]);
   }
   vectors_rhs_energy_equation.push_back(rho_s[IMEX_stage - 1]);
   vectors_rhs_energy_equation.push_back(u_fixed);
-  vectors_rhs_energy_equation.push_back(pres_fixed);
+  vectors_rhs_energy_equation.push_back(pres_prime_fixed);
 
   euler_matrix.vmult_rhs_energy(rhs_pres, vectors_rhs_energy_equation);
 
@@ -781,7 +801,9 @@ void EulerSolver<dim>::pressure_fixed_point() {
   SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
-  gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
+  gmres.solve(euler_matrix, pres_prime_fixed, rhs_pres, preconditioner_Jacobi);
+  pres_fixed.equ(static_cast<Number>(1.0), pres_prime_fixed);
+  pres_fixed.add(static_cast<Number>(1.0), pres_bar);
 }
 
 // Auxiliary routine for the fixed point loop
@@ -830,7 +852,7 @@ void EulerSolver<dim>::update_velocity() {
   /*--- Compute the rhs ---*/
   if(IMEX_stage <= n_stages) {
     rhs_u.equ(static_cast<Number>(1.0), rhs_momentum);
-    euler_matrix.vmult_pressure(extra_rhs_u, pres_fixed);
+    euler_matrix.vmult_pressure(extra_rhs_u, pres_prime_fixed);
     rhs_u.add(static_cast<Number>(-1.0), extra_rhs_u);
   }
   else {
@@ -838,7 +860,8 @@ void EulerSolver<dim>::update_velocity() {
     for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
       vectors_rhs_momentum_equation.push_back(rho_s[idx_s]);
       vectors_rhs_momentum_equation.push_back(u_s[idx_s]);
-      vectors_rhs_momentum_equation.push_back(pres_s[idx_s]);
+      vectors_rhs_momentum_equation.push_back(pres_prime_s[idx_s]);
+      vectors_rhs_momentum_equation.push_back(rho_prime_s[idx_s]);
     }
 
     euler_matrix.vmult_rhs_momentum(rhs_u, vectors_rhs_momentum_equation);
@@ -872,6 +895,7 @@ void EulerSolver<dim>::update_pressure() {
     vectors_rhs_energy_equation.push_back(rho_s[idx_s]);
     vectors_rhs_energy_equation.push_back(u_s[idx_s]);
     vectors_rhs_energy_equation.push_back(pres_s[idx_s]);
+    vectors_rhs_energy_equation.push_back(pres_prime_s[idx_s]);
   }
   vectors_rhs_energy_equation.push_back(rho_s.back());
   vectors_rhs_energy_equation.push_back(u_s.back());
@@ -879,7 +903,9 @@ void EulerSolver<dim>::update_pressure() {
   euler_matrix.vmult_rhs_energy(rhs_pres, vectors_rhs_energy_equation);
 
   /*--- Solve the system for the pressure ---*/
-  euler_matrix.vmult(pres_s.front(), rhs_pres);
+  euler_matrix.vmult(pres_prime_s.front(), rhs_pres);
+  pres_s.front().equ(static_cast<Number>(1.0), pres_prime_s.front());
+  pres_s.front().add(static_cast<Number>(1.0), pres_bar);
 }
 
 
@@ -922,6 +948,11 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   }
   theta_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, theta_old, "theta", {DataComponentInterpretation::component_is_scalar});
+
+  rho_prime_s.front().update_ghost_values();
+  data_out.add_data_vector(dof_handler_density, rho_prime_s.front(), "rho_prime", {DataComponentInterpretation::component_is_scalar});
+  pres_prime_s.front().update_ghost_values();
+  data_out.add_data_vector(dof_handler_pressure, pres_prime_s.front(), "p_prime", {DataComponentInterpretation::component_is_scalar});
 
   /*--- Save background state ---*/
   rho_bar.update_ghost_values();
@@ -980,6 +1011,8 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   u_s.front().zero_out_ghost_values();
   pres_s.front().zero_out_ghost_values();
   theta_old.zero_out_ghost_values();
+  rho_prime_s.front().zero_out_ghost_values();
+  pres_prime_s.front().zero_out_ghost_values();
 }
 
 
@@ -1220,6 +1253,8 @@ void EulerSolver<dim>::run(const bool verbose,
 
       verbose_cout << "  Update density stage " << IMEX_stage << std::endl;
       update_density();
+      rho_prime_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), rho_s[IMEX_stage - 1]);
+      rho_prime_s[IMEX_stage - 1].add(static_cast<Number>(-1.0), rho_bar);
       pcout << "Minimum density " << get_min_density() << std::endl;
       pcout << "Maximum density " << get_max_density() << std::endl;
 
@@ -1227,10 +1262,12 @@ void EulerSolver<dim>::run(const bool verbose,
       // Set the current density to the operator
       euler_matrix.set_rho_for_fixed(rho_s[IMEX_stage - 1]);
       pres_fixed.equ(static_cast<Number>(1.0), pres_s[IMEX_stage - 2]);
+      pres_prime_fixed.equ(static_cast<Number>(1.0), pres_prime_s[IMEX_stage - 2]);
       u_fixed.equ(static_cast<Number>(1.0), u_s[IMEX_stage - 2]);
       const auto iter = perform_fixed_point_loop();
       tot_fixed_point_iters += (iter + 1);
       // Assign the fields after the fixed point loop
+      pres_prime_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), pres_prime_fixed);
       pres_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), pres_fixed);
       u_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), u_fixed);
     }
@@ -1295,6 +1332,12 @@ void EulerSolver<dim>::run(const bool verbose,
     u_s.front().scale(dt_tau_u_aux_left_y);
     pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_left_y);
     pres_s.front().scale(dt_tau_pres_aux_left_y);
+
+    /*--- Update density and pressure perturbation for the next step ---*/
+    rho_prime_s.front().equ(static_cast<Number>(1.0), rho_s.front());
+    rho_prime_s.front().add(static_cast<Number>(-1.0), rho_bar);
+    pres_prime_s.front().equ(static_cast<Number>(1.0), pres_s.front());
+    pres_prime_s.front().add(static_cast<Number>(-1.0), pres_bar);
 
     /*--- Compute auxiliary post-processing data ---*/
     const auto max_celerity = inv_Ma*compute_max_celerity();

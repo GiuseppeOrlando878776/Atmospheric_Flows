@@ -812,7 +812,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   preconditioner_Jacobi.initialize(euler_matrix);
 
   /*--- Solve the linear system for the pressure---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm());
+  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
   gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
@@ -943,7 +943,7 @@ void EulerSolver<dim>::diffusion_step() {
   preconditioner_Jacobi.initialize(turbulent_matrix);
 
   /*--- Solve the linear system for the velocity ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_u.l2_norm());
+  SolverControl solver_control(max_its, rtol_iterative*rhs_u.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
   u_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), u_s[IMEX_stage - 2]);
@@ -977,7 +977,7 @@ void EulerSolver<dim>::temperature_step() {
   preconditioner_Jacobi.initialize(turbulent_matrix);
 
   /*--- Solve the linear system for the potential temperature ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_theta.l2_norm());
+  SolverControl solver_control(max_its, rtol_iterative*rhs_theta.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
   theta_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), theta_s[IMEX_stage - 2]);
@@ -1335,7 +1335,7 @@ void EulerSolver<dim>::run(const bool verbose,
     pcout << "Maximum density " << get_max_density() << std::endl;
 
     verbose_cout << "  Update velocity" << std::endl;
-    // Set the current density to the operator and set the variables for multigrid
+    // Set the current density to the operator
     euler_matrix.set_rho_for_fixed(rho_s.back());
     update_velocity();
 
