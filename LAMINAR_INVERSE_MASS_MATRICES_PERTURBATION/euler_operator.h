@@ -362,9 +362,9 @@ namespace Atmospheric_Flow {
            typename Vec>
   inline DEAL_II_ALWAYS_INLINE
   typename EULEROperator<dim,
-                     fe_degree_u, fe_degree_rho, fe_degree_p,
-                     n_q_points_1d, n_q_points_1d_boundary,
-                     Vec>::Number
+                         fe_degree_u, fe_degree_rho, fe_degree_p,
+                         n_q_points_1d, n_q_points_1d_boundary,
+                         Vec>::Number
   EULEROperator<dim,
                      fe_degree_u, fe_degree_rho, fe_degree_p,
                      n_q_points_1d, n_q_points_1d_boundary,
@@ -381,13 +381,13 @@ namespace Atmospheric_Flow {
            typename Vec>
   inline DEAL_II_ALWAYS_INLINE
   typename EULEROperator<dim,
-                     fe_degree_u, fe_degree_rho, fe_degree_p,
-                     n_q_points_1d, n_q_points_1d_boundary,
-                     Vec>::Number
+                         fe_degree_u, fe_degree_rho, fe_degree_p,
+                         n_q_points_1d, n_q_points_1d_boundary,
+                         Vec>::Number
   EULEROperator<dim,
-                     fe_degree_u, fe_degree_rho, fe_degree_p,
-                     n_q_points_1d, n_q_points_1d_boundary,
-                     Vec>::
+                fe_degree_u, fe_degree_rho, fe_degree_p,
+                n_q_points_1d, n_q_points_1d_boundary,
+                Vec>::
   get_Froude() const {
     return Fr;
   }
