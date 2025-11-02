@@ -534,6 +534,8 @@ void EulerSolver<dim>::setup_dofs() {
   quadratures.push_back(QGauss<1>(EquationData::quadrature_degree));
   quadratures.push_back(QGauss<1>(EquationData::quadrature_degree + GalChenMapping::extra_quadrature_degree));
   quadratures.push_back(QGauss<1>(EquationData::degree_u + 1));
+  quadratures.push_back(QGauss<1>(EquationData::degree_rho + 1));
+  quadratures.push_back(QGauss<1>(EquationData::degree_p + 1));
 
   /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
   matrix_free_storage->reinit(mapping, dof_handlers, constraints, quadratures, additional_data);
@@ -1440,6 +1442,8 @@ void EulerSolver<dim>::run(const bool verbose,
     pcout << "CFL_u_x = " << max_Cu_x_y_z[0] << std::endl;
     pcout << "CFL_u_y = " << max_Cu_x_y_z[1] << std::endl;
     pcout << "CFL_u_z = " << max_Cu_x_y_z[2] << std::endl;
+
+    /*--- Recompute time step if needed ---*/
     if(dt_from_CFL) {
       dt = CFL*h_min/(max_velocity*EquationData::degree_u);
       euler_matrix.set_dt(dt);
@@ -1530,23 +1534,23 @@ int main(int argc, char *argv[]) {
     std::vector<Number> b(n_stages);
     std::fill(a.begin(), a.end(),
               std::vector<Number>(n_stages, static_cast<Number>(0.0)));
-    const auto gamma = static_cast<Number>(2.0) - static_cast<Number>(std::sqrt(2.0));
-    a[1][0] = gamma;
+    const auto chi = static_cast<Number>(2.0) - static_cast<Number>(std::sqrt(2.0));
+    a[1][0] = chi;
     a[2][0] = static_cast<Number>(0.5);
     a[2][1] = static_cast<Number>(0.5);
-    b[0]    = static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma;
-    b[1]    = static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma;
-    b[2]    = static_cast<Number>(0.5)*gamma;
+    b[0]    = static_cast<Number>(0.5) - static_cast<Number>(0.25)*chi;
+    b[1]    = static_cast<Number>(0.5) - static_cast<Number>(0.25)*chi;
+    b[2]    = static_cast<Number>(0.5)*chi;
     TimeStepping::RungeKutta<Number> explicit_RK(a, b);
 
     std::vector<std::vector<Number>> a_tilde(n_stages, std::vector<Number>(n_stages));
     std::fill(a_tilde.begin(), a_tilde.end(),
               std::vector<Number>(n_stages, static_cast<Number>(0.0)));
-    a_tilde[1][0] = static_cast<Number>(0.5)*gamma;
-    a_tilde[1][1] = static_cast<Number>(0.5)*gamma;
-    a_tilde[2][0] = static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma;
-    a_tilde[2][1] = static_cast<Number>(0.5) - static_cast<Number>(0.25)*gamma;
-    a_tilde[2][2] = static_cast<Number>(0.5)*gamma;
+    a_tilde[1][0] = static_cast<Number>(0.5)*chi;
+    a_tilde[1][1] = static_cast<Number>(0.5)*chi;
+    a_tilde[2][0] = static_cast<Number>(0.5) - static_cast<Number>(0.25)*chi;
+    a_tilde[2][1] = static_cast<Number>(0.5) - static_cast<Number>(0.25)*chi;
+    a_tilde[2][2] = static_cast<Number>(0.5)*chi;
     std::vector<Number> b_tilde = b;
     TimeStepping::RungeKutta<Number> implicit_RK(a_tilde, b_tilde);
 

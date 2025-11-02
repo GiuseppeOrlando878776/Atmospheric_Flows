@@ -366,9 +366,9 @@ namespace Atmospheric_Flow {
                          n_q_points_1d, n_q_points_1d_boundary,
                          Vec>::Number
   EULEROperator<dim,
-                     fe_degree_u, fe_degree_rho, fe_degree_p,
-                     n_q_points_1d, n_q_points_1d_boundary,
-                     Vec>::
+                fe_degree_u, fe_degree_rho, fe_degree_p,
+                n_q_points_1d, n_q_points_1d_boundary,
+                Vec>::
   get_Mach() const {
     return Ma;
   }
@@ -746,7 +746,7 @@ namespace Atmospheric_Flow {
                              Vec&                                 dst,
                              const Vec&                           src,
                              const std::pair<unsigned, unsigned>& cell_range) const {
-    FEEvaluation<dim, fe_degree_rho, fe_degree_rho + 1, 1, Number> phi(data, EquationData::RHO_INDEX_DOF, 2);
+    FEEvaluation<dim, fe_degree_rho, fe_degree_rho + 1, 1, Number> phi(data, EquationData::RHO_INDEX_DOF, 3);
 
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, fe_degree_rho, 1, Number> inverse(phi);
 
@@ -827,15 +827,15 @@ namespace Atmospheric_Flow {
 
             const auto& rho_prime_s = phi_rho_prime[s - 1].get_value(q);
             gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*
-                            (rho_prime_s*e_k*inv_Fr2);
+                            (inv_Fr2*rho_prime_s*e_k);
 
             flux += a[IMEX_stage - 1][s - 1]*dt*(rho_s*tensor_product_u_s) +
-                    a_tilde[IMEX_stage - 1][s - 1]*dt*(p_prime_s_times_identity*inv_Ma2);
+                    a_tilde[IMEX_stage - 1][s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
           }
 
           /*--- Add last contribution of the gravity term (implicit treatment) ---*/
           const auto& rho_prime_s = phi_rho_prime.back().get_value(q);
-          gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(rho_prime_s*e_k*inv_Fr2);
+          gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(inv_Fr2*rho_prime_s*e_k);
 
           phi.submit_value(rho_old*u_old - gravity_term, q);
           phi.submit_gradient(flux, q);
@@ -888,10 +888,10 @@ namespace Atmospheric_Flow {
 
             const auto& rho_prime_s = phi_rho_prime[s - 1].get_value(q);
             gravity_term += b_tilde[s - 1]*dt*
-                            (rho_prime_s*e_k*inv_Fr2);
+                            (inv_Fr2*rho_prime_s*e_k);
 
             flux += b[s - 1]*dt*(rho_s*tensor_product_u_s) +
-                    b_tilde[s - 1]*dt*(p_prime_s_times_identity*inv_Ma2);
+                    b_tilde[s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
           }
 
           phi.submit_value(rho_old*u_old - gravity_term, q);
@@ -1282,7 +1282,7 @@ namespace Atmospheric_Flow {
                                     phi_src_p.get_value(q));
 
         const auto& flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
-                               (avg_term*inv_Ma2*n_minus);
+                               (inv_Ma2*avg_term*n_minus);
 
         phi_m.submit_value(flux_num, q);
         phi_p.submit_value(-flux_num, q);
@@ -1327,7 +1327,7 @@ namespace Atmospheric_Flow {
                                         pres_fixed_D);
 
         phi.submit_value(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
-                         (avg_term*inv_Ma2*n_minus), q);
+                         (inv_Ma2*avg_term*n_minus), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -1711,7 +1711,7 @@ namespace Atmospheric_Flow {
                                              Vec&                                 dst,
                                              const Vec&                           src,
                                              const std::pair<unsigned, unsigned>& cell_range) const {
-    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 2);
+    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 4);
 
     MatrixFreeOperators::CellwiseInverseMassMatrix<dim, fe_degree_p, 1, Number> inverse(phi);
 
@@ -1750,7 +1750,7 @@ namespace Atmospheric_Flow {
                                      Vec&                                         dst,
                                      const Vec&                                   src,
                                      const std::pair<unsigned, unsigned>& cell_range) const {
-    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 2);
+    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 4);
 
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi.reinit(cell);
@@ -2163,7 +2163,7 @@ namespace Atmospheric_Flow {
                                               Vec&                                 dst,
                                               const unsigned&                      ,
                                               const std::pair<unsigned, unsigned>& cell_range) const {
-    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 2);
+    FEEvaluation<dim, fe_degree_p, fe_degree_p + 1, 1, Number> phi(data, EquationData::P_INDEX_DOF, 4);
 
     AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
 
