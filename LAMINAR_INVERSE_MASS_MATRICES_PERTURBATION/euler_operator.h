@@ -825,12 +825,12 @@ namespace Atmospheric_Flow {
 
             const auto& rho_s = phi_rho[s - 1].get_value(q);
 
+            flux += a[IMEX_stage - 1][s - 1]*dt*(rho_s*tensor_product_u_s) +
+                    a_tilde[IMEX_stage - 1][s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
+
             const auto& rho_prime_s = phi_rho_prime[s - 1].get_value(q);
             gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*
                             (inv_Fr2*rho_prime_s*e_k);
-
-            flux += a[IMEX_stage - 1][s - 1]*dt*(rho_s*tensor_product_u_s) +
-                    a_tilde[IMEX_stage - 1][s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
           }
 
           /*--- Add last contribution of the gravity term (implicit treatment) ---*/
@@ -886,12 +886,12 @@ namespace Atmospheric_Flow {
 
             const auto& rho_s = phi_rho[s - 1].get_value(q);
 
+            flux += b[s - 1]*dt*(rho_s*tensor_product_u_s) +
+                    b_tilde[s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
+
             const auto& rho_prime_s = phi_rho_prime[s - 1].get_value(q);
             gravity_term += b_tilde[s - 1]*dt*
                             (inv_Fr2*rho_prime_s*e_k);
-
-            flux += b[s - 1]*dt*(rho_s*tensor_product_u_s) +
-                    b_tilde[s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
           }
 
           phi.submit_value(rho_old*u_old - gravity_term, q);
@@ -1238,7 +1238,7 @@ namespace Atmospheric_Flow {
 
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
         /*--- Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'. ---*/
-        phi.submit_divergence(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(phi_src.get_value(q)*inv_Ma2), q);
+        phi.submit_divergence(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(inv_Ma2*phi_src.get_value(q)), q);
       }
 
       phi.integrate_scatter(EvaluationFlags::gradients, dst);
@@ -1397,13 +1397,13 @@ namespace Atmospheric_Flow {
             const auto& u_s    = phi_u[s - 1].get_value(q);
             const auto& pres_s = phi_pres[s - 1].get_value(q);
 
-            gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*
-                            (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
-
             flux += a[IMEX_stage - 1][s - 1]*dt*
                     (rho_s*(0.5*Ma2*scalar_product(u_s, u_s))*u_s)
                   + a_tilde[IMEX_stage - 1][s - 1]*dt*
                     (inv_Gamma*(pres_s*u_s));
+
+            gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*
+                            (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
           }
 
           /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop.
@@ -1466,13 +1466,13 @@ namespace Atmospheric_Flow {
             const auto& u_s    = phi_u[s - 1].get_value(q);
             const auto& pres_s = phi_pres[s - 1].get_value(q);
 
-            gravity_term += b_tilde[s - 1]*dt*
-                            (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
-
             flux += b[s - 1]*dt*
                     (rho_s*(0.5*Ma2*scalar_product(u_s, u_s))*u_s)
                   + b_tilde[s - 1]*dt*
                     (inv_Gamma*(pres_s*u_s));
+
+            gravity_term += b_tilde[s - 1]*dt*
+                            (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
           }
 
           /*--- We assign to the rhs the contribution due to the (already updated) kinetic energy ---*/

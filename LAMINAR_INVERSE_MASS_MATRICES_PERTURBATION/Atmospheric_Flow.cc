@@ -804,8 +804,8 @@ void EulerSolver<dim>::pressure_fixed_point() {
   SolverGMRES<Vec> gmres(solver_control);
 
   gmres.solve(euler_matrix, pres_prime_fixed, rhs_pres, preconditioner_Jacobi);
-  pres_fixed.equ(static_cast<Number>(1.0), pres_prime_fixed);
-  pres_fixed.add(static_cast<Number>(1.0), pres_bar);
+  pres_fixed.equ(static_cast<Number>(1.0), pres_bar);
+  pres_fixed.add(static_cast<Number>(1.0), pres_prime_fixed);
 }
 
 // Auxiliary routine for the fixed point loop
@@ -951,6 +951,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   theta_old.update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, theta_old, "theta", {DataComponentInterpretation::component_is_scalar});
 
+  /*--- Save perturbations ---*/
   rho_prime_s.front().update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_prime_s.front(), "rho_prime", {DataComponentInterpretation::component_is_scalar});
   pres_prime_s.front().update_ghost_values();
