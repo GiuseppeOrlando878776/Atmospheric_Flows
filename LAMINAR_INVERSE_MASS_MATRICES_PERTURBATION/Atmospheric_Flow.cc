@@ -111,15 +111,16 @@ protected:
   // Variables for the density
   std::vector<Vec> rho_s;
   std::vector<Vec> rho_prime_s;
-  Vec rhs_rho;
+  Vec rhs_rho_prime;
 
   // Variables for the velocity
-  std::vector<Vec> u_s;
-  Vec u_fixed;
-  Vec rhs_u;
+  Vec u_old;
+  std::vector<Vec> u_prime_s;
+  Vec u_prime_fixed;
+  Vec rhs_u_prime;
 
   // Variables for the pressure
-  std::vector<Vec> pres_s;
+  Vec pres_old;
   std::vector<Vec> pres_prime_s;
   Vec pres_fixed;
   Vec pres_prime_fixed;
@@ -272,9 +273,9 @@ private:
   Vector<Number> Linfty_error_per_cell_pres; /*--- Auxiliary variable for the end of the fixed point loop ---*/
 
   Vec rhs_momentum,
-      rhs_u_precomputed,
+      rhs_u_prime_precomputed,
       rhs_pres_precomputed,
-      extra_rhs_u; /*--- Auxiliary vectors for the Schur complement ---*/
+      extra_rhs_u_prime; /*--- Auxiliary vectors for the Schur complement ---*/
 
   Number Ma;     /*--- Mach number for post-processing ---*/
   Number inv_Ma; /*--- Inverse Mach number for post-processing ---*/
@@ -334,9 +335,8 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   quadrature_velocity(EquationData::degree_u + 1),
   quadrature_pressure(EquationData::degree_p + 1),
   rho_s(n_stages + 1),
-  rho_prime_s(n_stages),
-  u_s(n_stages + 1),
-  pres_s(n_stages),
+  rho_prime_s(n_stages + 1),
+  u_prime_s(n_stages + 1),
   pres_prime_s(n_stages),
   dof_handlers(EquationData::n_vars),
   constraints(EquationData::n_vars),
@@ -529,16 +529,15 @@ void EulerSolver<dim>::setup_dofs() {
   matrix_free_storage->reinit(mapping, dof_handlers, constraints, quadratures, additional_data);
 
   /*--- Initialize the variables related to the velocity ---*/
-  for(std::size_t idx = 0; idx < u_s.size(); ++idx) {
-    matrix_free_storage->initialize_dof_vector(u_s[idx], EquationData::U_INDEX_DOF);
+  matrix_free_storage->initialize_dof_vector(u_old, EquationData::U_INDEX_DOF);
+  for(std::size_t idx = 0; idx < u_prime_s.size(); ++idx) {
+    matrix_free_storage->initialize_dof_vector(u_prime_s[idx], EquationData::U_INDEX_DOF);
   }
-  matrix_free_storage->initialize_dof_vector(u_fixed, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(rhs_u, EquationData::U_INDEX_DOF);
+  matrix_free_storage->initialize_dof_vector(u_prime_fixed, EquationData::U_INDEX_DOF);
+  matrix_free_storage->initialize_dof_vector(rhs_u_prime, EquationData::U_INDEX_DOF);
 
   /*--- Initialize the variables related to the pressure ---*/
-  for(std::size_t idx = 0; idx < pres_s.size(); ++idx) {
-    matrix_free_storage->initialize_dof_vector(pres_s[idx], EquationData::P_INDEX_DOF);
-  }
+  matrix_free_storage->initialize_dof_vector(pres_old, EquationData::P_INDEX_DOF);
   for(std::size_t idx = 0; idx < pres_prime_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(pres_prime_s[idx], EquationData::P_INDEX_DOF);
   }
@@ -554,17 +553,17 @@ void EulerSolver<dim>::setup_dofs() {
   for(std::size_t idx = 0; idx < rho_prime_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(rho_prime_s[idx], EquationData::RHO_INDEX_DOF);
   }
-  matrix_free_storage->initialize_dof_vector(rhs_rho, EquationData::RHO_INDEX_DOF);
+  matrix_free_storage->initialize_dof_vector(rhs_rho_prime, EquationData::RHO_INDEX_DOF);
 
   /*--- Initialize the variable related to the potential temperature ---*/
   matrix_free_storage->initialize_dof_vector(theta_old, EquationData::P_INDEX_DOF);
 
   /*--- Initialize the auxiliary variable for the Schur complement ---*/
   matrix_free_storage->initialize_dof_vector(rhs_momentum, EquationData::U_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(rhs_u_precomputed, EquationData::U_INDEX_DOF);
-  rhs_u_precomputed = 0;
+  matrix_free_storage->initialize_dof_vector(rhs_u_prime_precomputed, EquationData::U_INDEX_DOF);
+  rhs_u_prime_precomputed = 0;
   matrix_free_storage->initialize_dof_vector(rhs_pres_precomputed, EquationData::P_INDEX_DOF);
-  matrix_free_storage->initialize_dof_vector(extra_rhs_u, EquationData::U_INDEX_DOF);
+  matrix_free_storage->initialize_dof_vector(extra_rhs_u_prime, EquationData::U_INDEX_DOF);
 
   /*--- Initialize the variables related to the damping layers ---*/
   matrix_free_storage->initialize_dof_vector(dt_tau_u, EquationData::U_INDEX_DOF);
@@ -682,24 +681,26 @@ void EulerSolver<dim>::initialize() {
     solution_transfer_pressure(dof_handler_pressure);
 
     rho_s.front().zero_out_ghost_values();
-    u_s.front().zero_out_ghost_values();
-    pres_s.front().zero_out_ghost_values();
+    u_old.zero_out_ghost_values();
+    pres_old.zero_out_ghost_values();
 
     solution_transfer_density.deserialize(rho_s.front());
-    solution_transfer_velocity.deserialize(u_s.front());
-    solution_transfer_pressure.deserialize(pres_s.front());
+    solution_transfer_velocity.deserialize(u_old);
+    solution_transfer_pressure.deserialize(pres_old);
   }
   /*--- Initialize the fields ---*/
   else {
     VectorTools::interpolate(mapping, dof_handler_density, rho_init, rho_s.front());
-    VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u_s.front());
-    VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_s.front());
+    VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u_old);
+    VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_old);
   }
 
-  /*--- Initialize density and pressure perturbation ---*/
+  /*--- Initialize density, velocity, and pressure perturbations ---*/
   rho_prime_s.front().equ(static_cast<Number>(1.0), rho_s.front());
   rho_prime_s.front().add(static_cast<Number>(-1.0), rho_bar);
-  pres_prime_s.front().equ(static_cast<Number>(1.0), pres_s.front());
+  u_prime_s.front().equ(static_cast<Number>(1.0), u_old);
+  u_prime_s.front().add(static_cast<Number>(-1.0), u_bar);
+  pres_prime_s.front().equ(static_cast<Number>(1.0), pres_old);
   pres_prime_s.front().add(static_cast<Number>(-1.0), pres_bar);
 }
 
@@ -724,14 +725,18 @@ void EulerSolver<dim>::update_density() {
   /*--- Compute the rhs ---*/
   std::vector<Vec> vectors_rhs_density_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
-    vectors_rhs_density_equation.push_back(rho_s[idx_s]);
-    vectors_rhs_density_equation.push_back(u_s[idx_s]);
+    vectors_rhs_density_equation.push_back(rho_prime_s[idx_s]);
+    vectors_rhs_density_equation.push_back(u_prime_s[idx_s]);
   }
+  vectors_rhs_density_equation.push_back(rho_bar);
+  vectors_rhs_density_equation.push_back(u_bar);
 
-  euler_matrix.vmult_rhs_density(rhs_rho, vectors_rhs_density_equation);
+  euler_matrix.vmult_rhs_density(rhs_rho_prime, vectors_rhs_density_equation);
 
   /*--- Solve the system for the density ---*/
-  euler_matrix.vmult(rho_s[IMEX_stage - 1], rhs_rho);
+  euler_matrix.vmult(rho_prime_s[IMEX_stage - 1], rhs_rho_prime);
+  rho_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), rho_bar);
+  rho_s[IMEX_stage - 1].add(static_cast<Number>(1.0), rho_prime_s[IMEX_stage - 1]);
 }
 
 // @sect{<code>EulerSolver::pressure_fixed_point</code>}
@@ -749,17 +754,18 @@ void EulerSolver<dim>::precompute_rhs_pressure() {
   /*--- Compute the rhs ---*/
   std::vector<Vec> vectors_rhs_momentum_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
-    vectors_rhs_momentum_equation.push_back(rho_s[idx_s]);
-    vectors_rhs_momentum_equation.push_back(u_s[idx_s]);
-    vectors_rhs_momentum_equation.push_back(pres_prime_s[idx_s]);
     vectors_rhs_momentum_equation.push_back(rho_prime_s[idx_s]);
+    vectors_rhs_momentum_equation.push_back(u_prime_s[idx_s]);
+    vectors_rhs_momentum_equation.push_back(pres_prime_s[idx_s]);
   }
   vectors_rhs_momentum_equation.push_back(rho_prime_s[IMEX_stage - 1]);
+  vectors_rhs_momentum_equation.push_back(rho_bar);
+  vectors_rhs_momentum_equation.push_back(u_bar);
 
   euler_matrix.vmult_rhs_momentum(rhs_momentum, vectors_rhs_momentum_equation);
 
   /*--- Solve to compute first contribution to rhs --*/
-  euler_matrix.vmult(rhs_u_precomputed, rhs_momentum);
+  euler_matrix.vmult(rhs_u_prime_precomputed, rhs_momentum);
 }
 
 // This implements a step of the fixed point procedure for the computation of the pressure
@@ -776,20 +782,22 @@ void EulerSolver<dim>::pressure_fixed_point() {
   /*--- Compute the rhs ---*/
   std::vector<Vec> vectors_rhs_energy_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
-    vectors_rhs_energy_equation.push_back(rho_s[idx_s]);
-    vectors_rhs_energy_equation.push_back(u_s[idx_s]);
-    vectors_rhs_energy_equation.push_back(pres_s[idx_s]);
+    vectors_rhs_energy_equation.push_back(rho_prime_s[idx_s]);
+    vectors_rhs_energy_equation.push_back(u_prime_s[idx_s]);
     vectors_rhs_energy_equation.push_back(pres_prime_s[idx_s]);
   }
-  vectors_rhs_energy_equation.push_back(rho_s[IMEX_stage - 1]);
-  vectors_rhs_energy_equation.push_back(u_fixed);
+  vectors_rhs_energy_equation.push_back(rho_prime_s[IMEX_stage - 1]);
+  vectors_rhs_energy_equation.push_back(u_prime_fixed);
   vectors_rhs_energy_equation.push_back(pres_prime_fixed);
+  vectors_rhs_energy_equation.push_back(rho_bar);
+  vectors_rhs_energy_equation.push_back(u_bar);
+  vectors_rhs_energy_equation.push_back(pres_bar);
 
   euler_matrix.vmult_rhs_energy(rhs_pres, vectors_rhs_energy_equation);
 
   // Perform matrix-vector multiplication with enthalpy matrix (which changes over time)
   euler_matrix.set_pres_fixed(pres_fixed); // Set the current pressure for the fixed point loop to the operator
-  euler_matrix.vmult_enthalpy(rhs_pres_precomputed, rhs_u_precomputed);
+  euler_matrix.vmult_enthalpy(rhs_pres_precomputed, rhs_u_prime_precomputed);
 
   // Conclude computation of rhs for pressure fixed point
   rhs_pres.add(static_cast<Number>(-1.0), rhs_pres_precomputed);
@@ -853,28 +861,30 @@ void EulerSolver<dim>::update_velocity() {
 
   /*--- Compute the rhs ---*/
   if(IMEX_stage <= n_stages) {
-    rhs_u.equ(static_cast<Number>(1.0), rhs_momentum);
-    euler_matrix.vmult_pressure(extra_rhs_u, pres_prime_fixed);
-    rhs_u.add(static_cast<Number>(-1.0), extra_rhs_u);
+    rhs_u_prime.equ(static_cast<Number>(1.0), rhs_momentum);
+    euler_matrix.vmult_pressure(extra_rhs_u_prime, pres_prime_fixed);
+    rhs_u_prime.add(static_cast<Number>(-1.0), extra_rhs_u_prime);
   }
   else {
     std::vector<Vec> vectors_rhs_momentum_equation;
     for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
-      vectors_rhs_momentum_equation.push_back(rho_s[idx_s]);
-      vectors_rhs_momentum_equation.push_back(u_s[idx_s]);
-      vectors_rhs_momentum_equation.push_back(pres_prime_s[idx_s]);
       vectors_rhs_momentum_equation.push_back(rho_prime_s[idx_s]);
+      vectors_rhs_momentum_equation.push_back(u_prime_s[idx_s]);
+      vectors_rhs_momentum_equation.push_back(pres_prime_s[idx_s]);
     }
+    vectors_rhs_momentum_equation.push_back(rho_prime_s.back());
+    vectors_rhs_momentum_equation.push_back(rho_bar);
+    vectors_rhs_momentum_equation.push_back(u_bar);
 
-    euler_matrix.vmult_rhs_momentum(rhs_u, vectors_rhs_momentum_equation);
+    euler_matrix.vmult_rhs_momentum(rhs_u_prime, vectors_rhs_momentum_equation);
   }
 
   /*--- Solve the system for the velocity ---*/
   if(IMEX_stage <= n_stages) {
-    euler_matrix.vmult(u_fixed, rhs_u);
+    euler_matrix.vmult(u_prime_fixed, rhs_u_prime);
   }
   else {
-    euler_matrix.vmult(u_s.back(), rhs_u);
+    euler_matrix.vmult(u_prime_s.back(), rhs_u_prime);
   }
 }
 
@@ -894,20 +904,20 @@ void EulerSolver<dim>::update_pressure() {
   /*--- Compute the rhs ---*/
   std::vector<Vec> vectors_rhs_energy_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
-    vectors_rhs_energy_equation.push_back(rho_s[idx_s]);
-    vectors_rhs_energy_equation.push_back(u_s[idx_s]);
-    vectors_rhs_energy_equation.push_back(pres_s[idx_s]);
+    vectors_rhs_energy_equation.push_back(rho_prime_s[idx_s]);
+    vectors_rhs_energy_equation.push_back(u_prime_s[idx_s]);
     vectors_rhs_energy_equation.push_back(pres_prime_s[idx_s]);
   }
-  vectors_rhs_energy_equation.push_back(rho_s.back());
-  vectors_rhs_energy_equation.push_back(u_s.back());
+  vectors_rhs_energy_equation.push_back(rho_prime_s.back());
+  vectors_rhs_energy_equation.push_back(u_prime_s.back());
+  vectors_rhs_energy_equation.push_back(rho_bar);
+  vectors_rhs_energy_equation.push_back(u_bar);
+  vectors_rhs_energy_equation.push_back(pres_bar);
 
   euler_matrix.vmult_rhs_energy(rhs_pres, vectors_rhs_energy_equation);
 
   /*--- Solve the system for the pressure ---*/
   euler_matrix.vmult(pres_prime_s.front(), rhs_pres);
-  pres_s.front().equ(static_cast<Number>(1.0), pres_prime_s.front());
-  pres_s.front().add(static_cast<Number>(1.0), pres_bar);
 }
 
 
@@ -931,17 +941,17 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   std::vector<std::string> velocity_names(dim, "u");
   std::vector<DataComponentInterpretation::DataComponentInterpretation>
   component_interpretation_velocity(dim, DataComponentInterpretation::component_is_part_of_vector);
-  u_s.front().update_ghost_values();
-  data_out.add_data_vector(dof_handler_velocity, u_s.front(), velocity_names, component_interpretation_velocity);
-  pres_s.front().update_ghost_values();
-  data_out.add_data_vector(dof_handler_pressure, pres_s.front(), "p", {DataComponentInterpretation::component_is_scalar});
+  u_old.update_ghost_values();
+  data_out.add_data_vector(dof_handler_velocity, u_old, velocity_names, component_interpretation_velocity);
+  pres_old.update_ghost_values();
+  data_out.add_data_vector(dof_handler_pressure, pres_old, "p", {DataComponentInterpretation::component_is_scalar});
 
   for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
       cell->get_dof_indices(dof_indices);
       for(unsigned idx = 0; idx < dof_indices.size(); ++idx) {
-        const auto pres = pres_s.front()(dof_indices[idx]);
+        const auto pres = pres_old(dof_indices[idx]);
         const auto T    = pres/rho_s.front()(dof_indices[idx]);
         const auto Pi   = std::pow(pres, Gamma);
         theta_old(dof_indices[idx]) = T/Pi;
@@ -954,6 +964,9 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   /*--- Save perturbations ---*/
   rho_prime_s.front().update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_prime_s.front(), "rho_prime", {DataComponentInterpretation::component_is_scalar});
+  u_prime_s.front().update_ghost_values();
+  std::fill(velocity_names.begin(), velocity_names.end(), "u_prime");
+  data_out.add_data_vector(dof_handler_velocity, u_prime_s.front(), velocity_names, component_interpretation_velocity);
   pres_prime_s.front().update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, pres_prime_s.front(), "p_prime", {DataComponentInterpretation::component_is_scalar});
 
@@ -999,22 +1012,23 @@ void EulerSolver<dim>::output_results(const unsigned step) {
     solution_transfer_pressure(dof_handler_pressure);
 
     rho_s.front().update_ghost_values();
-    u_s.front().update_ghost_values();
-    pres_s.front().update_ghost_values();
+    u_old.update_ghost_values();
+    pres_old.update_ghost_values();
 
     solution_transfer_density.prepare_for_serialization(rho_s.front());
-    solution_transfer_velocity.prepare_for_serialization(u_s.front());
-    solution_transfer_pressure.prepare_for_serialization(pres_s.front());
+    solution_transfer_velocity.prepare_for_serialization(u_old);
+    solution_transfer_pressure.prepare_for_serialization(pres_old);
 
     triangulation.save("./" + saving_dir + "/solution_ser-" + Utilities::int_to_string(step, 5));
   }
 
   /*--- Call this function to be sure to be able to write again on these fields ---*/
   rho_s.front().zero_out_ghost_values();
-  u_s.front().zero_out_ghost_values();
-  pres_s.front().zero_out_ghost_values();
+  u_old.zero_out_ghost_values();
+  pres_old.zero_out_ghost_values();
   theta_old.zero_out_ghost_values();
   rho_prime_s.front().zero_out_ghost_values();
+  u_prime_s.front().zero_out_ghost_values();
   pres_prime_s.front().zero_out_ghost_values();
 }
 
@@ -1035,7 +1049,7 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::get_max_velocity() const {
     if(cell->is_locally_owned()) {
       fe_values_velocity.reinit(cell);
 
-      fe_values_velocity.get_function_values(u_s.front(), velocity_values);
+      fe_values_velocity.get_function_values(u_old, velocity_values);
 
       for(unsigned q = 0; q < n_q_points; q++) {
         max_local_velocity = std::max(max_local_velocity, velocity_values[q].l2_norm());
@@ -1093,7 +1107,7 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::compute_max_celerity() const
   for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
-      fe_values.get_function_values(pres_s.front(), solution_values_pressure);
+      fe_values.get_function_values(pres_old, solution_values_pressure);
       fe_values.get_function_values(rho_s.front(), solution_values_density);
 
       for(unsigned q = 0; q < n_q_points; ++q) {
@@ -1122,7 +1136,7 @@ EulerSolver<dim>::compute_max_Cu_per_direction() const {
   for(const auto& cell: dof_handler_velocity.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
-      fe_values.get_function_values(u_s.front(), solution_values_velocity);
+      fe_values.get_function_values(u_old, solution_values_velocity);
 
       for(unsigned q = 0; q < n_q_points; ++q) {
         for(unsigned d = 0; d < dim; ++d) {
@@ -1157,7 +1171,7 @@ EulerSolver<dim>::compute_max_C_per_direction() const {
   for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
-      fe_values.get_function_values(pres_s.front(), solution_values_pressure);
+      fe_values.get_function_values(pres_old, solution_values_pressure);
       fe_values.get_function_values(rho_s.front(), solution_values_density);
 
       for(unsigned q = 0; q < n_q_points; ++q) {
@@ -1256,23 +1270,21 @@ void EulerSolver<dim>::run(const bool verbose,
 
       verbose_cout << "  Update density stage " << IMEX_stage << std::endl;
       update_density();
-      rho_prime_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), rho_s[IMEX_stage - 1]);
-      rho_prime_s[IMEX_stage - 1].add(static_cast<Number>(-1.0), rho_bar);
       pcout << "Minimum density " << get_min_density() << std::endl;
       pcout << "Maximum density " << get_max_density() << std::endl;
 
       verbose_cout << "  Fixed point pressure stage " << IMEX_stage << std::endl;
       // Set the current density to the operator
       euler_matrix.set_rho_for_fixed(rho_s[IMEX_stage - 1]);
-      pres_fixed.equ(static_cast<Number>(1.0), pres_s[IMEX_stage - 2]);
       pres_prime_fixed.equ(static_cast<Number>(1.0), pres_prime_s[IMEX_stage - 2]);
-      u_fixed.equ(static_cast<Number>(1.0), u_s[IMEX_stage - 2]);
+      pres_fixed.equ(static_cast<Number>(1.0), pres_bar);
+      pres_fixed.add(static_cast<Number>(1.0), pres_prime_fixed);
+      u_prime_fixed.equ(static_cast<Number>(1.0), u_prime_s[IMEX_stage - 2]);
       const auto iter = perform_fixed_point_loop();
       tot_fixed_point_iters += (iter + 1);
       // Assign the fields after the fixed point loop
       pres_prime_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), pres_prime_fixed);
-      pres_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), pres_fixed);
-      u_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), u_fixed);
+      u_prime_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), u_prime_fixed);
     }
 
     /*--- Final stage of RK scheme to update ---*/
@@ -1294,52 +1306,57 @@ void EulerSolver<dim>::run(const bool verbose,
 
     /*--- Update before applying damping layer ---*/
     rho_s.front().equ(static_cast<Number>(1.0), rho_s.back());
-    u_s.front().equ(static_cast<Number>(1.0), u_s.back());
+    u_old.equ(static_cast<Number>(1.0), u_bar);
+    u_old.add(static_cast<Number>(1.0), u_prime_s.back());
+    pres_old.equ(static_cast<Number>(1.0), pres_bar);
+    pres_old.add(static_cast<Number>(1.0), pres_prime_s.front());
 
     /*--- Apply the damping layer for the vertical component ---*/
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho);
     rho_s.front().scale(dt_tau_rho_aux);
-    u_s.front().add(static_cast<Number>(1.0), dt_tau_u);
-    u_s.front().scale(dt_tau_u_aux);
-    pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres);
-    pres_s.front().scale(dt_tau_pres_aux);
+    u_old.add(static_cast<Number>(1.0), dt_tau_u);
+    u_old.scale(dt_tau_u_aux);
+    pres_old.add(static_cast<Number>(1.0), dt_tau_pres);
+    pres_old.scale(dt_tau_pres_aux);
 
     /*--- Apply the damping layer for the right lateral part ---*/
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_right);
     rho_s.front().scale(dt_tau_rho_aux_right);
-    u_s.front().add(static_cast<Number>(1.0), dt_tau_u_right);
-    u_s.front().scale(dt_tau_u_aux_right);
-    pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_right);
-    pres_s.front().scale(dt_tau_pres_aux_right);
+    u_old.add(static_cast<Number>(1.0), dt_tau_u_right);
+    u_old.scale(dt_tau_u_aux_right);
+    pres_old.add(static_cast<Number>(1.0), dt_tau_pres_right);
+    pres_old.scale(dt_tau_pres_aux_right);
 
     /*--- Apply the damping layer for the left lateral part ---*/
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_left);
     rho_s.front().scale(dt_tau_rho_aux_left);
-    u_s.front().add(static_cast<Number>(1.0), dt_tau_u_left);
-    u_s.front().scale(dt_tau_u_aux_left);
-    pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_left);
-    pres_s.front().scale(dt_tau_pres_aux_left);
+    u_old.add(static_cast<Number>(1.0), dt_tau_u_left);
+    u_old.scale(dt_tau_u_aux_left);
+    pres_old.add(static_cast<Number>(1.0), dt_tau_pres_left);
+    pres_old.scale(dt_tau_pres_aux_left);
 
     /*--- Apply the damping layer for the right y lateral part ---*/
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_right_y);
     rho_s.front().scale(dt_tau_rho_aux_right_y);
-    u_s.front().add(static_cast<Number>(1.0), dt_tau_u_right_y);
-    u_s.front().scale(dt_tau_u_aux_right_y);
-    pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_right_y);
-    pres_s.front().scale(dt_tau_pres_aux_right_y);
+    u_old.add(static_cast<Number>(1.0), dt_tau_u_right_y);
+    u_old.scale(dt_tau_u_aux_right_y);
+    pres_old.add(static_cast<Number>(1.0), dt_tau_pres_right_y);
+    pres_old.scale(dt_tau_pres_aux_right_y);
 
     /*--- Apply the damping layer for the left y lateral part ---*/
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_left_y);
     rho_s.front().scale(dt_tau_rho_aux_left_y);
-    u_s.front().add(static_cast<Number>(1.0), dt_tau_u_left_y);
-    u_s.front().scale(dt_tau_u_aux_left_y);
-    pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_left_y);
-    pres_s.front().scale(dt_tau_pres_aux_left_y);
+    u_old.add(static_cast<Number>(1.0), dt_tau_u_left_y);
+    u_old.scale(dt_tau_u_aux_left_y);
+    pres_old.add(static_cast<Number>(1.0), dt_tau_pres_left_y);
+    pres_old.scale(dt_tau_pres_aux_left_y);
 
-    /*--- Update density and pressure perturbation for the next step ---*/
+    /*--- Update density, velocity, and pressure perturbations for the next step ---*/
     rho_prime_s.front().equ(static_cast<Number>(1.0), rho_s.front());
     rho_prime_s.front().add(static_cast<Number>(-1.0), rho_bar);
-    pres_prime_s.front().equ(static_cast<Number>(1.0), pres_s.front());
+    u_prime_s.front().equ(static_cast<Number>(1.0), u_old);
+    u_prime_s.front().add(static_cast<Number>(-1.0), u_bar)
+    pres_prime_s.front().equ(static_cast<Number>(1.0), pres_old);
     pres_prime_s.front().add(static_cast<Number>(-1.0), pres_bar);
 
     /*--- Compute auxiliary post-processing data ---*/
