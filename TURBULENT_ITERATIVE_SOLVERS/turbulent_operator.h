@@ -906,8 +906,8 @@ namespace Turbulent_Diffusivity {
 
           /*--- Compute the numerical flux ---*/
           IP_flux_num += a_tilde[IMEX_stage - 1][s - 1]*dt*
-                        (scalar_product(avg_diff_flux_s, n_minus) -
-                         coef_jump*avg_kappa_s*jump_theta_s);
+                         (scalar_product(avg_diff_flux_s, n_minus) -
+                          coef_jump*avg_kappa_s*jump_theta_s);
         }
 
         phi_m.submit_value(IP_flux_num, q);

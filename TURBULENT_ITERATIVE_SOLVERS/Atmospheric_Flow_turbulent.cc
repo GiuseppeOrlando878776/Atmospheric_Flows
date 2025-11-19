@@ -304,9 +304,9 @@ private:
   using Vec_MG        = LinearAlgebra::distributed::Vector<float>;
   using Number_MG     = Vec_MG::value_type;
   using MatrixType_MG = EULEROperator<dim,
+                                      EquationData::degree_u,
                                       EquationData::degree_rho,
                                       EquationData::degree_p,
-                                      EquationData::degree_u,
                                       EquationData::quadrature_degree,
                                       EquationData::quadrature_degree + GalChenMapping::extra_quadrature_degree,
                                       Vec_MG>;

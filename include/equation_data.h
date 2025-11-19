@@ -24,9 +24,14 @@ namespace EquationData {
   static const unsigned P_INDEX_SYSTEM   = 2;
   static const unsigned U_INDEX_SYSTEM   = 3;
 
+  static const unsigned U_INDEX_SYSTEM_TURB = 1;
+  static const unsigned THETA_INDEX_SYSTEM  = 2;
+
   static const unsigned U_INDEX_DOF   = 0;
   static const unsigned P_INDEX_DOF   = 1;
   static const unsigned RHO_INDEX_DOF = 2;
+
+  static const unsigned THETA_INDEX_DOF = P_INDEX_DOF;
 
   /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/
   static const unsigned degree_p   = 4;

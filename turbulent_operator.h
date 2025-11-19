@@ -226,6 +226,12 @@ namespace Turbulent_Diffusivity {
     l2_mixing(static_cast<Number>(EquationData::l_mixing)*static_cast<Number>(EquationData::l_mixing))
     {
       implicit_RK.get_coefficients(a_tilde);
+
+      /*--- We create an auxiliary vector that will never change
+            independently on the stage, so we declare it once and for all. ---*/
+      for(unsigned d = 0; d < dim; ++d) {
+        tmp_diagonal_velocity[d] = make_vectorized_array<Number>(1.0);
+      }
     }
 
 
@@ -900,8 +906,8 @@ namespace Turbulent_Diffusivity {
 
           /*--- Compute the numerical flux ---*/
           IP_flux_num += a_tilde[IMEX_stage - 1][s - 1]*dt*
-                        (scalar_product(avg_diff_flux_s, n_minus) -
-                         coef_jump*avg_kappa_s*jump_theta_s);
+                         (scalar_product(avg_diff_flux_s, n_minus) -
+                          coef_jump*avg_kappa_s*jump_theta_s);
         }
 
         phi_m.submit_value(IP_flux_num, q);

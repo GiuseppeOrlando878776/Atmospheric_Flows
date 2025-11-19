@@ -1,4 +1,5 @@
 /*--- Author: Giuseppe Orlando, 2025. ---*/
+#pragma once
 
 // @sect{Include files}
 
