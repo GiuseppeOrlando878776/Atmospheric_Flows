@@ -36,8 +36,10 @@
 
 /*--- Include headers related to the problem of interest ---*/
 #include "include/ic_bc/ic_3D_nonhydrostatic_hill.h"
+
 #include "include/ic_bc/Rayleigh_damping.h"
 #include "include/mapping/mapping.h"
+
 #include "euler_operator.h"
 
 using namespace Atmospheric_Flow;

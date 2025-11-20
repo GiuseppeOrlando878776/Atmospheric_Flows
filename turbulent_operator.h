@@ -23,7 +23,7 @@ namespace Turbulent_Diffusivity {
   // @sect{ <code>TurbulentOperator::TurbulentOperator</code> }
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   class TurbulentOperator: public MatrixFreeOperators::Base<dim, Vec> {
@@ -188,7 +188,7 @@ namespace Turbulent_Diffusivity {
   // Default constructor
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   TurbulentOperator<dim,
@@ -209,7 +209,7 @@ namespace Turbulent_Diffusivity {
   // Constructor with runtime parameters storage
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   TurbulentOperator<dim,
@@ -242,7 +242,7 @@ namespace Turbulent_Diffusivity {
   // Setter of time-step
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   template<typename T>
@@ -259,7 +259,7 @@ namespace Turbulent_Diffusivity {
   // and so it has to be demanded to the class that really solves the problem)
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   inline DEAL_II_ALWAYS_INLINE
@@ -278,7 +278,7 @@ namespace Turbulent_Diffusivity {
   // and so it has to be demanded to the class that really solves the problem)
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   inline DEAL_II_ALWAYS_INLINE
@@ -296,7 +296,7 @@ namespace Turbulent_Diffusivity {
   // Setter of current velocity
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary, typename Vec>
   void TurbulentOperator<dim,
                          fe_degree_T, fe_degree_u,
@@ -310,7 +310,7 @@ namespace Turbulent_Diffusivity {
   // Setter of current potential temperature
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -330,7 +330,7 @@ namespace Turbulent_Diffusivity {
   // Assemble rhs cell term for the velocity equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -406,7 +406,7 @@ namespace Turbulent_Diffusivity {
   // Assemble rhs face term for the velocity equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -521,7 +521,7 @@ namespace Turbulent_Diffusivity {
   // Put together all the previous steps for the momentum equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -544,7 +544,7 @@ namespace Turbulent_Diffusivity {
   // Assemble cell term for the velocity equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -600,7 +600,7 @@ namespace Turbulent_Diffusivity {
         const auto& grad_u    = phi.get_gradient(q);
         diff_flux[0][dim - 1] = kappa_curr*grad_u[0][dim - 1];
 
-        phi.submit_value(u, q);
+        phi.submit_value(phi.get_value(q), q);
         phi.submit_gradient(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*diff_flux, q);
       }
 
@@ -611,7 +611,7 @@ namespace Turbulent_Diffusivity {
   // Assemble face term for the velocity equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -729,7 +729,7 @@ namespace Turbulent_Diffusivity {
   // Assemble rhs cell term for the the potential temperature equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -804,7 +804,7 @@ namespace Turbulent_Diffusivity {
   // Assemble rhs face term for the temperature equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -922,7 +922,7 @@ namespace Turbulent_Diffusivity {
   // Put together all the previous steps for the temperature equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -945,7 +945,7 @@ namespace Turbulent_Diffusivity {
   // Assemble cell term for the temperature equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -973,7 +973,6 @@ namespace Turbulent_Diffusivity {
 
       /*--- Loop over all quadrature points. ---*/
       for(unsigned q = 0; q < phi.n_q_points; ++q) {
-        /*--- Compute contribution at current stage ---*/
         const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
         const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
 
@@ -1009,7 +1008,7 @@ namespace Turbulent_Diffusivity {
   // Assemble face term for the temperature equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -1128,7 +1127,7 @@ namespace Turbulent_Diffusivity {
   // Put together all previous steps
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary, typename Vec>
   void TurbulentOperator<dim,
                          fe_degree_T, fe_degree_u,
@@ -1166,7 +1165,7 @@ namespace Turbulent_Diffusivity {
   // Assemble diagonal cell term for the velocity equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -1205,9 +1204,6 @@ namespace Turbulent_Diffusivity {
 
         /*--- Loop over all quadrature points. ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          const auto& u = phi.get_value(q);
-
-          /*--- Compute contribution at current stage ---*/
           const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
           const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
 
@@ -1233,7 +1229,7 @@ namespace Turbulent_Diffusivity {
           const auto& grad_u    = phi.get_gradient(q);
           diff_flux[0][dim - 1] = kappa_curr*grad_u[0][dim - 1];
 
-          phi.submit_value(u, q);
+          phi.submit_value(phi.get_value(q);, q);
           phi.submit_gradient(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*diff_flux, q);
         }
 
@@ -1251,7 +1247,7 @@ namespace Turbulent_Diffusivity {
   // Assemble diagonal face term for the velocity equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -1307,10 +1303,10 @@ namespace Turbulent_Diffusivity {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute contribution at current stage ---*/
-          const auto& grad_u_curr_m              = phi_u_curr_m.get_gradient(q);
-          const auto& grad_u_curr_p              = phi_u_curr_p.get_gradient(q);
-          const auto& grad_theta_curr_m          = phi_theta_curr_m.get_gradient(q);
-          const auto& grad_theta_curr_p          = phi_theta_curr_p.get_gradient(q);
+          const auto& grad_u_curr_m     = phi_u_curr_m.get_gradient(q);
+          const auto& grad_u_curr_p     = phi_u_curr_p.get_gradient(q);
+          const auto& grad_theta_curr_m = phi_theta_curr_m.get_gradient(q);
+          const auto& grad_theta_curr_p = phi_theta_curr_p.get_gradient(q);
 
           const auto& mod_squared_grad_uz_curr_m = grad_u_curr_m[0][dim - 1]*grad_u_curr_m[0][dim - 1];
           const auto& mod_squared_grad_uz_curr_p = grad_u_curr_p[0][dim - 1]*grad_u_curr_p[0][dim - 1];
@@ -1387,7 +1383,7 @@ namespace Turbulent_Diffusivity {
   // Assemble diagonal cell term for the temperature equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -1426,7 +1422,6 @@ namespace Turbulent_Diffusivity {
 
         /*--- Loop over all quadrature points ---*/
         for(unsigned q = 0; q < phi.n_q_points; ++q) {
-          /*--- Compute contribution at current stage ---*/
           const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
           const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
 
@@ -1471,7 +1466,7 @@ namespace Turbulent_Diffusivity {
   // Assemble diagonal face term for the temperature equation
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,
@@ -1607,7 +1602,7 @@ namespace Turbulent_Diffusivity {
   // Compute diagonal of various steps
   //
   template<unsigned dim,
-           unsigned fe_degree_T, unsigned fe_degree_u,
+           unsigned fe_degree_u, unsigned fe_degree_T,
            unsigned n_q_points_1d, unsigned n_q_points_1d_boundary,
            typename Vec>
   void TurbulentOperator<dim,

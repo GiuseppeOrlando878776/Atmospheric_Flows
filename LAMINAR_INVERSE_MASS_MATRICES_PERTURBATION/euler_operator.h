@@ -897,14 +897,13 @@ namespace Atmospheric_Flow {
           Tensor<2, dim, VectorizedArray<Number>> flux;
           Tensor<1, dim, VectorizedArray<Number>> gravity_term;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            const auto& u_prime_s          = phi_u_prime[s - 1].get_value(q);
-            const auto& tensor_product_u_s = outer_product(u_bar + u_prime_s, u_bar + u_prime_s)
+            const auto& u_prime_s = phi_u_prime[s - 1].get_value(q);
 
             const auto& p_prime_s_times_identity = phi_pres_prime[s - 1].get_value(q)*identity;
 
             const auto& rho_prime_s = phi_rho_prime[s - 1].get_value(q);
 
-            flux += a[IMEX_stage - 1][s - 1]*dt*((rho_bar + rho_prime_s)*tensor_product_u_s) +
+            flux += a[IMEX_stage - 1][s - 1]*dt*((rho_bar + rho_prime_s)*outer_product(u_bar + u_prime_s, u_bar + u_prime_s)) +
                     a_tilde[IMEX_stage - 1][s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
 
             gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*
@@ -968,14 +967,13 @@ namespace Atmospheric_Flow {
           Tensor<2, dim, VectorizedArray<Number>> flux;
           Tensor<1, dim, VectorizedArray<Number>> gravity_term;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            const auto& u_prime_s          = phi_u_prime[s - 1].get_value(q);
-            const auto& tensor_product_u_s = outer_product(u_bar + u_prime_s, u_bar + u_prime_s)
+            const auto& u_prime_s = phi_u_prime[s - 1].get_value(q);
 
             const auto& p_prime_s_times_identity = phi_pres_prime[s - 1].get_value(q)*identity;
 
             const auto& rho_prime_s = phi_rho_prime[s - 1].get_value(q);
 
-            flux += b[s - 1]*dt*((rho_bar + rho_prime_s)*tensor_product_u_s) +
+            flux += b[s - 1]*dt*((rho_bar + rho_prime_s)*outer_product(u_bar + u_prime_s, u_bar + u_prime_s)) +
                     b_tilde[s - 1]*dt*(inv_Ma2*p_prime_s_times_identity);
 
             gravity_term += b_tilde[s - 1]*dt*
@@ -1412,8 +1410,9 @@ namespace Atmospheric_Flow {
       for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
         const auto& n_minus  = phi_m.normal_vector(q);
 
-        const auto& avg_term = 0.5*(phi_src_m.get_value(q) +
-                                    phi_src_p.get_value(q));
+        const auto& avg_term = static_cast<Number>(0.5)*
+                               (phi_src_m.get_value(q) +
+                                phi_src_p.get_value(q));
 
         const auto& flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                                (inv_Ma2*avg_term*n_minus);
@@ -1457,8 +1456,9 @@ namespace Atmospheric_Flow {
 
         const auto& pres_fixed_D = phi_src.get_value(q);
 
-        const auto& avg_term     = 0.5*(phi_src.get_value(q) +
-                                        pres_fixed_D);
+        const auto& avg_term     = static_cast<Number>(0.5)*
+                                   (phi_src.get_value(q) +
+                                    pres_fixed_D);
 
         phi.submit_value(a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                          (inv_Ma2*avg_term*n_minus), q);
@@ -1545,7 +1545,7 @@ namespace Atmospheric_Flow {
             const auto& pres_prime_s = phi_pres_prime[s - 1].get_value(q);
 
             flux += a[IMEX_stage - 1][s - 1]*dt*
-                    ((rho_bar + rho_prime_s)*(0.5*Ma2*scalar_product(u_bar + u_prime_s, u_bar + u_prime_s))*(u_bar + u_prime_s))
+                    ((rho_bar + rho_prime_s)*(static_cast<Number>(0.5)*Ma2*scalar_product(u_bar + u_prime_s, u_bar + u_prime_s))*(u_bar + u_prime_s))
                   + a_tilde[IMEX_stage - 1][s - 1]*dt*
                     (inv_Gamma*((pres_bar + pres_prime_s)*(u_bar + u_prime_s)));
 
@@ -1561,8 +1561,8 @@ namespace Atmospheric_Flow {
                           (Ma2_ov_Fr2*(rho_bar + rho_prime_for_fixed_s)*(u_bar[dim - 1] + u_prime_fixed_s[dim - 1]));
 
           phi.submit_value(inv_gamma_m1*pres_prime_old +
-                           (rho_bar + rho_prime_old)*(0.5*Ma2*scalar_product(u_bar + u_prime_old, u_bar + u_prime_old)) -
-                           (rho_bar + rho_prime_for_fixed_s)*(0.5*Ma2*scalar_product(u_bar + u_prime_fixed_s, u_bar + u_prime_fixed_s)) -
+                           (rho_bar + rho_prime_old)*(static_cast<Number>(0.5)*Ma2*scalar_product(u_bar + u_prime_old, u_bar + u_prime_old)) -
+                           (rho_bar + rho_prime_for_fixed_s)*(static_cast<Number>(0.5)*Ma2*scalar_product(u_bar + u_prime_fixed_s, u_bar + u_prime_fixed_s)) -
                            gravity_term, q);
           phi.submit_gradient(flux, q);
         }
@@ -1627,7 +1627,7 @@ namespace Atmospheric_Flow {
             const auto& pres_prime_s = phi_pres_prime[s - 1].get_value(q);
 
             flux += b[s - 1]*dt*
-                    ((rho_bar + rho_prime_s)*(0.5*Ma2*scalar_product(u_bar + u_prime_s, u_bar + u_prime_s))*(u_bar + u_prime_s))
+                    ((rho_bar + rho_prime_s)*(static_cast<Number>(0.5)*Ma2*scalar_product(u_bar + u_prime_s, u_bar + u_prime_s))*(u_bar + u_prime_s))
                   + b_tilde[s - 1]*dt*
                     (inv_Gamma*((pres_bar + pres_prime_s)*(u_bar + u_prime_s)));
 
@@ -1640,8 +1640,8 @@ namespace Atmospheric_Flow {
           const auto& u_prime_curr   = phi_u_prime.back().get_value(q);
 
           phi.submit_value(inv_gamma_m1*pres_prime_old +
-                           (rho_bar + rho_prime_old)*(0.5*Ma2*scalar_product(u_bar + u_prime_old, u_bar + u_prime_old)) -
-                           (rho_bar + rho_prime_curr)*(0.5*Ma2*scalar_product(u_bar + u_prime_curr, u_bar + u_prime_curr)) -
+                           (rho_bar + rho_prime_old)*(static_cast<Number>(0.5)*Ma2*scalar_product(u_bar + u_prime_old, u_bar + u_prime_old)) -
+                           (rho_bar + rho_prime_curr)*(static_cast<Number>(0.5)*Ma2*scalar_product(u_bar + u_prime_curr, u_bar + u_prime_curr)) -
                            gravity_term, q);
           phi.submit_gradient(flux, q);
         }
@@ -1769,11 +1769,10 @@ namespace Atmospheric_Flow {
           const auto& lambda_fixed_s = num_flux.compute_lambda(u_bar_m + u_prime_fixed_s_m,
                                                                u_bar_p + u_prime_fixed_s_p,
                                                                n_minus);
-          const auto& jump_rho_e_prime_fixed_s = inv_gamma_m1*
-                                                 (pres_prime_fixed_s_m - pres_prime_fixed_s_p);
+          const auto& jump_rho_e_prime_fixed_s = inv_gamma_m1*(pres_prime_fixed_s_m - pres_prime_fixed_s_p);
 
           flux_num += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
-                      (0.5*lambda_fixed_s*jump_rho_e_prime_fixed_s);
+                      (static_cast<Number>(0.5)*lambda_fixed_s*jump_rho_e_prime_fixed_s);
 
           phi_m.submit_value(-flux_num, q);
           phi_p.submit_value(flux_num, q);
@@ -2060,7 +2059,7 @@ namespace Atmospheric_Flow {
         const auto& pres_fixed_m      = phi_pres_fixed_m.get_value(q);
         const auto& pres_fixed_p      = phi_pres_fixed_p.get_value(q);
 
-        const auto& avg_flux_enthalpy = 0.5*inv_Gamma*
+        const auto& avg_flux_enthalpy = static_cast<Number>(0.5)*inv_Gamma*
                                         (pres_fixed_m*phi_src_m.get_value(q) +
                                          pres_fixed_p*phi_src_p.get_value(q));
 

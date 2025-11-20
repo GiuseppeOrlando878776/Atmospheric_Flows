@@ -36,8 +36,10 @@
 
 /*--- Include headers related to the problem of interest ---*/
 #include "include/ic_bc/ic_3D_nonhydrostatic_hill.h"
+
 #include "include/ic_bc/Rayleigh_damping.h"
 #include "include/mapping/mapping.h"
+
 #include "euler_operator.h"
 #include "turbulent_operator.h"
 
@@ -268,8 +270,8 @@ private:
   MatrixType euler_matrix;
 
   using TurbulentType = TurbulentOperator<dim,
-                                          EquationData::degree_p,
                                           EquationData::degree_u,
+                                          EquationData::degree_p,
                                           EquationData::quadrature_degree,
                                           EquationData::quadrature_degree + GalChenMapping::extra_quadrature_degree,
                                           Vec>;
