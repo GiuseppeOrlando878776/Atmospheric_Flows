@@ -1357,7 +1357,7 @@ void EulerSolver<dim>::run(const bool verbose,
     rho_prime_s.front().equ(static_cast<Number>(1.0), rho_s.front());
     rho_prime_s.front().add(static_cast<Number>(-1.0), rho_bar);
     u_prime_s.front().equ(static_cast<Number>(1.0), u_old);
-    u_prime_s.front().add(static_cast<Number>(-1.0), u_bar)
+    u_prime_s.front().add(static_cast<Number>(-1.0), u_bar);
     pres_prime_s.front().equ(static_cast<Number>(1.0), pres_old);
     pres_prime_s.front().add(static_cast<Number>(-1.0), pres_bar);
 
