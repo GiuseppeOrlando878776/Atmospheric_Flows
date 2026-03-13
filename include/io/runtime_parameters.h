@@ -63,6 +63,10 @@ namespace RunTimeParameters {
     double rho_bar; /*--- Reference background density ---*/
 
     /*--- Numerical parameters ---*/
+    unsigned degree_u;   /*--- Polynomial degree for the velocity (not used so far) ---*/
+    unsigned degree_rho; /*--- Polynomial degree for the density (not used so far) ---*/
+    unsigned degree_p;   /*--- Polynomial degree for the pressure (not used so far) ---*/
+
     double dt;       /*--- The time-step ---*/
     std::string CFL; /*--- The Courant number (declare as string so as to verify if empty or not) ---*/
 
@@ -91,6 +95,8 @@ namespace RunTimeParameters {
     unsigned n_elements_y;     /*--- Number of (initial) elements along y direction ---*/
     unsigned n_elements_z;     /*--- Number of (initial) elements along z direction ---*/
     unsigned n_global_refines; /*--- Number of global refinements for the initial (coarse) mesh ---*/
+
+    unsigned degree_mapping; /*--- Degree of mapping for curved boundary (not used so far) ---*/
 
     unsigned max_loc_refinements;   /*--- Maximum number of refinements allowed ---*/
     unsigned min_loc_refinements;   /*--- Minimum number of refinements allowed ---*/
@@ -150,6 +156,9 @@ namespace RunTimeParameters {
                                 p_bar(1.0),
                                 T_bar(1.0),
                                 rho_bar(1.0),
+                                degree_u(1),
+                                degree_rho(1),
+                                degree_p(1),
                                 dt(5e-4),
                                 CFL(""),
                                 z_start(1.0),
@@ -169,6 +178,7 @@ namespace RunTimeParameters {
                                 n_elements_y(1),
                                 n_elements_z(1),
                                 n_global_refines(0),
+                                degree_mapping(1),
                                 max_loc_refinements(0),
                                 min_loc_refinements(0),
                                 refinement_iterations(0),
@@ -296,6 +306,19 @@ namespace RunTimeParameters {
     /*--- Focus now on some numerical parameters ---*/
     prm.enter_subsection("Numerical data");
     {
+      prm.declare_entry("degree_u",
+                        "1",
+                        Patterns::Integer(0, 15),
+                        "Polynomial degree for the velocity.");
+      prm.declare_entry("degree_rho",
+                        "1",
+                        Patterns::Integer(0, 15),
+                        "Polynomial degree for the density.");
+      prm.declare_entry("degree_p",
+                        "1",
+                        Patterns::Integer(0, 15),
+                        "Polynomial degree for the pressure.");
+
       prm.declare_entry("dt",
                         "5e-4",
                         Patterns::Double(0.0),
@@ -378,6 +401,11 @@ namespace RunTimeParameters {
                         "3",
                         Patterns::Integer(0, 15),
                         "The number of global refinements we want for the mesh.");
+
+      prm.declare_entry("degree_mapping",
+                        "1",
+                         Patterns::Integer(1, 15),
+                         "Polynomial degree mapping curved boundary.");
 
       prm.declare_entry("max_loc_refinements",
                         "4",
@@ -510,6 +538,10 @@ namespace RunTimeParameters {
     /*--- Focus now on some numerical parameters ---*/
     prm.enter_subsection("Numerical data");
     {
+      degree_u   = prm.get_integer("degree_u");
+      degree_rho = prm.get_integer("degree_rho");
+      degree_p   = prm.get_integer("degree_p");
+
       dt  = prm.get_double("dt");
       CFL = prm.get("CFL");
 
@@ -538,6 +570,8 @@ namespace RunTimeParameters {
       n_elements_y     = prm.get_integer("n_elements_y");
       n_elements_z     = prm.get_integer("n_elements_z");
       n_global_refines = prm.get_integer("n_of_refines");
+
+      degree_mapping = prm.get_integer("degree_mapping");
 
       max_loc_refinements   = prm.get_integer("max_loc_refinements");
       min_loc_refinements   = prm.get_integer("min_loc_refinements");

@@ -520,7 +520,7 @@ namespace Atmospheric_Flow {
         phi.reinit(cell);
 
         /*--- Loop over quadrature points of each cell ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           /*--- Compute the density at the previous step (always needed) ---*/
           const auto& rho_old = phi_rho.front().get_value(q);
 
@@ -563,7 +563,7 @@ namespace Atmospheric_Flow {
         phi.reinit(cell);
 
         /*--- Loop over quadrature points of each cell ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           /*--- Compute the density at the previous step (always needed) ---*/
           const auto& rho_old = phi_rho.front().get_value(q);
 
@@ -621,7 +621,7 @@ namespace Atmospheric_Flow {
         phi_p.reinit(face);
 
         /*--- Loop over quadrature points of each internal face ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q); /*--- Notice that the unit normal vector is the same from
                                                               'both sides'. ---*/
 
@@ -675,7 +675,7 @@ namespace Atmospheric_Flow {
         phi_p.reinit(face);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -805,7 +805,7 @@ namespace Atmospheric_Flow {
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           /*--- Compute the density and the velocity at the previous step (always necessary).
                 Notice that this is ok because of ESDIRK method. ---*/
           const auto& rho_old = phi_rho.front().get_value(q);
@@ -860,7 +860,7 @@ namespace Atmospheric_Flow {
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           /*--- Compute the density and the velocity at the previous step (always necessary).
                 Notice that this is ok because of ESDIRK method. ---*/
           const auto& rho_old = phi_rho.front().get_value(q);
@@ -929,7 +929,7 @@ namespace Atmospheric_Flow {
         phi_p.reinit(face);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -994,7 +994,7 @@ namespace Atmospheric_Flow {
         phi_p.reinit(face);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -1063,7 +1063,7 @@ namespace Atmospheric_Flow {
         phi.reinit(face);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& n_minus = phi.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -1101,7 +1101,7 @@ namespace Atmospheric_Flow {
         phi.reinit(face);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& n_minus = phi.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -1185,7 +1185,7 @@ namespace Atmospheric_Flow {
       inverse.fill_inverse_JxW_values(inverse_jxw);
 
       /*--- Loop over all quadrature points to fill the inverse of the coefficient ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         inverse_jxw[q] *= 1.0/phi_rho_for_fixed.get_value(q);
       }
 
@@ -1224,7 +1224,7 @@ namespace Atmospheric_Flow {
 
       phi.reinit(cell);
 
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         /*--- Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'. ---*/
         phi.submit_divergence(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(inv_Ma2*phi_src.get_value(q)), q);
       }
@@ -1263,7 +1263,7 @@ namespace Atmospheric_Flow {
       phi_p.reinit(face);
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+      for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus  = phi_m.normal_vector(q);
 
         const auto& avg_term = static_cast<Number>(0.5)*
@@ -1307,7 +1307,7 @@ namespace Atmospheric_Flow {
       phi.reinit(face);
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& n_minus      = phi.normal_vector(q);
 
         const auto& pres_fixed_D = phi_src.get_value(q);
@@ -1369,7 +1369,7 @@ namespace Atmospheric_Flow {
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           /*--- Compute the quantities at the previous step (always necessary).
                 Notice that this is ok because of ESDIRK method. ---*/
           const auto& rho_old  = phi_rho.front().get_value(q);
@@ -1436,7 +1436,7 @@ namespace Atmospheric_Flow {
         phi.reinit(cell);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           /*--- Compute the quantities at the previous step (always necessary).
                 Notice that this is ok because of ESDIRK method. ---*/
           const auto& rho_old  = phi_rho.front().get_value(q);
@@ -1516,7 +1516,7 @@ namespace Atmospheric_Flow {
         phi_p.reinit(face);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -1601,7 +1601,7 @@ namespace Atmospheric_Flow {
         phi_p.reinit(face);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
           /*--- Compute the quantities at the previous stages ---*/
@@ -1693,7 +1693,7 @@ namespace Atmospheric_Flow {
       inverse.fill_inverse_JxW_values(inverse_jxw);
 
       /*--- Loop over all quadrature points to fill the inverse of the coefficient ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         inverse_jxw[q] *= gamma_m1;
       }
 
@@ -1725,7 +1725,7 @@ namespace Atmospheric_Flow {
       phi.reinit(cell);
       phi.gather_evaluate(src, EvaluationFlags::values);
 
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         /*--- For an ideal gas the part associated to the internal energy for a pressure based
               is just a modification of the mass matrix ---*/
         phi.submit_value(inv_gamma_m1*phi.get_value(q), q);
@@ -1767,7 +1767,7 @@ namespace Atmospheric_Flow {
       phi.reinit(cell);
 
       /*--- loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& pres_fixed = phi_pres_fixed.get_value(q);
 
         phi.submit_gradient(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
@@ -1815,7 +1815,7 @@ namespace Atmospheric_Flow {
       phi_p.reinit(face);
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+      for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus           = phi_m.normal_vector(q);
 
         const auto& pres_fixed_m      = phi_pres_fixed_m.get_value(q);
@@ -1984,7 +1984,7 @@ namespace Atmospheric_Flow {
         phi.evaluate(EvaluationFlags::values);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           phi.submit_value(phi.get_value(q), q);
         }
 
@@ -2039,7 +2039,7 @@ namespace Atmospheric_Flow {
         phi.evaluate(EvaluationFlags::values);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           phi.submit_value(phi_rho_for_fixed.get_value(q)*phi.get_value(q), q);
         }
 
@@ -2096,7 +2096,7 @@ namespace Atmospheric_Flow {
         phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& pres_fixed    = phi_pres_fixed.get_value(q);
 
           const auto& rho_for_fixed = phi_rho_for_fixed.get_value(q);
@@ -2149,7 +2149,7 @@ namespace Atmospheric_Flow {
               a vector which is 1 for the node of interest and 0 elsewhere.---*/
         phi.evaluate(EvaluationFlags::values);
 
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           phi.submit_value(inv_gamma_m1*phi.get_value(q), q);
         }
 

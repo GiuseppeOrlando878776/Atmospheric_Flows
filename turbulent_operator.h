@@ -358,7 +358,7 @@ namespace Turbulent_Diffusivity {
       phi.reinit(cell);
 
       /*--- Loop over all quadrature points. ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         /*--- Compute the velocity after hyperbolic operator (always needed).
               Notice this is ok because of ESDIRK method ---*/
         const auto& u_curr = phi_u.front().get_value(q);
@@ -440,7 +440,7 @@ namespace Turbulent_Diffusivity {
                                    std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+      for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
         /*--- Compute the quantities at the previous stages ---*/
@@ -571,7 +571,7 @@ namespace Turbulent_Diffusivity {
       phi.gather_evaluate(src, EvaluationFlags::values | EvaluationFlags::gradients);
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& u = phi.get_value(q);
 
         /*--- Compute contribution at current stage ---*/
@@ -651,7 +651,7 @@ namespace Turbulent_Diffusivity {
                                    std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+      for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
         /*--- Compute contribution at current stage ---*/
@@ -757,7 +757,7 @@ namespace Turbulent_Diffusivity {
       phi.reinit(cell);
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         /*--- Compute the potential temperature after hyperbolic operator (always needed).
               Notice this is ok because of ESDIRK method ---*/
         const auto& theta_curr = phi_theta.front().get_value(q);
@@ -838,7 +838,7 @@ namespace Turbulent_Diffusivity {
                                    std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+      for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
         /*--- Compute the quantities at the previous stages ---*/
@@ -972,7 +972,7 @@ namespace Turbulent_Diffusivity {
       phi.gather_evaluate(src, EvaluationFlags::values | EvaluationFlags::gradients);
 
       /*--- Loop over all quadrature points. ---*/
-      for(unsigned q = 0; q < phi.n_q_points; ++q) {
+      for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
         const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
 
@@ -1048,7 +1048,7 @@ namespace Turbulent_Diffusivity {
                                    std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump cosntant for IP ---*/
 
       /*--- Loop over all quadrature points ---*/
-      for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+      for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
         /*--- Compute contribution at current stage ---*/
@@ -1203,7 +1203,7 @@ namespace Turbulent_Diffusivity {
         phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
         /*--- Loop over all quadrature points. ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
           const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
 
@@ -1299,7 +1299,7 @@ namespace Turbulent_Diffusivity {
         phi_p.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute contribution at current stage ---*/
@@ -1421,7 +1421,7 @@ namespace Turbulent_Diffusivity {
         phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi.n_q_points; ++q) {
+        for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
           const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
 
@@ -1517,7 +1517,7 @@ namespace Turbulent_Diffusivity {
         phi_p.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
         /*--- Loop over all quadrature points ---*/
-        for(unsigned q = 0; q < phi_m.n_q_points; ++q) {
+        for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
           /*--- Compute contribution at current stage ---*/

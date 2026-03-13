@@ -95,7 +95,8 @@ protected:
 
   // Auxiliary variables for linear solvers parameters
   unsigned max_its;        /*--- Auxiliary variable for the maximum number of iterations of linear solvers ---*/
-  Number   rtol_iterative; /*--- Auxiliary variable for the tolerance of linear solvers ---*/
+  Number   atol_iterative; /*--- Auxiliary variable for the absolute tolerance of linear solvers ---*/
+  Number   rtol_iterative; /*--- Auxiliary variable for the relative tolerance of linear solvers ---*/
 
   // Domain discretization
   parallel::distributed::Triangulation<dim> triangulation; /*--- The variable which stores the mesh ---*/
@@ -275,7 +276,8 @@ private:
                                    Vec>;
   MatrixType euler_matrix;
 
-  Number rtol_fixed_point; /*--- Auxiliary variable for the tolerance of fixed point loop ---*/
+  Number atol_fixed_point; /*--- Auxiliary variable for the absolute tolerance of fixed point loop ---*/
+  Number rtol_fixed_point; /*--- Auxiliary variable for the relative tolerance of fixed point loop ---*/
 
   Vector<Number> Linfty_error_per_cell_pres; /*--- Auxiliary variable for the end of the fixed point loop ---*/
 
@@ -353,6 +355,7 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   IMEX_stage(2),
   /*--- Linear solvers ---*/
   max_its(data.max_iterations),
+  atol_iterative(static_cast<Number>(data.atol_iterative)),
   rtol_iterative(static_cast<Number>(data.rtol_iterative)),
   /*--- Space discretization ---*/
   triangulation(MPI_COMM_WORLD,
@@ -447,6 +450,7 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   as_initial_conditions(data.as_initial_conditions),
   /*--- Auxiliary and fixed-point loop ---*/
   euler_matrix(data, explicit_RK, implicit_RK),
+  atol_fixed_point(static_cast<Number>(data.atol_fixed_point)),
   rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)),
   Ma(euler_matrix.get_Mach()), inv_Ma(static_cast<Number>(1.0)/Ma),
   gamma(static_cast<Number>(EquationData::Cp_Cv)),
@@ -889,7 +893,7 @@ void EulerSolver<dim>::update_density() {
                                       Number_MG>> preconditioner(dof_handler_density, mg, mg_transfer);
 
   /*--- Solve the system for the density ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_rho.l2_norm(), false, true);
+  SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_rho.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
   rho_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), rho_s[IMEX_stage - 2]);
@@ -971,7 +975,7 @@ void EulerSolver<dim>::pressure_fixed_point() {
   preconditioner_Jacobi.initialize(euler_matrix);
 
   /*--- Solve the linear system for the pressure---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm(), false, true);
+  SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
   gmres.solve(euler_matrix, pres_fixed, rhs_pres, preconditioner_Jacobi);
@@ -998,8 +1002,8 @@ unsigned EulerSolver<dim>::perform_fixed_point_loop() {
     dpres_fixed.add(static_cast<Number>(-1.0), pres_fixed);
     VectorTools::integrate_difference(dof_handler_pressure, dpres_fixed, Functions::ZeroFunction<dim, Number>(),
                                       Linfty_error_per_cell_pres, quadrature_pressure, VectorTools::Linfty_norm);
-    const auto error = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm)/den;
-    if(error < rtol_fixed_point)
+    const auto error = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm);
+    if(error < atol_fixed_point + rtol_fixed_point*den)
       break; /*--- The fixed point loop is stopped whenever the relative error in infinity norm is below the specified tolerance ---*/
   }
 
@@ -1047,7 +1051,7 @@ void EulerSolver<dim>::update_velocity() {
                                       Number_MG>> preconditioner(dof_handler_velocity, mg, mg_transfer);
 
   /*--- Solve the system for the velocity ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_u.l2_norm(), false, true);
+  SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_u.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
   if(IMEX_stage <= n_stages) {
@@ -1094,7 +1098,7 @@ void EulerSolver<dim>::update_pressure() {
                                       Number_MG>> preconditioner(dof_handler_pressure, mg, mg_transfer);
 
   /*--- Solve the system for the pressure ---*/
-  SolverControl solver_control(max_its, rtol_iterative*rhs_pres.l2_norm(), false, true);
+  SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
   pres_s.front().equ(static_cast<Number>(1.0), pres_s.back());

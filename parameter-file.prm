@@ -48,6 +48,7 @@ subsection Numerical data
   set lambda_y_right = 1.2
 
   # Fixed point tolerances
+  set atol_fixed_point = 0.0
   set rtol_fixed_point = 1e-6
 end
 
@@ -62,6 +63,7 @@ end
 subsection Data linear solvers
   # In this section we declare the parameters that are going to control the solution process.
   set max_iterations = 30000 # maximum number of iterations
+  set atol_iterative = 0.0   # absolute tolerance linear solvers
   set rtol_iterative = 1e-8  # relative tolerance linear solvers
 end
 
