@@ -349,9 +349,16 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
             static_cast<Number>(data.ac), static_cast<Number>(data.L_ref)),
   manifold(push_forward, pull_back),
   /*--- Initial condition ---*/
-  rho_init(static_cast<Number>(data.initial_time)),
-  u_init(static_cast<Number>(data.initial_time)),
-  pres_init(static_cast<Number>(data.initial_time)),
+  rho_init(static_cast<Number>(data.p_bar), static_cast<Number>(data.T_bar),
+           static_cast<Number>(data.rho_ref), static_cast<Number>(data.L_ref),
+           static_cast<Number>(data.N),
+           static_cast<Number>(data.initial_time)),
+  u_init(static_cast<Number>(data.u_bar), static_cast<Number>(data.u_ref),
+         static_cast<Number>(data.initial_time)),
+  pres_init(static_cast<Number>(data.p_bar), static_cast<Number>(data.T_bar),
+            static_cast<Number>(data.p_ref), static_cast<Number>(data.L_ref),
+            static_cast<Number>(data.N),
+            static_cast<Number>(data.initial_time)),
   /*--- Boundary condition (Rayleigh damping) ---*/
   dt_tau(static_cast<Number>(data.z_start), static_cast<Number>(data.z_max),
          static_cast<Number>(data.lambda_z), static_cast<Number>(data.L_ref)),
@@ -424,6 +431,23 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
       CFL = static_cast<Number>(std::stod(data.CFL));
 
       dt_from_CFL = true;
+    }
+
+    /*--- Check non-dimensional parameters coherence ---*/
+    if(std::abs(Ma*Ma -
+                static_cast<Number>(data.rho_ref)*
+                static_cast<Number>(data.u_ref)*static_cast<Number>(data.u_ref)/
+                static_cast<Number>(data.p_ref)) > static_cast<Number>(1e-10)) {
+      pcout << "WARNING: The non-dimensional Mach number in the parameter file is not coherent "
+                "with the reference values declared (and theoretically used for initial conditions and computational domain)."
+                "The simulation will go on with the Mach number read in the parameter file, but you may want to double check!" << std::endl;
+    }
+    if(std::abs(euler_matrix.get_Froude()*euler_matrix.get_Froude() -
+                static_cast<Number>(data.u_ref)*static_cast<Number>(data.u_ref)/
+                (static_cast<Number>(EquationData::g)*static_cast<Number>(data.L_ref))) > static_cast<Number>(1e-10)) {
+      pcout << "WARNING: The non-dimensional Froude number in the parameter file is not coherent "
+                "with the reference values declared (and theoretically used for initial conditions and computational domain)."
+                "The simulation will go on with the Froude number read in the parameter file, but you may want to double check!" << std::endl;
     }
 
     /*--- Initialize structures ---*/

@@ -40,16 +40,9 @@ namespace EquationData {
 
   static const unsigned quadrature_degree = 2*degree_u + 1; /*--- Accuracy for quadrature formula ---*/
 
-  /*--- Physical and domain parameters ---*/
+  /*--- Physical parameters ---*/
   static const double Cp_Cv = 1.4;   /*--- Specific heats ratio ---*/
   static const double R     = 287.0; /*--- Specific gas constant ---*/
 
   static const double g = 9.81; /*--- Acceleration of gravity ---*/
-
-  /*--- Reference values ---*/
-  static const double L_ref   = 1000.0;          /*--- Reference length ---*/
-  static const double u_ref   = 10.0;            /*--- Reference velocity ---*/
-  static const double p_ref   = 100000.0;        /*--- Reference pressure ---*/
-  static const double T_ref   = 293.15;          /*--- Reference temperature ---*/
-  static const double rho_ref = p_ref/(R*T_ref); /*--- Reference density ---*/
 } // namespace EquationData

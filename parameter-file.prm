@@ -13,12 +13,21 @@ subsection Physical data
   set Mach   = 0.03447578013
   set Froude = 0.10096375546
 
-  set L_ref = 1000.0 # Reference length to build non-dimensional domain
+  set L_ref   = 1000.0            # Reference length to build non-dimensional domain
+  set u_ref   = 10.0              # Reference velocity for non-dimensional variables 
+  set p_ref   = 100000.0          # Reference pressure for non-dimensional variables
+  set rho_ref = 1.188579415825103 # Reference density for non-dimensional variables
 
   set h  = 400.0   # Hill height
   set xc = 30000.0 # x-center of the hill
   set yc = 20000.0 # y-center of the hill
   set ac = 1000.0  # semi-width of the hill
+
+  set N = 0.01 # Buoyancy frequency
+
+  set u_bar = 10.0     # Background horizontal velocity 
+  set p_bar = 100000.0 # Background pressure (z = 0)
+  set T_bar = 293.15   # Background temperature (z = 0)
 end
 
 subsection Numerical data

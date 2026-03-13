@@ -55,6 +55,13 @@ namespace RunTimeParameters {
     double yc; /*--- y-center of the mountain ---*/
     double ac; /*--- Semi-Width of the mountain ---*/
 
+    double N; /*--- Buoyancy frequency ---*/
+
+    double u_bar;   /*--- Reference background velocity ---*/
+    double p_bar;   /*--- Reference background pressure ---*/
+    double T_bar;   /*--- Reference background temperature ---*/
+    double rho_bar; /*--- Reference background density ---*/
+
     /*--- Numerical parameters ---*/
     double dt;       /*--- The time-step ---*/
     std::string CFL; /*--- The Courant number (declare as string so as to verify if empty or not) ---*/
@@ -138,6 +145,11 @@ namespace RunTimeParameters {
                                 xc(1.0),
                                 yc(1.0),
                                 ac(1.0),
+                                N(0.01),
+                                u_bar(1.0),
+                                p_bar(1.0),
+                                T_bar(1.0),
+                                rho_bar(1.0),
                                 dt(5e-4),
                                 CFL(""),
                                 z_start(1.0),
@@ -256,6 +268,28 @@ namespace RunTimeParameters {
                         "1.0",
                         Patterns::Double(0.0),
                         "The width of the hill.");
+
+      prm.declare_entry("N",
+                        "0.01",
+                        Patterns::Double(0.0),
+                        "Buoyancy frequency.");
+
+      prm.declare_entry("u_bar",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The (horizontal) background.");
+      prm.declare_entry("p_bar",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The background pressure (at z = 0).");
+      prm.declare_entry("T_bar",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The background temperature (at z = 0).");
+      prm.declare_entry("rho_bar",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "The background density (at z = 0).");
     }
     prm.leave_subsection();
 
@@ -463,6 +497,13 @@ namespace RunTimeParameters {
       xc = prm.get_double("xc");
       yc = prm.get_double("yc");
       ac = prm.get_double("ac");
+
+      N = prm.get_double("N");
+
+      u_bar   = prm.get_double("u_bar");
+      p_bar   = prm.get_double("p_bar");
+      T_bar   = prm.get_double("T_bar");
+      rho_bar = prm.get_double("rho_bar");
     }
     prm.leave_subsection();
 
