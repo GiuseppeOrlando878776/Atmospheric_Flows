@@ -3,21 +3,51 @@ subsection Physical data
   set initial_time = 0.0
   set final_time   = 36.0
 
+  set x_min = 0.0
+  set y_min = 0.0
+  set z_min = 0.0
+  set x_max = 60000.0
+  set y_max = 40000.0
+  set z_max = 16000.0
+
   set Mach   = 0.03447578013
   set Froude = 0.10096375546
+
+  set L_ref = 1000.0 # Reference length to build non-dimensional domain
+
+  set h  = 400.0   # Hill height
+  set xc = 30000.0 # x-center of the hill
+  set yc = 20000.0 # y-center of the hill
+  set ac = 1000.0  # semi-width of the hill
 end
 
 subsection Numerical data
   # In this subsection we declare some numerical data
-  # (time step dt and fixed point iteration tolerance)
+  # (time step, bcs (Rayliegh damping), and fixed point iteration tolerance)
   set dt = 0.04
 
+  # Rayleigh damping parameters
+  set z_start        = 10000.0
+  set lambda_z       = 1.2
+  set x_start_left   = 20000.0
+  set lambda_x_left  = 1.2
+  set x_start_right  = 40000.0
+  set lambda_x_right = 1.2
+  set y_start_left   = 10000.0
+  set lambda_y_left  = 1.2
+  set y_start_right  = 30000.0
+  set lambda_y_right = 1.2
+
+  # Fixed point tolerances
   set rtol_fixed_point = 1e-6
 end
 
 subsection Mesh parameters
   # In this subsection we declare the data that is relevant to the domain discretization
-  set n_of_refines = 2 # number of global refines of the initial triangulation
+  set n_elements_x = 15 # number of (initial) elements along x direction
+  set n_elements_y = 10 # number of (initial) elements along y direction
+  set n_elements_z = 4  # number of (initial) elements along z direction
+  set n_of_refines = 2  # number of global refines of the initial triangulation
 end
 
 subsection Data linear solvers
@@ -39,7 +69,7 @@ end
 
 subsection Output data
   # The directory where results are saved
-  set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM_NEW_PRECON_INVERSE_MASS_MATRIX
+  set saving directory = 3D_MELVIN_NONHYDROSTATIC_UNIFORM_INVERSE_MASS_MATRIX
 
   # The output frequency
   set output_interval = 100

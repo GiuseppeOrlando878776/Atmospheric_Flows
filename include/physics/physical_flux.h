@@ -1,4 +1,4 @@
-/*--- Author: Giuseppe Orlando, 2025. ---*/
+/*--- Author: Giuseppe Orlando, 2026. ---*/
 #pragma once
 
 // @sect{Include files}
@@ -24,7 +24,7 @@ namespace Physics {
   public:
     using value_type = typename std::conditional<std::is_floating_point<Number>::value,
                                                  Number,
-                                                 typename Number::value_type>::type; /*--- Define the arythmetic type for this class ---*/
+                                                 typename Number::value_type>::type; /*--- Define the arithmetic type for this class ---*/
 
     PhysicalFluxEuler(); /*--- Default class constructor ---*/
 

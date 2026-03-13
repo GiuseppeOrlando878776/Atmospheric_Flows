@@ -1,4 +1,4 @@
-/*--- Author: Giuseppe Orlando, 2025. ---*/
+/*--- Author: Giuseppe Orlando, 2026. ---*/
 
 // @sect{Include files}
 
@@ -8,7 +8,7 @@
 
 // @sect{Numerical flux}
 
-// In this namespace, we implement (virtual) signature functions for the numerical flux
+// In this namespace, we implement signature functions for the numerical flux
 //
 namespace NumericalFlux {
   using namespace dealii;

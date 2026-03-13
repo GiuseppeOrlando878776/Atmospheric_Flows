@@ -1,4 +1,4 @@
-/* Author: Giuseppe Orlando, 2025. */
+/* Author: Giuseppe Orlando, 2026. */
 
 // @sect{Include files}
 
@@ -238,7 +238,7 @@ protected:
   bool     as_initial_conditions;
 
   // Auxiliary routines to perform the spatial discretization
-  void create_triangulation(const unsigned n_refines); /*--- Function to create the grid ---*/
+  void create_triangulation(const RunTimeParameters::Data_Storage& data); /*--- Function to create the grid ---*/
 
   void setup_dofs(); /*--- Function to set the dofs ---*/
 
@@ -316,13 +316,16 @@ template<unsigned dim>
 EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
                               const TimeStepping::RungeKutta<Number>& explicit_RK,
                               const TimeStepping::RungeKutta<Number>& implicit_RK):
+  /*--- Time integration ---*/
   t0(static_cast<Number>(data.initial_time)),
   T(static_cast<Number>(data.final_time)),
   dt(static_cast<Number>(data.dt)),
   n_stages(explicit_RK.get_n_stages()),
   IMEX_stage(2),
+  /*--- Linear solvers ---*/
   max_its(data.max_iterations),
   rtol_iterative(static_cast<Number>(data.rtol_iterative)),
+  /*--- Space discretization ---*/
   triangulation(MPI_COMM_WORLD,
                 parallel::distributed::Triangulation<dim>::limit_level_difference_at_vertices,
                 parallel::distributed::Triangulation<dim>::construct_multigrid_hierarchy),
@@ -342,32 +345,60 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   pres_prime_s(n_stages),
   dof_handlers(EquationData::n_vars),
   constraints(EquationData::n_vars),
-  push_forward(),
-  pull_back(),
+  /*--- Domain ---*/
+  push_forward(static_cast<Number>(data.z_max), static_cast<Number>(data.h),
+               static_cast<Number>(data.xc), static_cast<Number>(data.yc),
+               static_cast<Number>(data.ac), static_cast<Number>(data.L_ref)),
+  pull_back(static_cast<Number>(data.z_max), static_cast<Number>(data.h),
+            static_cast<Number>(data.xc), static_cast<Number>(data.yc),
+            static_cast<Number>(data.ac), static_cast<Number>(data.L_ref)),
   manifold(push_forward, pull_back),
+  /*--- Initial condition ---*/
   rho_init(static_cast<Number>(data.initial_time)),
   u_init(static_cast<Number>(data.initial_time)),
   pres_init(static_cast<Number>(data.initial_time)),
-  dt_tau(static_cast<Number>(data.initial_time)),
-  dt_tau_aux(static_cast<Number>(data.initial_time)),
-  dt_tau_vel(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_aux(static_cast<Number>(data.initial_time)),
-  dt_tau_right(static_cast<Number>(data.initial_time)),
-  dt_tau_aux_right(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_right(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_aux_right(static_cast<Number>(data.initial_time)),
-  dt_tau_left(static_cast<Number>(data.initial_time)),
-  dt_tau_aux_left(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_left(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_aux_left(static_cast<Number>(data.initial_time)),
-  dt_tau_right_y(static_cast<Number>(data.initial_time)),
-  dt_tau_aux_right_y(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_right_y(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_aux_right_y(static_cast<Number>(data.initial_time)),
-  dt_tau_left_y(static_cast<Number>(data.initial_time)),
-  dt_tau_aux_left_y(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_left_y(static_cast<Number>(data.initial_time)),
-  dt_tau_vel_aux_left_y(static_cast<Number>(data.initial_time)),
+  /*--- Boundary condition (Rayleigh damping) ---*/
+  dt_tau(static_cast<Number>(data.z_start), static_cast<Number>(data.z_max),
+         static_cast<Number>(data.lambda_z), static_cast<Number>(data.L_ref)),
+  dt_tau_aux(static_cast<Number>(data.z_start), static_cast<Number>(data.z_max),
+             static_cast<Number>(data.lambda_z), static_cast<Number>(data.L_ref)),
+  dt_tau_vel(static_cast<Number>(data.z_start), static_cast<Number>(data.z_max),
+             static_cast<Number>(data.lambda_z), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_aux(static_cast<Number>(data.z_start), static_cast<Number>(data.z_max),
+                 static_cast<Number>(data.lambda_z), static_cast<Number>(data.L_ref)),
+  dt_tau_right(static_cast<Number>(data.x_start_right), static_cast<Number>(data.x_max),
+               static_cast<Number>(data.lambda_x_right), static_cast<Number>(data.L_ref)),
+  dt_tau_aux_right(static_cast<Number>(data.x_start_right), static_cast<Number>(data.x_max),
+                   static_cast<Number>(data.lambda_x_right), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_right(static_cast<Number>(data.x_start_right), static_cast<Number>(data.x_max),
+                   static_cast<Number>(data.lambda_x_right), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_aux_right(static_cast<Number>(data.x_start_right), static_cast<Number>(data.x_max),
+                       static_cast<Number>(data.lambda_x_right), static_cast<Number>(data.L_ref)),
+  dt_tau_left(static_cast<Number>(data.x_start_left), static_cast<Number>(data.x_min),
+              static_cast<Number>(data.lambda_x_left), static_cast<Number>(data.L_ref)),
+  dt_tau_aux_left(static_cast<Number>(data.x_start_left), static_cast<Number>(data.x_min),
+                  static_cast<Number>(data.lambda_x_left), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_left(static_cast<Number>(data.x_start_left), static_cast<Number>(data.x_min),
+                  static_cast<Number>(data.lambda_x_left), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_aux_left(static_cast<Number>(data.x_start_left), static_cast<Number>(data.x_min),
+                      static_cast<Number>(data.lambda_x_left), static_cast<Number>(data.L_ref)),
+  dt_tau_right_y(static_cast<Number>(data.y_start_right), static_cast<Number>(data.y_max),
+                 static_cast<Number>(data.lambda_y_right), static_cast<Number>(data.L_ref)),
+  dt_tau_aux_right_y(static_cast<Number>(data.y_start_right), static_cast<Number>(data.y_max),
+                     static_cast<Number>(data.lambda_y_right), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_right_y(static_cast<Number>(data.y_start_right), static_cast<Number>(data.y_max),
+                     static_cast<Number>(data.lambda_y_right), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_aux_right_y(static_cast<Number>(data.y_start_right), static_cast<Number>(data.y_max),
+                         static_cast<Number>(data.lambda_y_right), static_cast<Number>(data.L_ref)),
+  dt_tau_left_y(static_cast<Number>(data.y_start_left), static_cast<Number>(data.y_min),
+                static_cast<Number>(data.lambda_y_left), static_cast<Number>(data.L_ref)),
+  dt_tau_aux_left_y(static_cast<Number>(data.y_start_left), static_cast<Number>(data.y_min),
+                    static_cast<Number>(data.lambda_y_left), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_left_y(static_cast<Number>(data.y_start_left), static_cast<Number>(data.y_min),
+                    static_cast<Number>(data.lambda_y_left), static_cast<Number>(data.L_ref)),
+  dt_tau_vel_aux_left_y(static_cast<Number>(data.y_start_left), static_cast<Number>(data.y_min),
+                        static_cast<Number>(data.lambda_y_left), static_cast<Number>(data.L_ref)),
+  /*--- Output ---*/
   saving_dir(data.dir),
   pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
   time_out("./" + data.dir + "/time_analysis_" +
@@ -379,6 +410,7 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   step_restart(data.step_restart),
   time_restart(static_cast<Number>(data.time_restart)),
   as_initial_conditions(data.as_initial_conditions),
+  /*--- Auxiliary and fixed-point loop ---*/
   euler_matrix(data, explicit_RK, implicit_RK),
   rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)),
   Ma(euler_matrix.get_Mach()), inv_Ma(static_cast<Number>(1.0)/Ma),
@@ -413,7 +445,7 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
     quadratures.clear();
 
     /*--- Call initializing routines ---*/
-    create_triangulation(data.n_global_refines);
+    create_triangulation(data);
     setup_dofs();
     initialize();
   }
@@ -428,22 +460,23 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
 // The method that creates the triangulation.
 //
 template<unsigned dim>
-void EulerSolver<dim>::create_triangulation(const unsigned n_refines) {
+void EulerSolver<dim>::create_triangulation(const RunTimeParameters::Data_Storage& data) {
   TimerOutput::Scope t(time_table, "Create triangulation");
 
   Point<dim, Number> lower_left;
-  lower_left[0] = static_cast<Number>(0.0);
-  lower_left[1] = static_cast<Number>(0.0);
-  lower_left[2] = static_cast<Number>(0.0);
+  lower_left[0] = static_cast<Number>(data.x_min);
+  lower_left[1] = static_cast<Number>(data.y_min);
+  lower_left[2] = static_cast<Number>(data.z_min);
   Point<dim, Number> upper_right;
-  upper_right[0] = static_cast<Number>(EquationData::x_max)/
-                   static_cast<Number>(EquationData::L_ref);
-  upper_right[1] = static_cast<Number>(EquationData::y_max)/
-                   static_cast<Number>(EquationData::L_ref);
-  upper_right[2] = static_cast<Number>(EquationData::z_max)/
-                   static_cast<Number>(EquationData::L_ref);
+  upper_right[0] = static_cast<Number>(data.x_max)/
+                   static_cast<Number>(data.L_ref);
+  upper_right[1] = static_cast<Number>(data.y_max)/
+                   static_cast<Number>(data.L_ref);
+  upper_right[2] = static_cast<Number>(data.z_max)/
+                   static_cast<Number>(data.L_ref);
 
-  GridGenerator::subdivided_hyper_rectangle(triangulation, {15, 10, 4}, lower_left, upper_right, true);
+  GridGenerator::subdivided_hyper_rectangle(triangulation, {data.n_elements_x, data.n_elements_y, data.n_elements_z},
+                                            lower_left, upper_right, true);
 
   /*--- Consider periodic conditions along the horizontal direction ---*/
   std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator>> periodic_faces;
@@ -456,7 +489,7 @@ void EulerSolver<dim>::create_triangulation(const unsigned n_refines) {
     triangulation.load("./" + saving_dir + "/solution_ser-" + Utilities::int_to_string(step_restart, 5));
   }
   else {
-    triangulation.refine_global(n_refines);
+    triangulation.refine_global(data.n_global_refines);
   }
 
   /*--- Apply the mapping to build the physical domain ---*/
@@ -465,7 +498,7 @@ void EulerSolver<dim>::create_triangulation(const unsigned n_refines) {
                               },
                               triangulation);
 
-  triangulation.set_all_manifold_ids_on_boundary(4, 111);
+  triangulation.set_all_manifold_ids_on_boundary(2*(dim - 1), 111);
   triangulation.set_manifold(111, manifold);
 }
 

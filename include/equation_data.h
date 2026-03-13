@@ -46,10 +46,6 @@ namespace EquationData {
 
   static const double g = 9.81; /*--- Acceleration of gravity ---*/
 
-  static const double x_max = 60000.0; /*--- Extension along horizontal direction ---*/
-  static const double y_max = 40000.0; /*--- Extension along y direction ---*/
-  static const double z_max = 16000.0; /*--- Extension along vertical direction ---*/
-
   /*--- Reference values ---*/
   static const double L_ref   = 1000.0;          /*--- Reference length ---*/
   static const double u_ref   = 10.0;            /*--- Reference velocity ---*/

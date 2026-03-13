@@ -1,4 +1,4 @@
-/*--- Author: Giuseppe Orlando, 2025. ---*/
+/*--- Author: Giuseppe Orlando, 2026. ---*/
 #pragma once
 
 // @sect{Include files}
@@ -44,20 +44,35 @@ namespace RunTimeParameters {
     double Mach;   /*--- The Mach number ---*/
     double Froude; /*--- The Froude number ---*/
 
-    double L_ref;   /*--- Reference length (not used so far) ---*/
-    double u_ref;   /*--- Reference velocity (not used so far) ---*/
-    double p_ref;   /*--- Reference pressure (not used so far) ---*/
-    double T_ref;   /*--- Reference temperature (not used so far) ---*/
-    double rho_ref; /*--- Reference density (not used so far) ---*/
+    double L_ref;   /*--- Reference length ---*/
+    double u_ref;   /*--- Reference velocity ---*/
+    double p_ref;   /*--- Reference pressure ---*/
+    double T_ref;   /*--- Reference temperature ---*/
+    double rho_ref; /*--- Reference density ---*/
 
-    double h;  /*--- Hill height (not used so far) ---*/
-    double xc; /*--- x-Center of the hill (not used so far) ---*/
-    double yc; /*--- y-Center of the hill (not used so far) ---*/
-    double ac; /*--- Width of the hill (not used so far) ---*/
+    double h;  /*--- Mountain height ---*/
+    double xc; /*--- x-center of the mountain ---*/
+    double yc; /*--- y-center of the mountain ---*/
+    double ac; /*--- Semi-Width of the mountain ---*/
 
     /*--- Numerical parameters ---*/
     double dt;       /*--- The time-step ---*/
     std::string CFL; /*--- The Courant number (declare as string so as to verify if empty or not) ---*/
+
+    double z_start;  /*--- Start of Rayleigh damping for top boundary ---*/
+    double lambda_z; /*--- Intensity of Rayleigh damping for top boundary ---*/
+
+    double x_start_left;  /*--- Start of Rayleigh damping for left boundary ---*/
+    double lambda_x_left; /*--- Intensity of Rayleigh damping for left boundary ---*/
+
+    double x_start_right;  /*--- Start of Rayleigh damping for right boundary ---*/
+    double lambda_x_right; /*--- Intensity of Rayleigh damping for right boundary ---*/
+
+    double y_start_left;  /*--- Start of Rayleigh damping for y left boundary ---*/
+    double lambda_y_left; /*--- Intensity of Rayleigh damping for y left boundary ---*/
+
+    double y_start_right;  /*--- Start of Rayleigh damping for y right boundary ---*/
+    double lambda_y_right; /*--- Intensity of Rayleigh damping for y right boundary ---*/
 
     double atol_fixed_point; /*--- Absolute tolerance for the fixed point loop ---*/
     double rtol_fixed_point; /*--- Relative tolerance for the fixed point loop ---*/
@@ -65,11 +80,14 @@ namespace RunTimeParameters {
     double l_mixing; /*--- Mixing length (in the case of turbulent simulations) ---*/
 
     /*--- Mesh parameters ---*/
-    unsigned n_global_refines;    /*--- Number of global refinements for the initial (coarse) mesh ---*/
-    unsigned max_loc_refinements; /*--- Maximum number of refinements allowed ---*/
-    unsigned min_loc_refinements; /*--- Minimum number of refinements allowed ---*/
+    unsigned n_elements_x;     /*--- Number of (initial) elements along x direction ---*/
+    unsigned n_elements_y;     /*--- Number of (initial) elements along y direction ---*/
+    unsigned n_elements_z;     /*--- Number of (initial) elements along z direction ---*/
+    unsigned n_global_refines; /*--- Number of global refinements for the initial (coarse) mesh ---*/
 
-    unsigned refinement_iterations; /*--- How often performin mesh adaptation ---*/
+    unsigned max_loc_refinements;   /*--- Maximum number of refinements allowed ---*/
+    unsigned min_loc_refinements;   /*--- Minimum number of refinements allowed ---*/
+    unsigned refinement_iterations; /*--- How often performing mesh adaptation ---*/
 
     /*--- Parameters related to the linear solver ---*/
     unsigned max_iterations; /*--- Maximum number of iterations for the linear solver ---*/
@@ -79,8 +97,8 @@ namespace RunTimeParameters {
     /*--- Parameters related to the output ---*/
     bool        verbose;         /*--- Choose if being verboe or not ---*/
     unsigned    output_interval; /*--- Set how often save the fields ---*/
-    std::string n_files;         /*--- Set how often save the fields through the number of output files (potentiaally unused) ---*/
-    std::string dt_save;         /*--- Set after how much time perfoming the save (potentiaally unused) ---*/
+    std::string n_files;         /*--- Set how often save the fields through the number of output files (potentially unused) ---*/
+    std::string dt_save;         /*--- Set after how much time perfoming the save (potentially unused) ---*/
 
     std::string dir; /*--- Directory where the data are saved. This has to be created before launching the code
                            and we assume it is a subfolder of the folder with the executable and the parameter file.
@@ -122,9 +140,22 @@ namespace RunTimeParameters {
                                 ac(1.0),
                                 dt(5e-4),
                                 CFL(""),
+                                z_start(1.0),
+                                lambda_z(1.0),
+                                x_start_left(0.0),
+                                lambda_x_left(1.0),
+                                x_start_right(1.0),
+                                lambda_x_right(1.0),
+                                y_start_left(0.0),
+                                lambda_y_left(1.0),
+                                y_start_right(1.0),
+                                lambda_y_right(1.0),
                                 atol_fixed_point(1e-12),
                                 rtol_fixed_point(1e-10),
                                 l_mixing(1.0),
+                                n_elements_x(1),
+                                n_elements_y(1),
+                                n_elements_z(1),
                                 n_global_refines(0),
                                 max_loc_refinements(0),
                                 min_loc_refinements(0),
@@ -237,8 +268,49 @@ namespace RunTimeParameters {
                         "The time step size.");
       prm.declare_entry("CFL", "");
 
+      prm.declare_entry("z_start",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Start of Rayleigh damping for top boundary.");
+      prm.declare_entry("lambda_z",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Intensity of Rayleigh damping for top boundary.");
+      prm.declare_entry("x_start_left",
+                        "0.0",
+                        Patterns::Double(0.0),
+                        "Start of Rayleigh damping for left boundary.");
+      prm.declare_entry("lambda_x_left",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Intensity of Rayleigh damping for left boundary.");
+      prm.declare_entry("x_start_right",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Start of Rayleigh damping for right boundary.");
+      prm.declare_entry("lambda_x_right",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Intensity of Rayleigh damping for right boundary.");
+      prm.declare_entry("y_start_left",
+                        "0.0",
+                        Patterns::Double(0.0),
+                        "Start of Rayleigh damping for y left boundary.");
+      prm.declare_entry("lambda_y_left",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Intensity of Rayleigh damping for y left boundary.");
+      prm.declare_entry("y_start_right",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Start of Rayleigh damping for y right boundary.");
+      prm.declare_entry("lambda_y_right",
+                        "1.0",
+                        Patterns::Double(0.0),
+                        "Intensity of Rayleigh damping for y right boundary.");
+
       prm.declare_entry("atol_fixed_point",
-                        "1e-10",
+                        "1e-12",
                         Patterns::Double(0.0),
                         "Absolute tolerance for the fixed point loop.");
       prm.declare_entry("rtol_fixed_point",
@@ -256,10 +328,23 @@ namespace RunTimeParameters {
     /*--- Focus now on some mesh parameters ---*/
     prm.enter_subsection("Mesh parameters");
     {
+      prm.declare_entry("n_elements_x",
+                        "1",
+                        Patterns::Integer(0, 100000000),
+                        "The number of (initial) elements along x direction.");
+      prm.declare_entry("n_elements_y",
+                        "1",
+                        Patterns::Integer(0, 100000000),
+                        "The number of (initial) elements along y direction.");
+      prm.declare_entry("n_elements_z",
+                        "1",
+                        Patterns::Integer(0, 100000000),
+                        "The number of (initial) elements along z direction.");
       prm.declare_entry("n_of_refines",
                         "3",
                         Patterns::Integer(0, 15),
                         "The number of global refinements we want for the mesh.");
+
       prm.declare_entry("max_loc_refinements",
                         "4",
                          Patterns::Integer(1, 10),
@@ -283,7 +368,7 @@ namespace RunTimeParameters {
                         Patterns::Integer(1, 30000),
                         "The maximal number of iterations GMRES must make.");
       prm.declare_entry("atol_iterative",
-                        "1e-12",
+                        "1e-14",
                         Patterns::Double(0.0),
                         "Absolute tolerance for the linear solver.");
       prm.declare_entry("rtol_iterative",
@@ -387,6 +472,17 @@ namespace RunTimeParameters {
       dt  = prm.get_double("dt");
       CFL = prm.get("CFL");
 
+      z_start        = prm.get_double("z_start");
+      lambda_z       = prm.get_double("lambda_z");
+      x_start_left   = prm.get_double("x_start_left");
+      lambda_x_left  = prm.get_double("lambda_x_left");
+      x_start_right  = prm.get_double("x_start_right");
+      lambda_x_right = prm.get_double("lambda_x_right");
+      y_start_left   = prm.get_double("y_start_left");
+      lambda_y_left  = prm.get_double("lambda_y_left");
+      y_start_right  = prm.get_double("y_start_right");
+      lambda_y_right = prm.get_double("lambda_y_right");
+
       atol_fixed_point = prm.get_double("atol_fixed_point");
       rtol_fixed_point = prm.get_double("rtol_fixed_point");
 
@@ -397,7 +493,11 @@ namespace RunTimeParameters {
     /*--- Focus now on some mesh parameters ---*/
     prm.enter_subsection("Mesh parameters");
     {
-      n_global_refines      = prm.get_integer("n_of_refines");
+      n_elements_x     = prm.get_integer("n_elements_x");
+      n_elements_y     = prm.get_integer("n_elements_y");
+      n_elements_z     = prm.get_integer("n_elements_z");
+      n_global_refines = prm.get_integer("n_of_refines");
+
       max_loc_refinements   = prm.get_integer("max_loc_refinements");
       min_loc_refinements   = prm.get_integer("min_loc_refinements");
       refinement_iterations = prm.get_integer("refinement_iterations");

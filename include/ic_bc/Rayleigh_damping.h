@@ -16,12 +16,6 @@
 namespace RayleighDamping {
   using namespace dealii;
 
-  static const double z_start       = 10000.0; /*--- Start of Rayleigh damping for top boundary ---*/
-  static const double x_start_left  = 20000.0; /*--- Start of Rayleigh damping for left boundary ---*/
-  static const double x_start_right = 40000.0; /*--- Start of Rayleigh damping for right boundary ---*/
-  static const double y_start_left  = 10000.0; /*--- Start of Rayleigh damping for y left boundary ---*/
-  static const double y_start_right = 30000.0; /*--- Start of Rayleigh damping for y right boundary ---*/
-
   /**
    * We focus now on the Rayleigh damping profile along the vertical direction.
      We create a suitable function for that. This function will be either scalar
@@ -31,7 +25,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh: public Function<dim, T> {
   public:
-    Rayleigh(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh(const T z_start_, const T z_max_, const T lambda_z_,
+             const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -40,18 +35,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T z_start; /*--- Starting coordinate of the damping layer ---*/
-    const T z_max;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T z_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T z_max;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_z; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh<dim, n_comp, T>::Rayleigh(const T initial_time):
-    Function<dim, T>(n_comp, initial_time),
-    z_start(static_cast<T>(RayleighDamping::z_start)/static_cast<T>(EquationData::L_ref)),
-    z_max(static_cast<T>(EquationData::z_max)/static_cast<T>(EquationData::L_ref)) {}
+  Rayleigh<dim, n_comp, T>::Rayleigh(const T z_start_, const T z_max_, const T lambda_z_,
+                                     const T L_ref_):
+    Function<dim, T>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    z_start(z_start_/L_ref), z_max(z_max_/L_ref), lambda_z(lambda_z_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -61,13 +59,13 @@ namespace RayleighDamping {
     (void)component;
     AssertIndexRange(component, n_comp);
 
-    if(p[2] < z_start) {
+    if(p[dim - 1] < z_start) {
       return static_cast<T>(0.0);
     }
 
-    return static_cast<T>(1.2)*
-           std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[2] - z_start)/(z_max - z_start))*
-           std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[2] - z_start)/(z_max - z_start)); /*--- Rayleigh profile expression ---*/
+    return lambda_z*
+           std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[dim - 1] - z_start)/(z_max - z_start))*
+           std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[dim - 1] - z_start)/(z_max - z_start)); /*--- Rayleigh profile expression ---*/
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -91,7 +89,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_Aux: public Function<dim, T> {
   public:
-    Rayleigh_Aux(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_Aux(const T z_start_, const T z_max_, const T lambda_z_,
+                 const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -100,18 +99,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T z_start; /*--- Starting coordinate of the damping layer ---*/
-    const T z_max;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T z_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T z_max;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_z; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_Aux<dim, n_comp, T>::Rayleigh_Aux(const T initial_time):
-    Function<dim, T>(n_comp, initial_time),
-    z_start(static_cast<T>(RayleighDamping::z_start)/static_cast<T>(EquationData::L_ref)),
-    z_max(static_cast<T>(EquationData::z_max)/static_cast<T>(EquationData::L_ref)) {}
+  Rayleigh_Aux<dim, n_comp, T>::Rayleigh_Aux(const T z_start_, const T z_max_, const T lambda_z_,
+                                             const T L_ref_):
+    Function<dim, T>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    z_start(z_start_/L_ref), z_max(z_max_/L_ref), lambda_z(lambda_z_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -121,14 +123,14 @@ namespace RayleighDamping {
     (void)component;
     AssertIndexRange(component, n_comp);
 
-    if(p[2] < z_start) {
+    if(p[dim - 1] < z_start) {
       return static_cast<T>(1.0);
     }
 
     return static_cast<T>(1.0)/
            (static_cast<T>(1.0) +
-            static_cast<T>(1.2)*std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[2] - z_start)/(z_max - z_start))*
-                                std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[2] - z_start)/(z_max - z_start)));
+            lambda_z*std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[dim - 1] - z_start)/(z_max - z_start))*
+                     std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[dim - 1] - z_start)/(z_max - z_start)));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -151,7 +153,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_Right: public Function<dim, T> {
   public:
-    Rayleigh_Right(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_Right(const T x_start_, const T x_max_, const T lambda_x_,
+                   const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -160,18 +163,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T x_start; /*--- Starting coordinate of the damping layer ---*/
-    const T x_max;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T x_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T x_max;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_x; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_Right<dim, n_comp, T>::Rayleigh_Right(const T initial_time):
-    Function<dim, T>(n_comp, initial_time),
-    x_start(static_cast<T>(RayleighDamping::x_start_right)/static_cast<T>(EquationData::L_ref)),
-    x_max(static_cast<T>(EquationData::x_max)/static_cast<T>(EquationData::L_ref)) {}
+  Rayleigh_Right<dim, n_comp, T>::Rayleigh_Right(const T x_start_, const T x_max_, const T lambda_x_,
+                                                 const T L_ref_):
+    Function<dim, T>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    x_start(x_start_/L_ref), x_max(x_max_/L_ref), lambda_x(lambda_x_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -185,7 +191,7 @@ namespace RayleighDamping {
       return static_cast<T>(0.0);
     }
 
-    return static_cast<T>(1.2)*
+    return lambda_x*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_max - x_start))*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_max - x_start));
   }
@@ -197,8 +203,10 @@ namespace RayleighDamping {
   void Rayleigh_Right<dim, n_comp, T>::vector_value(const Point<dim, T>& p,
                                                     Vector<T>&           values) const {
     Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), n_comp));
-    for(unsigned i = 0; i < n_comp; ++i)
+
+    for(unsigned i = 0; i < n_comp; ++i) {
       values[i] = value(p, i);
+    }
   }
 
 
@@ -208,7 +216,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_Aux_Right: public Function<dim, T> {
   public:
-    Rayleigh_Aux_Right(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_Aux_Right(const T x_start_, const T x_max_, const T lambda_x_,
+                       const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -217,18 +226,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T x_start; /*--- Starting coordinate of the damping layer ---*/
-    const T x_max;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T x_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T x_max;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_x; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_Aux_Right<dim, n_comp, T>::Rayleigh_Aux_Right(const T initial_time):
-    Function<dim>(n_comp, initial_time),
-    x_start(static_cast<T>(RayleighDamping::x_start_right)/static_cast<T>(EquationData::L_ref)),
-    x_max(static_cast<T>(EquationData::x_max)/static_cast<T>(EquationData::L_ref)) {}
+  Rayleigh_Aux_Right<dim, n_comp, T>::Rayleigh_Aux_Right(const T x_start_, const T x_max_, const T lambda_x_,
+                                                         const T L_ref_):
+    Function<dim>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    x_start(x_start_/L_ref), x_max(x_max_/L_ref), lambda_x(lambda_x_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -244,8 +256,8 @@ namespace RayleighDamping {
 
     return static_cast<T>(1.0)/
            (static_cast<T>(1.0) +
-            static_cast<T>(1.2)*std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_max - x_start))*
-                                std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_max - x_start)));
+            lambda_x*std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_max - x_start))*
+                     std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_max - x_start)));
   }
 
   // We need a vector value instance to deal with the velocity or, more in general,
@@ -268,7 +280,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_Left: public Function<dim, T> {
   public:
-    Rayleigh_Left(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_Left(const T x_start_, const T x_min_, const T lambda_x_,
+                  const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -277,18 +290,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T x_start; /*--- Starting coordinate of the damping layer ---*/
-    const T x_min;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T x_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T x_min;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_x; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_Left<dim, n_comp, T>::Rayleigh_Left(const T initial_time):
-    Function<dim, T>(n_comp, initial_time),
-    x_start(RayleighDamping::x_start_left/static_cast<T>(EquationData::L_ref)),
-    x_min(static_cast<T>(0.0)) {}
+  Rayleigh_Left<dim, n_comp, T>::Rayleigh_Left(const T x_start_, const T x_min_, const T lambda_x_,
+                                               const T L_ref_):
+    Function<dim, T>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    x_start(x_start_/L_ref), x_min(x_min_/L_ref), lambda_x(lambda_x_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -302,7 +318,7 @@ namespace RayleighDamping {
       return static_cast<T>(0.0);
     }
 
-    return static_cast<T>(1.2)*
+    return lambda_x*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_min - x_start))*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_min - x_start));
   }
@@ -327,7 +343,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_Aux_Left: public Function<dim, T> {
   public:
-    Rayleigh_Aux_Left(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_Aux_Left(const T x_start_, const T x_min_, const T lambda_x_,
+                      const T L_ref_); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -336,18 +353,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T x_start; /*--- Starting coordinate of the damping layer ---*/
-    const T x_min;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T x_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T x_min;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_x; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_Aux_Left<dim, n_comp, T>::Rayleigh_Aux_Left(const T initial_time):
-    Function<dim>(n_comp, initial_time),
-    x_start(static_cast<T>(RayleighDamping::x_start_left)/static_cast<T>(EquationData::L_ref)),
-    x_min(static_cast<T>(0.0)) {}
+  Rayleigh_Aux_Left<dim, n_comp, T>::Rayleigh_Aux_Left(const T x_start_, const T x_min_, const T lambda_x_,
+                                                       const T L_ref_):
+    Function<dim>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    x_start(x_start_/L_ref), x_min(x_min_/L_ref), lambda_x(lambda_x_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -363,7 +383,7 @@ namespace RayleighDamping {
 
     return static_cast<T>(1.0)/
            (static_cast<T>(1.0) +
-            static_cast<T>(1.2)*
+            lambda_x*
             std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_min - x_start))*
             std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[0] - x_start)/(x_min - x_start)));
   }
@@ -388,7 +408,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_RightY: public Function<dim, T> {
   public:
-    Rayleigh_RightY(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_RightY(const T y_start_, const T y_max_, const T lambda_y_,
+                    const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>&  p,
                     const unsigned component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -397,18 +418,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T y_start; /*--- Starting coordinate of the damping layer ---*/
-    const T y_max;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T y_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T y_max;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_y; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_RightY<dim, n_comp, T>::Rayleigh_RightY(const T initial_time):
-    Function<dim>(n_comp, initial_time),
-    y_start(static_cast<T>(RayleighDamping::y_start_right)/static_cast<T>(EquationData::L_ref)),
-    y_max(static_cast<T>(EquationData::y_max)/static_cast<T>(EquationData::L_ref)) {}
+  Rayleigh_RightY<dim, n_comp, T>::Rayleigh_RightY(const T y_start_, const T y_max_, const T lambda_y_,
+                                                   const T L_ref_):
+    Function<dim>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    y_start(y_start_/L_ref), y_max(y_max_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -422,7 +446,7 @@ namespace RayleighDamping {
       return static_cast<T>(0.0);
     }
 
-    return static_cast<T>(1.2)*
+    return lambda_y*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_max - y_start))*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_max - y_start));
   }
@@ -435,8 +459,9 @@ namespace RayleighDamping {
                                                      Vector<T>& values) const {
     Assert(values.size() == n_comp, ExcDimensionMismatch(values.size(), n_comp));
 
-    for(unsigned i = 0; i < n_comp; ++i)
+    for(unsigned i = 0; i < n_comp; ++i) {
       values[i] = value(p, i);
+    }
   }
 
 
@@ -446,7 +471,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_Aux_RightY: public Function<dim, T> {
   public:
-    Rayleigh_Aux_RightY(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_Aux_RightY(const T y_start_, const T y_max_, const T lambda_y_,
+                        const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -455,18 +481,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T y_start; /*--- Starting coordinate of the damping layer ---*/
-    const T y_max;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T y_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T y_max;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_y; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_Aux_RightY<dim, n_comp, T>::Rayleigh_Aux_RightY(const T initial_time):
-    Function<dim>(n_comp, initial_time),
-    y_start(static_cast<T>(RayleighDamping::y_start_right)/static_cast<T>(EquationData::L_ref)),
-    y_max(static_cast<T>(EquationData::y_max)/static_cast<T>(EquationData::L_ref)) {}
+  Rayleigh_Aux_RightY<dim, n_comp, T>::Rayleigh_Aux_RightY(const T y_start_, const T y_max_, const T lambda_y_,
+                                                           const T L_ref_):
+    Function<dim>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    y_start(y_start_/L_ref), y_max(y_max_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -482,7 +511,7 @@ namespace RayleighDamping {
 
     return static_cast<T>(1.0)/
            (static_cast<T>(1.0) +
-            static_cast<T>(1.2)*
+            lambda_y*
             std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_max - y_start))*
             std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_max - y_start)));
   }
@@ -506,7 +535,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_LeftY: public Function<dim, T> {
   public:
-    Rayleigh_LeftY(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_LeftY(const T y_start_, const T y_min_, const T lambda_y_,
+                   const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -515,18 +545,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T y_start; /*--- Starting coordinate of the damping layer ---*/
-    const T y_min;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T y_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T y_min;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_y; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_LeftY<dim, n_comp, T>::Rayleigh_LeftY(const T initial_time):
-    Function<dim>(n_comp, initial_time),
-    y_start(static_cast<T>(RayleighDamping::y_start_left)/static_cast<T>(EquationData::L_ref)),
-    y_min(static_cast<T>(0.0)) {}
+  Rayleigh_LeftY<dim, n_comp, T>::Rayleigh_LeftY(const T y_start_, const T y_min_, const T lambda_y_,
+                                                 const T L_ref_):
+    Function<dim>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    y_start(y_start_/L_ref), y_min(y_min_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -540,7 +573,7 @@ namespace RayleighDamping {
       return static_cast<T>(0.0);
     }
 
-    return static_cast<T>(1.2)*
+    return lambda_y*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_min - y_start))*
            std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_min - y_start));
   }
@@ -565,7 +598,8 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T = double>
   class Rayleigh_Aux_LeftY: public Function<dim, T> {
   public:
-    Rayleigh_Aux_LeftY(const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    Rayleigh_Aux_LeftY(const T y_start_, const T y_min_, const T lambda_y_,
+                       const T L_ref_ = static_cast<T>(1.0)); /*--- Class constructor ---*/
 
     virtual T value(const Point<dim, T>& p,
                     const unsigned       component = 0) const override; /*--- Damping profile evaluation ---*/
@@ -574,18 +608,21 @@ namespace RayleighDamping {
                               Vector<T>&           values) const override; /*--- Damping profile vector evaluation for the velocity ---*/
 
   private:
-    const T y_start; /*--- Starting coordinate of the damping layer ---*/
-    const T y_min;   /*--- Ending coordinate of the damping layer ---*/
+    const T L_ref; /*--- Reference length ---*/
+
+    const T y_start;  /*--- Starting coordinate of the damping layer ---*/
+    const T y_min;    /*--- Ending coordinate of the damping layer ---*/
+    const T lambda_y; /*--- Intensity of the damping layer ---*/
   };
 
   // Class constructor, which simply calls the parent class constructor
   // and then initialize some data
   //
   template<unsigned dim, unsigned n_comp, typename T>
-  Rayleigh_Aux_LeftY<dim, n_comp, T>::Rayleigh_Aux_LeftY(const T initial_time):
-    Function<dim>(n_comp, initial_time),
-    y_start(static_cast<T>(RayleighDamping::y_start_left)/static_cast<T>(EquationData::L_ref)),
-    y_min(static_cast<T>(0.0)) {}
+  Rayleigh_Aux_LeftY<dim, n_comp, T>::Rayleigh_Aux_LeftY(const T y_start_, const T y_min_, const T lambda_y_,
+                                                         const T L_ref_):
+    Function<dim>(n_comp, static_cast<T>(0.0)), L_ref(L_ref_),
+    y_start(y_start_/L_ref), y_min(y_min_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile
   //
@@ -601,7 +638,7 @@ namespace RayleighDamping {
 
     return static_cast<T>(1.0)/
            (static_cast<T>(1.0) +
-            static_cast<T>(1.2)*
+            lambda_y*
             std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_min - y_start))*
             std::sin(static_cast<T>(0.5)*static_cast<T>(numbers::PI)*(p[1] - y_start)/(y_min - y_start)));
   }

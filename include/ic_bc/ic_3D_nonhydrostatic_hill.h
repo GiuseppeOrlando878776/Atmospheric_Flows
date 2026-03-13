@@ -1,4 +1,4 @@
-/*--- Author: Giuseppe Orlando, 2025. ---*/
+/*--- Author: Giuseppe Orlando, 2026. ---*/
 
 // @sect{Include files}
 
