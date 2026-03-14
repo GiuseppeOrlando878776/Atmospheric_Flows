@@ -57,7 +57,7 @@ namespace GalChenMapping {
   PushForward<dim, T>::PushForward(const T z_max_,
                                    const T h_, const T xc_, const T yc_, const T ac_,
                                    const T L_ref_):
-    Function<dim, T>(dim, static_cast<T>(0.0)),
+    Function<dim, T>(dim, 0.0),
     L_ref(L_ref_), z_max(z_max_/L_ref),
     h(h_), xc(xc_), yc(yc_), ac(ac_) {}
 
@@ -120,7 +120,7 @@ namespace GalChenMapping {
   PullBack<dim, T>::PullBack(const T z_max_,
                              const T h_, const T xc_, const T yc_, const T ac_,
                              const T L_ref_):
-    Function<dim, T>(dim, static_cast<T>(0.0)),
+    Function<dim, T>(dim, 0.0),
     L_ref(L_ref_), z_max(z_max_/L_ref),
     h(h_), xc(xc_), yc(yc_), ac(ac_) {}
 

@@ -219,11 +219,11 @@ namespace Turbulent_Diffusivity {
   TurbulentOperator(const RunTimeParameters::Data_Storage& data,
                     const TimeStepping::RungeKutta<Number>& implicit_RK):
     MatrixFreeOperators::Base<dim, Vec>(),
-    dt(static_cast<Number>(data.dt)),
+    dt(data.dt),
     n_stages(implicit_RK.get_n_stages()), IMEX_stage(1), NS_stage(1),
     inv_Fr2(static_cast<Number>(1.0)/
             (static_cast<Number>(data.Froude)*static_cast<Number>(data.Froude))),
-    l2_mixing(static_cast<Number>(EquationData::l_mixing)*static_cast<Number>(EquationData::l_mixing))
+    l2_mixing(static_cast<Number>(data.l_mixing)*static_cast<Number>(data.l_mixing))
     {
       implicit_RK.get_coefficients(a_tilde);
 

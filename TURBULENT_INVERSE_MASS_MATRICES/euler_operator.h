@@ -304,9 +304,9 @@ namespace Atmospheric_Flow {
                 const TimeStepping::RungeKutta<Number>& explicit_RK,
                 const TimeStepping::RungeKutta<Number>& implicit_RK):
     MatrixFreeOperators::Base<dim, Vec>(),
-    Ma(static_cast<Number>(data.Mach)),
-    Fr(static_cast<Number>(data.Froude)),
-    dt(static_cast<Number>(data.dt)),
+    Ma(data.Mach),
+    Fr(data.Froude),
+    dt(data.dt),
     n_stages(explicit_RK.get_n_stages()),
     IMEX_stage(1), Euler_stage(1), num_flux(Ma),
     Ma2(Ma*Ma), inv_Ma2(static_cast<Number>(1.0)/Ma2),
