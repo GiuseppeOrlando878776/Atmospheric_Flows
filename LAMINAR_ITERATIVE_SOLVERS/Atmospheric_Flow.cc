@@ -194,40 +194,40 @@ protected:
   std::vector<QGauss<1>> quadratures; /*--- Auxiliary container for the quadrature in matrix-free ---*/
 
   // Manifold (mapping) data structures
-  GalChenMapping::PushForward<dim> push_forward;
-  GalChenMapping::PullBack<dim>    pull_back;
-  FunctionManifold<dim, dim, dim>  manifold;
+  GalChenMapping::PushForward<dim, Number> push_forward;
+  GalChenMapping::PullBack<dim, Number>    pull_back;
+  FunctionManifold<dim, dim, dim>          manifold;
 
   // Functions to set the initial conditions
-  ICBC::Density<dim>  rho_init;
-  ICBC::Velocity<dim> u_init;
-  ICBC::Pressure<dim> pres_init;
+  ICBC::Density<dim, Number>  rho_init;
+  ICBC::Velocity<dim, Number> u_init;
+  ICBC::Pressure<dim, Number> pres_init;
 
   // Functions for the Rayleigh damping profile
-  RayleighDamping::Rayleigh<dim, 1>       dt_tau;
-  RayleighDamping::Rayleigh_Aux<dim, 1>   dt_tau_aux;
-  RayleighDamping::Rayleigh<dim, dim>     dt_tau_vel;
-  RayleighDamping::Rayleigh_Aux<dim, dim> dt_tau_vel_aux;
+  RayleighDamping::Rayleigh<dim, 1, Number>       dt_tau;
+  RayleighDamping::Rayleigh_Aux<dim, 1, Number>   dt_tau_aux;
+  RayleighDamping::Rayleigh<dim, dim, Number>     dt_tau_vel;
+  RayleighDamping::Rayleigh_Aux<dim, dim, Number> dt_tau_vel_aux;
 
-  RayleighDamping::Rayleigh_Right<dim, 1>       dt_tau_right;
-  RayleighDamping::Rayleigh_Aux_Right<dim, 1>   dt_tau_aux_right;
-  RayleighDamping::Rayleigh_Right<dim, dim>     dt_tau_vel_right;
-  RayleighDamping::Rayleigh_Aux_Right<dim, dim> dt_tau_vel_aux_right;
+  RayleighDamping::Rayleigh_Right<dim, 1, Number>       dt_tau_right;
+  RayleighDamping::Rayleigh_Aux_Right<dim, 1, Number>   dt_tau_aux_right;
+  RayleighDamping::Rayleigh_Right<dim, dim, Number>     dt_tau_vel_right;
+  RayleighDamping::Rayleigh_Aux_Right<dim, dim, Number> dt_tau_vel_aux_right;
 
-  RayleighDamping::Rayleigh_Left<dim, 1>       dt_tau_left;
-  RayleighDamping::Rayleigh_Aux_Left<dim, 1>   dt_tau_aux_left;
-  RayleighDamping::Rayleigh_Left<dim, dim>     dt_tau_vel_left;
-  RayleighDamping::Rayleigh_Aux_Left<dim, dim> dt_tau_vel_aux_left;
+  RayleighDamping::Rayleigh_Left<dim, 1, Number>       dt_tau_left;
+  RayleighDamping::Rayleigh_Aux_Left<dim, 1, Number>   dt_tau_aux_left;
+  RayleighDamping::Rayleigh_Left<dim, dim, Number>     dt_tau_vel_left;
+  RayleighDamping::Rayleigh_Aux_Left<dim, dim, Number> dt_tau_vel_aux_left;
 
-  RayleighDamping::Rayleigh_RightY<dim, 1>       dt_tau_right_y;
-  RayleighDamping::Rayleigh_Aux_RightY<dim, 1>   dt_tau_aux_right_y;
-  RayleighDamping::Rayleigh_RightY<dim, dim>     dt_tau_vel_right_y;
-  RayleighDamping::Rayleigh_Aux_RightY<dim, dim> dt_tau_vel_aux_right_y;
+  RayleighDamping::Rayleigh_RightY<dim, 1, Number>       dt_tau_right_y;
+  RayleighDamping::Rayleigh_Aux_RightY<dim, 1, Number>   dt_tau_aux_right_y;
+  RayleighDamping::Rayleigh_RightY<dim, dim, Number>     dt_tau_vel_right_y;
+  RayleighDamping::Rayleigh_Aux_RightY<dim, dim, Number> dt_tau_vel_aux_right_y;
 
-  RayleighDamping::Rayleigh_LeftY<dim, 1>       dt_tau_left_y;
-  RayleighDamping::Rayleigh_Aux_LeftY<dim, 1>   dt_tau_aux_left_y;
-  RayleighDamping::Rayleigh_LeftY<dim, dim>     dt_tau_vel_left_y;
-  RayleighDamping::Rayleigh_Aux_LeftY<dim, dim> dt_tau_vel_aux_left_y;
+  RayleighDamping::Rayleigh_LeftY<dim, 1, Number>       dt_tau_left_y;
+  RayleighDamping::Rayleigh_Aux_LeftY<dim, 1, Number>   dt_tau_aux_left_y;
+  RayleighDamping::Rayleigh_LeftY<dim, dim, Number>     dt_tau_vel_left_y;
+  RayleighDamping::Rayleigh_Aux_LeftY<dim, dim, Number> dt_tau_vel_aux_left_y;
 
   // Now we declare a bunch of variables for output
   fs::path saving_dir; /*--- Auxiliary variable for the directory to save the results ---*/
@@ -1321,7 +1321,9 @@ EulerSolver<dim>::compute_max_Cu_per_direction() const {
       for(unsigned q = 0; q < n_q_points; ++q) {
         for(unsigned d = 0; d < dim; ++d) {
           res[d] = std::max(res[d],
-                            EquationData::degree_u*(std::abs(solution_values_velocity[q](d))*dt/cell->extent_in_direction(d)));
+                            EquationData::degree_u*
+                            (std::abs(solution_values_velocity[q](d))*dt/
+                             static_cast<Number>(cell->extent_in_direction(d))));
         }
       }
     }
@@ -1358,7 +1360,8 @@ EulerSolver<dim>::compute_max_C_per_direction() const {
         auto local_celerity = std::sqrt(gamma*(solution_values_pressure[q]/solution_values_density[q]));
         for(unsigned d = 0; d < dim; ++d) {
           res[d] = std::max(res[d],
-                            inv_Ma*EquationData::degree_u*(local_celerity*dt/cell->extent_in_direction(d)));
+                            inv_Ma*EquationData::degree_u*
+                            (local_celerity*dt/static_cast<Number>(cell->extent_in_direction(d))));
         }
       }
     }
