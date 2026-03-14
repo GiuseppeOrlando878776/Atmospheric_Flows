@@ -1,6 +1,8 @@
 /* Author: Giuseppe Orlando, 2026. */
 
 // @sect{Include files}
+#include <filesystem>
+namespace fs = std::filesystem;
 
 // We start by including all the necessary deal.II header files
 //
@@ -228,7 +230,7 @@ protected:
   RayleighDamping::Rayleigh_Aux_LeftY<dim, dim> dt_tau_vel_aux_left_y;
 
   // Now we declare a bunch of variables for output
-  std::string saving_dir; /*--- Auxiliary variable for the directory to save the results ---*/
+  fs::path saving_dir; /*--- Auxiliary variable for the directory to save the results ---*/
 
   ConditionalOStream pcout;
 
@@ -439,8 +441,6 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   /*--- Output ---*/
   saving_dir(data.dir),
   pcout(std::cout, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
-  time_out("./" + data.dir + "/time_analysis_" +
-           Utilities::int_to_string(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)) + "proc.dat"),
   ptime_out(time_out, Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0),
   time_table(ptime_out, TimerOutput::summary, TimerOutput::cpu_and_wall_times),
   restart(data.restart),
@@ -486,6 +486,13 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
                 "with the reference values declared (and theoretically used for initial conditions and computational domain)."
                 "The simulation will go on with the Froude number read in the parameter file, but you may want to double check!" << std::endl;
     }
+
+    /*--- Create saving directory if needed and related output stream ---*/
+    if(!fs::exists(saving_dir)) {
+      fs::create_directory(saving_dir);
+    }
+    time_out = std::ofstream(saving_dir.string() + "/time_analysis_" +
+                             Utilities::int_to_string(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)) + "proc.dat");
 
     /*--- Initialize structures ---*/
     matrix_free_storage = std::make_shared<MatrixFree<dim, Number>>();
@@ -542,7 +549,7 @@ void EulerSolver<dim>::create_triangulation(const RunTimeParameters::Data_Storag
 
   /*--- Build the proper triangulation ---*/
   if(restart) {
-    triangulation.load("./" + saving_dir + "/solution_ser-" + Utilities::int_to_string(step_restart, 5));
+    triangulation.load(saving_dir.string() + "/solution_ser-" + Utilities::int_to_string(step_restart, 5));
   }
   else {
     triangulation.refine_global(data.n_global_refines);
@@ -1160,18 +1167,18 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   DataOutBase::DataOutFilterFlags flags(false, true);
   DataOutBase::DataOutFilter      data_filter(flags);
   data_out.write_filtered_data(data_filter);
-  std::string output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".h5";
+  std::string output = saving_dir.string() + "/solution-" + Utilities::int_to_string(step, 5) + ".h5";
   data_out.write_hdf5_parallel(data_filter, output, MPI_COMM_WORLD);
   std::vector<XDMFEntry> xdmf_entries;
   auto new_xdmf_entry = data_out.create_xdmf_entry(data_filter, output, step, MPI_COMM_WORLD);
   xdmf_entries.push_back(new_xdmf_entry);
-  output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".xdmf";
+  output = saving_dir.string() + "/solution-" + Utilities::int_to_string(step, 5) + ".xdmf";
   data_out.write_xdmf_file(xdmf_entries, output, MPI_COMM_WORLD);
-  output = "./" + saving_dir + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
+  output = saving_dir.string() + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
 
   /*--- Save high order mapping ---*/
-  output = "./" + saving_dir + "/solution_high_order-" + Utilities::int_to_string(step, 5) + ".vtu";
+  output = saving_dir.string() + "/solution_high_order-" + Utilities::int_to_string(step, 5) + ".vtu";
   DataOutBase::VtkFlags flags_high_order;
   flags_high_order.write_higher_order_cells = true;
   data_out.set_flags(flags_high_order);
@@ -1195,7 +1202,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
     solution_transfer_velocity.prepare_for_serialization(u_s.front());
     solution_transfer_pressure.prepare_for_serialization(pres_s.front());
 
-    triangulation.save("./" + saving_dir + "/solution_ser-" + Utilities::int_to_string(step, 5));
+    triangulation.save(saving_dir.string() + "/solution_ser-" + Utilities::int_to_string(step, 5));
   }
 
   /*--- Call this function to be sure to be able to write again on these fields ---*/
@@ -1614,13 +1621,43 @@ void EulerSolver<dim>::run(const bool verbose,
 // @sect{ The main function }
 
 // The main function is quite standard. We just need to declare the EulerSolver
-// instance and let the simulation run.
+// instance and let the simulation run. Include also a help message
 //
+void print_help(const char* program_name) {
+  std::cout << "Usage: " << program_name << " [options]\n\n"
+            << "Options:\n"
+            << "  -p, --param FILE     Parameter file to read\n"
+            << "  -h, --help           Show this help message\n\n"
+            << "Default parameter file: parameter-file.prm\n";
+}
+
 int main(int argc, char *argv[]) {
   try {
     /*--- Read the parameters ---*/
+    std::string parameter_file = "parameter-file.prm";
+    for(int i = 1; i < argc; ++i) {
+      std::string arg = argv[i];
+
+      if(arg == "-h" || arg == "--help") {
+        print_help(argv[0]);
+        return 0;
+      }
+      else if(arg == "-p" || arg == "--param") {
+        if(i + 1 >= argc) {
+          std::cerr << "Error: missing argument after " << arg << "\n";
+          return 1;
+        }
+        parameter_file = argv[++i];
+      }
+      else {
+        std::cerr << "Unknown option: " << arg << "\n";
+        print_help(argv[0]);
+        return 1;
+      }
+    }
+
     RunTimeParameters::Data_Storage data;
-    data.read_data("parameter-file.prm");
+    data.read_data(parameter_file);
 
     /*-- Initialize console and output ---*/
     Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, -1);
