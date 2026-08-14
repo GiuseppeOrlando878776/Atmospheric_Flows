@@ -24,6 +24,8 @@ namespace RunTimeParameters {
 
     void read_data(const std::string& filename); /*--- The function that actually reads the parameters ---*/
 
+    void print_parameters() const; /*--- Print helper of parameters ---*/
+
     /*--- Start with physical parameters ---*/
     double initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
     double final_time;   /*--- Variable to set the final time ---*/
@@ -494,10 +496,7 @@ namespace RunTimeParameters {
   // Function to read all declared parameters in the constructor
   //
   void Data_Storage::read_data(const std::string& filename) {
-    std::ifstream file(filename);
-    AssertThrow(file, ExcFileNotOpen(filename));
-
-    prm.parse_input(file);
+    prm.parse_input(filename);
 
     /*--- Start with physical related parameters ---*/
     prm.enter_subsection("Physical data");
@@ -610,6 +609,12 @@ namespace RunTimeParameters {
 
       dir = prm.get("saving directory");
     }
+  }
+
+  // Print helper of parameters
+  //
+  void Data_Storage::print_parameters() const {
+    prm.print_parameters(std::cout, ParameterHandler::Description);
   }
 
 } // namespace RunTimeParameters

@@ -1439,12 +1439,14 @@ void print_help(const char* program_name) {
 int main(int argc, char *argv[]) {
   try {
     /*--- Read the parameters ---*/
+    RunTimeParameters::Data_Storage data;
     std::string parameter_file = "parameter-file.prm";
     for(int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
 
       if(arg == "-h" || arg == "--help") {
         print_help(argv[0]);
+        data.print_parameters();
         return 0;
       }
       else if(arg == "-p" || arg == "--param") {
@@ -1461,7 +1463,6 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    RunTimeParameters::Data_Storage data;
     data.read_data(parameter_file);
 
     /*-- Initialize console and output ---*/
