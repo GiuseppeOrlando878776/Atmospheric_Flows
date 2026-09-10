@@ -101,7 +101,7 @@ namespace RunTimeParameters {
     unsigned degree_rho; /*!< Polynomial degree for the density (not used so far) */
     unsigned degree_p;   /*!< Polynomial degree for the pressure (not used so far) */
 
-    double dt;       /*!< The time-step */
+    double dt;       /*!< The time step */
     std::string CFL; /*!< The Courant number (declared as string so as to verify if empty or not) */
 
     double z_start;  /*!< Start of Rayleigh damping for top boundary */
@@ -547,7 +547,23 @@ namespace RunTimeParameters {
   // Function to read all declared parameters in the constructor
   //
   void Data_Storage::parse_parameters(const std::string& filename) {
-    prm.parse_input(filename);
+    try {
+      std::ifstream file(filename);
+      AssertThrow(file, ExcFileNotOpen(filename));
+
+      prm.parse_input(file);
+    }
+    catch(const ExcFileNotOpen& exc) {
+      std::cerr << std::endl
+                << std::endl
+                << "----------------------------------------------------"
+                << std::endl;
+      std::cerr << "Exception on processing: " << std::endl
+                << exc.what() << std::endl
+                << "Using default values!" << std::endl
+                << "----------------------------------------------------"
+                << std::endl;
+    }
 
     /*--- Start with physical related parameters ---*/
     prm.enter_subsection("Physical data");

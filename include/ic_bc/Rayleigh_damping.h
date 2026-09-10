@@ -334,7 +334,7 @@ namespace RayleighDamping {
                                                          const T x_max_,
                                                          const T lambda_x_,
                                                          const T L_ref_):
-    Function<dim>(n_comp), L_ref(L_ref_),
+    Function<dim, T>(n_comp), L_ref(L_ref_),
     x_start(x_start_/L_ref), x_max(x_max_/L_ref), lambda_x(lambda_x_) {}
 
   // Evaluation of Rayleigh damping profile
@@ -501,7 +501,7 @@ namespace RayleighDamping {
                                                        const T x_min_,
                                                        const T lambda_x_,
                                                        const T L_ref_):
-    Function<dim>(n_comp), L_ref(L_ref_),
+    Function<dim, T>(n_comp), L_ref(L_ref_),
     x_start(x_start_/L_ref), x_min(x_min_/L_ref), lambda_x(lambda_x_) {}
 
   // Evaluation of Rayleigh damping profile
@@ -587,7 +587,7 @@ namespace RayleighDamping {
                                                    const T y_max_,
                                                    const T lambda_y_,
                                                    const T L_ref_):
-    Function<dim>(n_comp), L_ref(L_ref_),
+    Function<dim, T>(n_comp), L_ref(L_ref_),
     y_start(y_start_/L_ref), y_max(y_max_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile
@@ -667,7 +667,7 @@ namespace RayleighDamping {
   template<unsigned dim, unsigned n_comp, typename T>
   Rayleigh_Aux_RightY<dim, n_comp, T>::Rayleigh_Aux_RightY(const T y_start_, const T y_max_, const T lambda_y_,
                                                            const T L_ref_):
-    Function<dim>(n_comp, 0.0), L_ref(L_ref_),
+    Function<dim, T>(n_comp), L_ref(L_ref_),
     y_start(y_start_/L_ref), y_max(y_max_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile
@@ -752,7 +752,7 @@ namespace RayleighDamping {
                                                  const T y_min_,
                                                  const T lambda_y_,
                                                  const T L_ref_):
-    Function<dim>(n_comp), L_ref(L_ref_),
+    Function<dim, T>(n_comp), L_ref(L_ref_),
     y_start(y_start_/L_ref), y_min(y_min_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile
@@ -834,7 +834,7 @@ namespace RayleighDamping {
                                                          const T y_min_,
                                                          const T lambda_y_,
                                                          const T L_ref_):
-    Function<dim>(n_comp), L_ref(L_ref_),
+    Function<dim, T>(n_comp), L_ref(L_ref_),
     y_start(y_start_/L_ref), y_min(y_min_/L_ref), lambda_y(lambda_y_) {}
 
   // Evaluation of Rayleigh damping profile

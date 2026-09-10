@@ -349,8 +349,8 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   IMEX_stage(2),
   /*--- Linear solvers ---*/
   max_its(data.max_iterations),
-  atol_iterative(data.atol_iterative),
-  rtol_iterative(data.rtol_iterative),
+  atol_iterative(static_cast<Number>(data.atol_iterative)),
+  rtol_iterative(static_cast<Number>(data.rtol_iterative)),
   /*--- Space discretization ---*/
   triangulation(MPI_COMM_WORLD,
                 parallel::distributed::Triangulation<dim>::limit_level_difference_at_vertices,
@@ -413,8 +413,8 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   as_initial_conditions(data.as_initial_conditions),
   /*--- Auxiliary and fixed-point loop ---*/
   euler_matrix(data, explicit_RK, implicit_RK),
-  atol_fixed_point(data.atol_fixed_point),
-  rtol_fixed_point(data.rtol_fixed_point),
+  atol_fixed_point(static_cast<Number>(data.atol_fixed_point)),
+  rtol_fixed_point(static_cast<Number>(data.rtol_fixed_point)),
   Ma(euler_matrix.get_Mach()), inv_Ma(static_cast<Number>(1.0)/Ma),
   gamma(EquationData::Cp_Cv),
   Gamma((gamma - static_cast<Number>(1.0))/gamma)

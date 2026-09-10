@@ -51,7 +51,7 @@ namespace EquationData {
   static const unsigned degree_rho = 4;
   static const unsigned degree_u   = 4;
 
-  static const unsigned quadrature_degree = 2*degree_u + 1; // Accuracy for quadrature formula
+  static const unsigned quadrature_degree = 2*degree_u + 1; /*!< Accuracy for quadrature formula */
 
   // Physical parameters
   static const double Cp_Cv = 1.4;   /*!< Specific heats ratio */
