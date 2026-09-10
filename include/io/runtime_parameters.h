@@ -1,9 +1,22 @@
-/*--- Author: Giuseppe Orlando, 2026. ---*/
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
 #pragma once
 
 // @sect{Include files}
 
-// We start by including the necessary deal.II header files and some C++
+// We start by including the necessary deal.II header file and some C++
 // related ones
 //
 #include <deal.II/base/parameter_handler.h>
@@ -18,24 +31,43 @@
 namespace RunTimeParameters {
   using namespace dealii;
 
+  /**
+   * This is the class for the simulation parameters that, theoretically,
+   * should be set independently of the specific configuration / test case.
+   */
   class Data_Storage {
   public:
-    Data_Storage(); /*--- Class constructor ---*/
+    /**
+     * Class constructor
+     */
+    Data_Storage();
 
-    void read_data(const std::string& filename); /*--- The function that actually reads the parameters ---*/
+    /**
+     * Declare the parameters
+     */
+    void declare_parameters();
 
-    void print_parameters() const; /*--- Print helper of parameters ---*/
+    /**
+     * Read the parameters
+     * @param filename name of input file with parameters
+     */
+    void parse_parameters(const std::string& filename);
+
+    /**
+     * Print helper of parameters
+     */
+    void print_parameters() const;
 
     /*--- Start with physical parameters ---*/
-    double initial_time; /*--- Variable to set the initial time (default equal to 0) ---*/
-    double final_time;   /*--- Variable to set the final time ---*/
+    double initial_time; /*!< Variable to set the initial time (default equal to 0) */
+    double final_time;   /*!< Variable to set the final time */
 
-    double x_min; /*--- Left-end domain x direction ---*/
-    double x_max; /*--- Right-end domain x direction ---*/
-    double y_min; /*--- Left-end domain y direction ---*/
-    double y_max; /*--- Right-end domain y direction ---*/
-    double z_min; /*--- Left-end domain z direction ---*/
-    double z_max; /*--- Right-end domain z direction ---*/
+    double x_min; /*!< Left-end domain x direction */
+    double x_max; /*!< Right-end domain x direction */
+    double y_min; /*!< Left-end domain y direction */
+    double y_max; /*!< Right-end domain y direction */
+    double z_min; /*!< Left-end domain z direction */
+    double z_max; /*!< Right-end domain z direction */
 
     // The present code is meant to work using non-dimensional variables and using
     // the non-dimensional equations described in Orlando et al., JCP, 2022.
@@ -43,81 +75,79 @@ namespace RunTimeParameters {
     // to set the Mach numer equal to 1 and the Froude number equal to 1/sqrt(g),
     // where g is, as usual, the acceleration of gravity.
     //
-    double Mach;   /*--- The Mach number ---*/
-    double Froude; /*--- The Froude number ---*/
+    double Mach;   /*!< The Mach number */
+    double Froude; /*!< The Froude number */
 
-    double L_ref;   /*--- Reference length ---*/
-    double u_ref;   /*--- Reference velocity ---*/
-    double p_ref;   /*--- Reference pressure ---*/
-    double T_ref;   /*--- Reference temperature ---*/
-    double rho_ref; /*--- Reference density ---*/
+    double L_ref;   /*!< Reference length */
+    double u_ref;   /*!< Reference velocity */
+    double p_ref;   /*!< Reference pressure */
+    double T_ref;   /*!< Reference temperature */
+    double rho_ref; /*!< Reference density */
 
-    double h;  /*--- Mountain height ---*/
-    double xc; /*--- x-center of the mountain ---*/
-    double yc; /*--- y-center of the mountain ---*/
-    double ac; /*--- Semi-Width of the mountain ---*/
+    double h;  /*!< Mountain height */
+    double xc; /*!< x-center of the mountain */
+    double yc; /*!< y-center of the mountain */
+    double ac; /*!< Semi-Width of the mountain */
 
-    double N; /*--- Buoyancy frequency ---*/
+    double N; /*!< Buoyancy frequency */
 
-    double u_bar;   /*--- Reference background velocity ---*/
-    double p_bar;   /*--- Reference background pressure ---*/
-    double T_bar;   /*--- Reference background temperature ---*/
-    double rho_bar; /*--- Reference background density ---*/
+    double u_bar;   /*!< Reference background velocity */
+    double p_bar;   /*!< Reference background pressure */
+    double T_bar;   /*!< Reference background temperature */
+    double rho_bar; /*!< Reference background density */
 
     /*--- Numerical parameters ---*/
-    unsigned degree_u;   /*--- Polynomial degree for the velocity (not used so far) ---*/
-    unsigned degree_rho; /*--- Polynomial degree for the density (not used so far) ---*/
-    unsigned degree_p;   /*--- Polynomial degree for the pressure (not used so far) ---*/
+    unsigned degree_u;   /*!< Polynomial degree for the velocity (not used so far) */
+    unsigned degree_rho; /*!< Polynomial degree for the density (not used so far) */
+    unsigned degree_p;   /*!< Polynomial degree for the pressure (not used so far) */
 
-    double dt;       /*--- The time-step ---*/
-    std::string CFL; /*--- The Courant number (declare as string so as to verify if empty or not) ---*/
+    double dt;       /*!< The time-step */
+    std::string CFL; /*!< The Courant number (declared as string so as to verify if empty or not) */
 
-    double z_start;  /*--- Start of Rayleigh damping for top boundary ---*/
-    double lambda_z; /*--- Intensity of Rayleigh damping for top boundary ---*/
+    double z_start;  /*!< Start of Rayleigh damping for top boundary */
+    double lambda_z; /*!< Intensity of Rayleigh damping for top boundary */
 
-    double x_start_left;  /*--- Start of Rayleigh damping for left boundary ---*/
-    double lambda_x_left; /*--- Intensity of Rayleigh damping for left boundary ---*/
+    double x_start_left;  /*!< Start of Rayleigh damping for left boundary */
+    double lambda_x_left; /*!< Intensity of Rayleigh damping for left boundary */
 
-    double x_start_right;  /*--- Start of Rayleigh damping for right boundary ---*/
-    double lambda_x_right; /*--- Intensity of Rayleigh damping for right boundary ---*/
+    double x_start_right;  /*!< Start of Rayleigh damping for right boundary */
+    double lambda_x_right; /*!< Intensity of Rayleigh damping for right boundary */
 
-    double y_start_left;  /*--- Start of Rayleigh damping for y left boundary ---*/
-    double lambda_y_left; /*--- Intensity of Rayleigh damping for y left boundary ---*/
+    double y_start_left;  /*!< Start of Rayleigh damping for y left boundary */
+    double lambda_y_left; /*!< Intensity of Rayleigh damping for y left boundary */
 
-    double y_start_right;  /*--- Start of Rayleigh damping for y right boundary ---*/
-    double lambda_y_right; /*--- Intensity of Rayleigh damping for y right boundary ---*/
+    double y_start_right;  /*!< Start of Rayleigh damping for y right boundary */
+    double lambda_y_right; /*!< Intensity of Rayleigh damping for y right boundary */
 
-    double atol_fixed_point; /*--- Absolute tolerance for the fixed point loop ---*/
-    double rtol_fixed_point; /*--- Relative tolerance for the fixed point loop ---*/
+    double atol_fixed_point; /*!< Absolute tolerance for the fixed point loop */
+    double rtol_fixed_point; /*!< Relative tolerance for the fixed point loop */
 
-    double l_mixing; /*--- Mixing length (in the case of turbulent simulations) ---*/
+    double l_mixing; /*!< Mixing length (in the case of turbulent simulations) */
 
     /*--- Mesh parameters ---*/
-    unsigned n_elements_x;     /*--- Number of (initial) elements along x direction ---*/
-    unsigned n_elements_y;     /*--- Number of (initial) elements along y direction ---*/
-    unsigned n_elements_z;     /*--- Number of (initial) elements along z direction ---*/
-    unsigned n_global_refines; /*--- Number of global refinements for the initial (coarse) mesh ---*/
+    unsigned n_elements_x;     /*!< Number of (initial) elements along x direction */
+    unsigned n_elements_y;     /*!< Number of (initial) elements along y direction */
+    unsigned n_elements_z;     /*!< Number of (initial) elements along z direction */
+    unsigned n_global_refines; /*!< Number of global refinements for the initial (coarse) mesh */
 
-    unsigned degree_mapping; /*--- Degree of mapping for curved boundary (not used so far) ---*/
+    unsigned degree_mapping; /*!< Degree of mapping for curved boundary (not used so far) */
 
-    unsigned max_loc_refinements;   /*--- Maximum number of refinements allowed ---*/
-    unsigned min_loc_refinements;   /*--- Minimum number of refinements allowed ---*/
-    unsigned refinement_iterations; /*--- How often performing mesh adaptation ---*/
+    unsigned max_loc_refinements;   /*!< Maximum number of refinements allowed */
+    unsigned min_loc_refinements;   /*!< Minimum number of refinements allowed */
+    unsigned refinement_iterations; /*!< How often performing mesh adaptation */
 
     /*--- Parameters related to the linear solver ---*/
-    unsigned max_iterations; /*--- Maximum number of iterations for the linear solver ---*/
-    double   atol_iterative; /*--- Absolute tolerance for the linear solver ---*/
-    double   rtol_iterative; /*--- Relative tolerance for the linear solver ---*/
+    unsigned max_iterations; /*!< Maximum number of iterations for the linear solver */
+    double   atol_iterative; /*!< Absolute tolerance for the linear solver */
+    double   rtol_iterative; /*!< Relative tolerance for the linear solver */
 
     /*--- Parameters related to the output ---*/
-    bool        verbose;         /*--- Choose if being verboe or not ---*/
-    unsigned    output_interval; /*--- Set how often save the fields ---*/
-    std::string n_files;         /*--- Set how often save the fields through the number of output files (potentially unused) ---*/
-    std::string dt_save;         /*--- Set after how much time perfoming the save (potentially unused) ---*/
+    bool        verbose;         /*!< Choose if being verbose or not */
+    unsigned    output_interval; /*!< Set how often save the fields */
+    std::string n_files;         /*!< Set how often save the fields through the number of output files (potentially unused) */
+    std::string dt_save;         /*!< Set after how much time perfoming the save (potentially unused) */
 
-    std::string dir; /*--- Directory where the data are saved. This has to be created before launching the code
-                           and we assume it is a subfolder of the folder with the executable and the parameter file.
-                           This behaviour can be easily changed giving, e.g., the absolute path ---*/
+    std::string dir; /*!< Directory where the data are saved */
 
     /*--- Auxiliary parameters related to restart ---*/
     bool     restart;
@@ -127,7 +157,7 @@ namespace RunTimeParameters {
     bool     as_initial_conditions;
 
   protected:
-    ParameterHandler prm; /*--- Auxiliary variable which handles the parameters ---*/
+    ParameterHandler prm; /*!< Auxiliary variable (deal.II structure) which handles the parameters */
   };
 
   // In the constructor of this class we declare all the parameters.
@@ -196,7 +226,14 @@ namespace RunTimeParameters {
                                 save_for_restart(false),
                                 step_restart(0),
                                 time_restart(0.0),
-                                as_initial_conditions(false) {
+                                as_initial_conditions(false)
+  {
+    declare_parameters();
+  }
+
+  // Function to delcare all parameters desired
+  //
+  void Data_Storage::declare_parameters() {
     /*--- Start declaring entries for the physical parameters ---*/
     prm.enter_subsection("Physical data");
     {
@@ -211,27 +248,27 @@ namespace RunTimeParameters {
 
       prm.declare_entry("x_min",
                         "0.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "The left-end of the domain along x-direction.");
       prm.declare_entry("x_max",
                         "1.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "The right-end of the domain along x-direction.");
       prm.declare_entry("y_min",
                         "0.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "The left-end of the domain along y-direction.");
       prm.declare_entry("y_max",
                         "1.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "The right-end of the domain along y-direction.");
       prm.declare_entry("z_min",
                         "0.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "The left-end of the domain along z-direction.");
       prm.declare_entry("z_max",
                         "1.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "The right-end of the domain along z-direction.");
 
       prm.declare_entry("Mach",
@@ -270,25 +307,25 @@ namespace RunTimeParameters {
                         "The hill height.");
       prm.declare_entry("xc",
                         "1.0",
-                        Patterns::Double(0.0),
-                        "The x-Center of the hill.");
+                        Patterns::Double(),
+                        "The x-center of the hill.");
       prm.declare_entry("yc",
                         "1.0",
-                        Patterns::Double(0.0),
-                        "The y-Center of the hill.");
+                        Patterns::Double(),
+                        "The y-center of the hill.");
       prm.declare_entry("ac",
                         "1.0",
                         Patterns::Double(0.0),
-                        "The width of the hill.");
+                        "The semi-width of the hill.");
 
       prm.declare_entry("N",
                         "0.01",
                         Patterns::Double(0.0),
-                        "Buoyancy frequency.");
+                        "The buoyancy frequency.");
 
       prm.declare_entry("u_bar",
                         "1.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "The (horizontal) background.");
       prm.declare_entry("p_bar",
                         "1.0",
@@ -311,25 +348,28 @@ namespace RunTimeParameters {
       prm.declare_entry("degree_u",
                         "1",
                         Patterns::Integer(0, 15),
-                        "Polynomial degree for the velocity.");
+                        "The polynomial degree for the velocity.");
       prm.declare_entry("degree_rho",
                         "1",
                         Patterns::Integer(0, 15),
-                        "Polynomial degree for the density.");
+                        "The polynomial degree for the density.");
       prm.declare_entry("degree_p",
                         "1",
                         Patterns::Integer(0, 15),
-                        "Polynomial degree for the pressure.");
+                        "The polynomial degree for the pressure.");
 
       prm.declare_entry("dt",
                         "5e-4",
                         Patterns::Double(0.0),
                         "The time step size.");
-      prm.declare_entry("CFL", "");
+      prm.declare_entry("CFL",
+                        "",
+                        Patterns::Anything(),
+                        "The CFL value (declared as string in case unused).");
 
       prm.declare_entry("z_start",
                         "1.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "Start of Rayleigh damping for top boundary.");
       prm.declare_entry("lambda_z",
                         "1.0",
@@ -337,7 +377,7 @@ namespace RunTimeParameters {
                         "Intensity of Rayleigh damping for top boundary.");
       prm.declare_entry("x_start_left",
                         "0.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "Start of Rayleigh damping for left boundary.");
       prm.declare_entry("lambda_x_left",
                         "1.0",
@@ -349,7 +389,7 @@ namespace RunTimeParameters {
                         "Start of Rayleigh damping for right boundary.");
       prm.declare_entry("lambda_x_right",
                         "1.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "Intensity of Rayleigh damping for right boundary.");
       prm.declare_entry("y_start_left",
                         "0.0",
@@ -365,17 +405,17 @@ namespace RunTimeParameters {
                         "Start of Rayleigh damping for y right boundary.");
       prm.declare_entry("lambda_y_right",
                         "1.0",
-                        Patterns::Double(0.0),
+                        Patterns::Double(),
                         "Intensity of Rayleigh damping for y right boundary.");
 
       prm.declare_entry("atol_fixed_point",
                         "1e-12",
                         Patterns::Double(0.0),
-                        "Absolute tolerance for the fixed point loop.");
+                        "The absolute tolerance for the fixed point loop.");
       prm.declare_entry("rtol_fixed_point",
                         "1e-10",
                         Patterns::Double(0.0),
-                        "Relative tolerance for the fixed point loop.");
+                        "The relative tolerance for the fixed point loop.");
 
       prm.declare_entry("l_mixing",
                         "1.0",
@@ -407,16 +447,16 @@ namespace RunTimeParameters {
       prm.declare_entry("degree_mapping",
                         "1",
                          Patterns::Integer(1, 15),
-                         "Polynomial degree mapping curved boundary.");
+                         "The polynomial degree mapping curved boundary.");
 
       prm.declare_entry("max_loc_refinements",
                         "4",
                          Patterns::Integer(1, 10),
-                         " The number of maximum local refinements in case of adaptive mesh.");
+                         "The number of maximum local refinements in case of adaptive mesh.");
       prm.declare_entry("min_loc_refinements",
                         "2",
                          Patterns::Integer(0, 10),
-                         " The number of minimum local refinements in case of adaptive mesh.");
+                         "The number of minimum local refinements in case of adaptive mesh.");
       prm.declare_entry("refinement_iterations",
                         "0",
                          Patterns::Integer(0, 100000000),
@@ -434,11 +474,11 @@ namespace RunTimeParameters {
       prm.declare_entry("atol_iterative",
                         "1e-14",
                         Patterns::Double(0.0),
-                        "Absolute tolerance for the linear solver.");
+                        "The absolute tolerance for the linear solver.");
       prm.declare_entry("rtol_iterative",
                         "1e-12",
                         Patterns::Double(0.0),
-                        "Relative tolerance for the linear solver.");
+                        "The relative tolerance for the linear solver.");
     }
     prm.leave_subsection();
 
@@ -485,17 +525,28 @@ namespace RunTimeParameters {
                         Patterns::Integer(1),
                         "This indicates between how many time steps we print "
                         "the solution.");
-      prm.declare_entry("n_files", "");
-      prm.declare_entry("dt_save", "");
+      prm.declare_entry("n_files",
+                        "",
+                        Patterns::Anything(),
+                        "The number of files to be saved "
+                        "(declared as string in case unsued).");
+      prm.declare_entry("dt_save",
+                        "",
+                        Patterns::Anything(),
+                        "The time interval for saving "
+                        "(declared as string in case unsued).");
 
-      prm.declare_entry("saving directory", "SimTest");
+      prm.declare_entry("saving directory",
+                        "SimTest",
+                        Patterns::DirectoryName(),
+                        "Name of the directory to save data.");
     }
     prm.leave_subsection();
   }
 
   // Function to read all declared parameters in the constructor
   //
-  void Data_Storage::read_data(const std::string& filename) {
+  void Data_Storage::parse_parameters(const std::string& filename) {
     prm.parse_input(filename);
 
     /*--- Start with physical related parameters ---*/

@@ -1,4 +1,18 @@
-/*--- Author: Giuseppe Orlando, 2026. ---*/
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
+#pragma once
 
 // @sect{Include files}
 
@@ -26,24 +40,42 @@ namespace ICBC {
   template<unsigned dim, typename T = double>
   class Velocity: public Function<dim, T> {
   public:
-    Velocity(const T u_bar_, const T u_ref_,
-             const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+    /**
+     * Class constructor
+     * @param u_bar_ background velocity
+     * @param u_ref_ reference velocity
+     * @param initial_time_ initial time (unused)
+     */
+    Velocity(const T u_bar_,
+             const T u_ref_,
+             const T initial_time = static_cast<T>(0.0));
 
+    /**
+     * Evaluation of the velocity for each component
+     * @param p point coordinate
+     * @param component spatial component to be evaluated
+     */
     virtual T value(const Point<dim, T>& p,
-                    const unsigned       component = 0) const override; /*--- Evaluation for each component ---*/
+                    const unsigned       component = 0) const override;
 
+    /**
+     * Vector evaluation of the velocity
+     * @param p point coordinate
+     * @return values vector with all components of the velocity
+     */
     virtual void vector_value(const Point<dim, T>& p,
-                              Vector<T>&           values) const override; /*--- Vector evaluation of the velocity ---*/
+                              Vector<T>&           values) const override;
 
   private:
-    T u_bar; /*--- Background velocity ---*/
-    T u_ref; /*--- Reference velocity (for non-dimensional variables) ---*/
+    T u_bar; /*!< Background velocity */
+    T u_ref; /*!< Reference velocity (for non-dimensional variables) */
   };
 
   // Constructor which relies on the 'Function' constructor.
   //
   template<unsigned dim, typename T>
-  Velocity<dim, T>::Velocity(const T u_bar_, const T u_ref_,
+  Velocity<dim, T>::Velocity(const T u_bar_,
+                             const T u_ref_,
                              const T initial_time):
     Function<dim, T>(dim, initial_time),
     u_bar(u_bar_), u_ref(u_ref_) {}
@@ -82,29 +114,47 @@ namespace ICBC {
   template<unsigned dim, typename T = double>
   class Pressure: public Function<dim, T> {
   public:
-    Pressure(const T p_bar_, const T T_bar_,
-             const T p_ref_, const T L_ref_,
+    /**
+     * Class constructor
+     * @param p_bar_ background pressure
+     * @param T_bar_ background temperature
+     * @param p_ref_ reference pressure
+     * @param p_ref_ reference length
+     * @param N_ buoyancy frequency
+     * @param initial_time_ initial time (unused)
+     */
+    Pressure(const T p_bar_,
+             const T T_bar_,
+             const T p_ref_,
+             const T L_ref_,
              const T N_,
-             const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+             const T initial_time = static_cast<T>(0.0));
 
+    /**
+     * Evaluation of the pressure
+     * @param p point coordinate
+     * @param component spatial component to be evaluated (unused)
+     */
     virtual T value(const Point<dim, T>& p,
-                    const unsigned       component = 0) const override; /*--- Evalution of the pressure ---*/
+                    const unsigned       component = 0) const override;
 
   private:
-    T p_bar; /*--- Background pressure ---*/
-    T T_bar; /*--- Background temeprature ---*/
+    T p_bar; /*!< Background pressure */
+    T T_bar; /*!< Background temeprature */
 
-    T p_ref; /*--- Reference pressure (for non-dimensional variables) ---*/
-    T L_ref; /*--- Reference length (for non-dimensional variables) ---*/
+    T p_ref; /*!< Reference pressure (for non-dimensional variables) */
+    T L_ref; /*!< Reference length (for non-dimensional variables) */
 
-    T N; /*--- Buoyancy frequency ---*/
+    T N; /*!< Buoyancy frequency */
   };
 
   // Constructor which again relies on the 'Function' constructor.
   //
   template<unsigned dim, typename T>
-  Pressure<dim, T>::Pressure(const T p_bar_, const T T_bar_,
-                             const T p_ref_, const T L_ref_,
+  Pressure<dim, T>::Pressure(const T p_bar_,
+                             const T T_bar_,
+                             const T p_ref_,
+                             const T L_ref_,
                              const T N_,
                              const T initial_time):
     Function<dim, T>(1, initial_time),
@@ -137,28 +187,46 @@ namespace ICBC {
   template<unsigned dim, typename T = double>
   class Density: public Function<dim, T> {
   public:
-    Density(const T p_bar_, const T T_bar_,
-            const T rho_ref_, const T L_ref_,
+    /**
+     * Class constructor
+     * @param p_bar_ background pressure
+     * @param T_bar_ background temperature
+     * @param rho_ref_ reference density
+     * @param p_ref_ reference length
+     * @param N_ buoyancy frequency
+     * @param initial_time_ initial time (unused)
+     */
+    Density(const T p_bar_,
+            const T T_bar_,
+            const T rho_ref_,
+            const T L_ref_,
             const T N_,
-            const T initial_time = static_cast<T>(0.0)); /*--- Class constructor ---*/
+            const T initial_time = static_cast<T>(0.0));
 
+    /**
+     * Evaluation of the density
+     * @param p point coordinate
+     * @param component spatial component to be evaluated (unused)
+     */
     virtual T value(const Point<dim, T>& p,
-                    const unsigned       component = 0) const override; /*--- Evaluation of the density ---*/
+                    const unsigned       component = 0) const override;
   private:
-    T p_bar; /*--- Background pressure ---*/
-    T T_bar; /*--- Background temeprature ---*/
+    T p_bar; /*!< Background pressure */
+    T T_bar; /*!< Background temeprature */
 
-    T rho_ref; /*--- Reference density (for non-dimensional variables) ---*/
-    T L_ref;   /*--- Reference length (for non-dimensional variables) ---*/
+    T rho_ref; /*!< Reference density (for non-dimensional variables) */
+    T L_ref;   /*!< Reference length (for non-dimensional variables) */
 
-    T N; /*--- Buoyancy frequency ---*/
+    T N; /*!< Buoyancy frequency */
   };
 
   // Constructor which again relies on the 'Function' constructor.
   //
   template<unsigned dim, typename T>
-  Density<dim, T>::Density(const T p_bar_, const T T_bar_,
-                           const T rho_ref_, const T L_ref_,
+  Density<dim, T>::Density(const T p_bar_,
+                           const T T_bar_,
+                           const T rho_ref_,
+                           const T L_ref_,
                            const T N_,
                            const T initial_time):
     Function<dim, T>(1, initial_time),
@@ -190,4 +258,4 @@ namespace ICBC {
                                             (static_cast<T>(EquationData::Cp_Cv) - static_cast<T>(1.0)));
   }
 
-} // namespace EquationData
+} // namespace ICBC

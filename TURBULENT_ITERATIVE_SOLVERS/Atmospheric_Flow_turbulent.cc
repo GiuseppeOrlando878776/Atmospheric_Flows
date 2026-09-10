@@ -1,6 +1,20 @@
-/* Author: Giuseppe Orlando, 2026. */
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
 
 // @sect{Include files}
+
 #include <filesystem>
 namespace fs = std::filesystem;
 
@@ -17,7 +31,6 @@ namespace fs = std::filesystem;
 
 #include <deal.II/grid/grid_generator.h>
 #include <deal.II/grid/grid_refinement.h>
-#include <deal.II/grid/grid_tools.h>
 #include <deal.II/grid/manifold_lib.h>
 
 #include <deal.II/dofs/dof_handler.h>
@@ -36,7 +49,7 @@ namespace fs = std::filesystem;
 
 #include <deal.II/distributed/solution_transfer.h>
 
-/*--- Include headers related to multigrid ---*/
+// Include headers related to multigrid
 #include <deal.II/multigrid/multigrid.h>
 #include <deal.II/multigrid/mg_transfer_matrix_free.h>
 #include <deal.II/multigrid/mg_tools.h>
@@ -44,7 +57,7 @@ namespace fs = std::filesystem;
 #include <deal.II/multigrid/mg_smoother.h>
 #include <deal.II/multigrid/mg_matrix.h>
 
-/*--- Include headers related to the problem of interest ---*/
+// Include headers related to the problem of interest
 #include "include/ic_bc/ic_3D_nonhydrostatic_hill.h"
 
 #include "include/ic_bc/Rayleigh_damping.h"
@@ -67,15 +80,27 @@ public:
   using Vec    = LinearAlgebra::distributed::Vector<double>;
   using Number = Vec::value_type;
 
+  /**
+   * Class constructor
+   * @param data runtime parameters
+   * @param explicit_RK explicit Runge-Kutta Butcher tableau
+   * @param implicit_RK implicit Runge-Kutta Butcher tableau
+   */
   EulerSolver(const RunTimeParameters::Data_Storage& data,
               const TimeStepping::RungeKutta<Number>& explicit_RK,
-              const TimeStepping::RungeKutta<Number>& implicit_RK); /*--- Class constructor ---*/
+              const TimeStepping::RungeKutta<Number>& implicit_RK);
 
+  /**
+   * The routine which actually runs the simulation
+   * @param verbose specify if being verbose or not
+   * @param output_interval specify how often save data
+   * @param n_files_ specify how many files to save
+   * @param dt_save_ specify the time step for saving
+   */
   void run(const bool verbose = false,
            const unsigned output_interval = 10,
            const std::string& n_files = "",
            const std::string& dt_save_ = "");
-  /*--- The run function which actually runs the simulation ---*/
 
 protected:
   DeclException2(ExcInvalidTimeStep,
@@ -86,24 +111,24 @@ protected:
                  << " The permitted range is (0," << arg2 << "]");
 
   // Auxiliary variables for some physical parameters
-  const Number t0; /*--- Initial time auxiliary variable ----*/
-  const Number T;  /*--- Final time auxiliary variable ----*/
+  const Number t0; /*!< Initial time auxiliary variable */
+  const Number T;  /*!< Final time auxiliary variable */
 
   // Auxiliary variables for some numerical parameters
-  Number dt;          /*--- Time step auxiliary variable ---*/
-  Number CFL;         /*--- Courant number auxiliary variable (not necessarily used) ---*/
-  bool   dt_from_CFL; /*--- Fix whether the time step is fixed from CFL or from input ---*/
+  Number dt;          /*!< Time step auxiliary variable */
+  Number CFL;         /*!< Courant number auxiliary variable (not necessarily used) */
+  bool   dt_from_CFL; /*!< Fix whether the time step is fixed from CFL or from input */
 
-  unsigned n_stages;   /*--- Number of IMEX stages ---*/
-  unsigned IMEX_stage; /*--- Flag to check at which current stage of the IMEX we are ---*/
+  unsigned n_stages;   /*!< Number of IMEX stages */
+  unsigned IMEX_stage; /*!< Flag to check at which current stage of the IMEX we are */
 
   // Auxiliary variables for linear solvers parameters
-  unsigned max_its;        /*--- Auxiliary variable for the maximum number of iterations of linear solvers ---*/
-  Number   atol_iterative; /*--- Auxiliary variable for the absolute tolerance of linear solvers ---*/
-  Number   rtol_iterative; /*--- Auxiliary variable for the relative tolerance of linear solvers ---*/
+  unsigned max_its;        /*!< Auxiliary variable for the maximum number of iterations of linear solvers */
+  Number   atol_iterative; /*!< Auxiliary variable for the absolute tolerance of linear solvers */
+  Number   rtol_iterative; /*!< Auxiliary variable for the relative tolerance of linear solvers */
 
   // Domain discretization
-  parallel::distributed::Triangulation<dim> triangulation; /*--- The variable which stores the mesh ---*/
+  parallel::distributed::Triangulation<dim> triangulation; /*!< The variable which stores the mesh */
 
   // Finite element spaces for all the variables
   FESystem<dim> fe_density;
@@ -117,7 +142,7 @@ protected:
 
   // Auxiliary mapping for curved boundary
   MappingQ<dim>  mapping;
-  MappingQ1<dim> mapping_mg; /*--- Auxiliary mapping for multigrid for the sake of generality ---*/
+  MappingQ1<dim> mapping_mg; /*!< Auxiliary mapping for multigrid for the sake of generality */
 
   // Auxiliary quadratures for all the variables
   QGaussLobatto<dim> quadrature_density;
@@ -187,14 +212,14 @@ protected:
   // Auxiliary structures for the matrix-free
   std::shared_ptr<MatrixFree<dim, Number>> matrix_free_storage;
 
-  std::vector<const DoFHandler<dim>*> dof_handlers; /*--- Auxiliary container for the matrix-free ---*/
+  std::vector<const DoFHandler<dim>*> dof_handlers; /*!< Auxiliary container for the matrix-free */
 
-  std::vector<const AffineConstraints<Number>*> constraints; /*--- Auxiliary container for the matrix-free ---*/
+  std::vector<const AffineConstraints<Number>*> constraints; /*!< Auxiliary container for the matrix-free */
   AffineConstraints<Number> constraints_velocity,
                             constraints_pressure,
                             constraints_density;
 
-  std::vector<QGauss<1>> quadratures; /*--- Auxiliary container for the quadrature in matrix-free ---*/
+  std::vector<QGauss<1>> quadratures; /*!< Auxiliary container for the quadrature in matrix-free */
 
   // Manifold (mapping) data structures
   GalChenMapping::PushForward<dim, Number> push_forward;
@@ -233,7 +258,7 @@ protected:
   RayleighDamping::Rayleigh_Aux_LeftY<dim, dim, Number> dt_tau_vel_aux_left_y;
 
   // Now we declare a bunch of variables for output
-  fs::path saving_dir; /*--- Auxiliary variable for the directory to save the results ---*/
+  fs::path saving_dir; /*!< Auxiliary variable for the directory to save the results */
 
   ConditionalOStream pcout;
 
@@ -249,27 +274,27 @@ protected:
   bool     as_initial_conditions;
 
   // Auxiliary routines to perform the spatial discretization
-  void create_triangulation(const RunTimeParameters::Data_Storage& data); /*--- Function to create the grid ---*/
+  void create_triangulation(const RunTimeParameters::Data_Storage& data); // Function to create the grid
 
-  void setup_dofs(); /*--- Function to set the dofs ---*/
+  void setup_dofs(); // Function to set the dofs
 
-  void initialize(); /*--- Function to initialize the fields ---*/
+  void initialize(); // Function to initialize the fields
 
   // Auxiliary routine to save results
-  void output_results(const unsigned step); /*--- Function to save the results ---*/
+  void output_results(const unsigned step); // Function to save the results
 
   // Auxiliary routines for post-processing
-  Number get_max_velocity() const; /*--- Get maximum velocity to compute the Courant number ---*/
+  Number get_max_velocity() const; // Get maximum velocity to compute the Courant number
 
-  Number get_min_density() const; /*--- Get minimum density ---*/
+  Number get_min_density() const; // Get minimum density
 
-  Number get_max_density() const; /*--- Get maximum density ---*/
+  Number get_max_density() const; // Get maximum density
 
-  Number compute_max_celerity() const; /*--- Compute maximum celerity for acoustic Courant number ---*/
+  Number compute_max_celerity() const; // Compute maximum celerity for acoustic Courant number
 
-  std::array<Number, dim> compute_max_Cu_per_direction() const; /*--- Get maximum Courant numbers along all the directions ---*/
+  std::array<Number, dim> compute_max_Cu_per_direction() const; // Get maximum Courant numbers along all the directions
 
-  std::array<Number, dim> compute_max_C_per_direction() const; /*--- Get maximum acoustic Courant numbers along all the directions ---*/
+  std::array<Number, dim> compute_max_C_per_direction() const; // Get maximum acoustic Courant numbers along all the directions
 
 private:
   using MatrixType = EULEROperator<dim,
@@ -289,22 +314,22 @@ private:
                                           Vec>;
   TurbulentType turbulent_matrix;
 
-  Number atol_fixed_point; /*--- Auxiliary variable for the absolute tolerance of fixed point loop ---*/
-  Number rtol_fixed_point; /*--- Auxiliary variable for the relative tolerance of fixed point loop ---*/
+  Number atol_fixed_point; /*!< Auxiliary variable for the absolute tolerance of fixed point loop */
+  Number rtol_fixed_point; /*!< Auxiliary variable for the relative tolerance of fixed point loop */
 
-  Vector<Number> Linfty_error_per_cell_pres; /*--- Auxiliary variable for the end of the fixed point loop ---*/
+  Vector<Number> Linfty_error_per_cell_pres; /*!< Auxiliary vector to verify convergence of the fixed point loop */
 
   Vec rhs_momentum,
       rhs_u_precomputed,
       rhs_pres_precomputed,
-      extra_rhs_u; /*--- Auxiliary vectors for the Schur complement ---*/
+      extra_rhs_u; // Auxiliary vectors for the Schur complement
 
-  Number Ma;     /*--- Mach number for post-processing ---*/
-  Number inv_Ma; /*--- Inverse Mach number for post-processing ---*/
-  Number gamma;  /*--- gamma (i.e. Cp/Cv) ---*/
-  Number Gamma;  /*--- (gamma - 1)/gamma ---*/
+  Number Ma;     /*!< Mach number for post-processing */
+  Number inv_Ma; /*!< Inverse Mach number for post-processing */
+  Number gamma;  /*!< gamma (i.e. Cp/Cv) */
+  Number Gamma;  /*!< (gamma - 1)/gamma */
 
-  Number h_min; /*--- Minimum cell diameter ---*/
+  Number h_min; /*!< Minimum cell diameter */
 
   // Auxiliary structures for the multigrid
   using Vec_MG        = LinearAlgebra::distributed::Vector<float>;
@@ -324,28 +349,28 @@ private:
   MGLevelObject<typename SmootherType::AdditionalData> smoother_data;
   MGLevelObject<MatrixType_MG> mg_matrices_euler;
 
-  MGLevelObject<Vec_MG> level_projection; /*--- Auxiliary variable for multigrid purposes ---*/
+  MGLevelObject<Vec_MG> level_projection; /*!< Auxiliary variable for multigrid purposes */
 
   // Auxiliary routines to numerically solve the problem
   void compute_multigrid_preconditioner(const DoFHandler<dim>& dof_handler,
-                                        const std::vector<unsigned> index_dof_handler); /*--- Auxiliary function to compute
-                                                                                              the multigrid preconditioner ---*/
+                                        const std::vector<unsigned> index_dof_handler); // Auxiliary function to compute
+                                                                                        // the multigrid preconditioner
 
-  void update_density(); /*--- Function to update the density ---*/
+  void update_density(); // Function to update the density
 
-  void pressure_fixed_point(); /*--- Function to compute the pressure in the fixed point loop ---*/
+  void pressure_fixed_point(); // Function to compute the pressure in the fixed point loop
 
-  void update_velocity(); /*--- Function to compute the velocity in the fixed point loop ---*/
+  void update_velocity(); // Function to compute the velocity in the fixed point loop
 
-  void update_pressure(); /*--- Function to compute the pressure for the weighting step of the IMEX ---*/
+  void update_pressure(); // Function to compute the pressure for the weighting step of the IMEX
 
-  void precompute_rhs_pressure(); /*--- Auxiliary function to compute the rhs of the pressure equation ---*/
+  void precompute_rhs_pressure(); // Auxiliary function to compute the rhs of the pressure equation
 
-  unsigned perform_fixed_point_loop(); /*--- Auxiliary function for the fixed point loop ---*/
+  unsigned perform_fixed_point_loop(); // Auxiliary function for the fixed point loop
 
-  void diffusion_step(); /*--- Solve the velocity equation for the turbulent part ---*/
+  void diffusion_step(); // Solve the velocity equation for the turbulent part
 
-  void temperature_step(); /*--- Solve the potential temperature equation for the turbulent part ---*/
+  void temperature_step(); // Solve the potential temperature equation for the turbulent part
 };
 
 
@@ -445,7 +470,7 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
   gamma(EquationData::Cp_Cv),
   Gamma((gamma - static_cast<Number>(1.0))/gamma)
   {
-    /*--- Check time step coherence ---*/
+    // Check time step coherence
     if(data.CFL.empty()) {
       dt = static_cast<Number>(data.dt);
       AssertThrow(!((dt <= static_cast<Number>(0.0)) || (dt > T)),
@@ -459,34 +484,36 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
       dt_from_CFL = true;
     }
 
-    /*--- Check non-dimensional parameters coherence ---*/
+    // Check non-dimensional parameters coherence
     if(std::abs(Ma*Ma -
                 static_cast<Number>(data.rho_ref)*
                 static_cast<Number>(data.u_ref)*static_cast<Number>(data.u_ref)/
                 static_cast<Number>(data.p_ref)) > static_cast<Number>(1e-10)) {
       pcout << "WARNING: The non-dimensional Mach number in the parameter file is not coherent "
-                "with the reference values declared (and theoretically used for initial conditions and computational domain)."
-                "The simulation will go on with the Mach number read in the parameter file, but you may want to double check!" << std::endl;
+               "with the reference values declared (and theoretically used for initial conditions and computational domain)."
+               "The simulation will go on with the Mach number read in the parameter file, "
+               "but you may want to double check!" << std::endl;
     }
     if(std::abs(euler_matrix.get_Froude()*euler_matrix.get_Froude() -
                 static_cast<Number>(data.u_ref)*static_cast<Number>(data.u_ref)/
                 (static_cast<Number>(EquationData::g)*static_cast<Number>(data.L_ref))) > static_cast<Number>(1e-10)) {
       pcout << "WARNING: The non-dimensional Froude number in the parameter file is not coherent "
-                "with the reference values declared (and theoretically used for initial conditions and computational domain)."
-                "The simulation will go on with the Froude number read in the parameter file, but you may want to double check!" << std::endl;
+               "with the reference values declared (and theoretically used for initial conditions and computational domain)."
+               "The simulation will go on with the Froude number read in the parameter file, "
+               "but you may want to double check!" << std::endl;
     }
 
-    /*--- Create saving directory if needed and related output stream ---*/
+    // Create saving directory if needed and related output stream
     if(!fs::exists(saving_dir)) {
       fs::create_directory(saving_dir);
     }
     time_out = std::ofstream(saving_dir.string() + "/time_analysis_" +
                              Utilities::int_to_string(Utilities::MPI::n_mpi_processes(MPI_COMM_WORLD)) + "proc.dat");
 
-    /*--- Initialize structures ---*/
+    // Initialize structures
     matrix_free_storage = std::make_shared<MatrixFree<dim, Number>>();
 
-    /*--- Clear the containers for safety ---*/
+    // Clear the containers for safety
     constraints_velocity.clear();
     constraints_velocity.close();
     constraints_pressure.clear();
@@ -496,7 +523,7 @@ EulerSolver<dim>::EulerSolver(const RunTimeParameters::Data_Storage& data,
 
     quadratures.clear();
 
-    /*--- Call initializing routines ---*/
+    // Call initializing routines
     create_triangulation(data);
     setup_dofs();
     initialize();
@@ -530,13 +557,13 @@ void EulerSolver<dim>::create_triangulation(const RunTimeParameters::Data_Storag
   GridGenerator::subdivided_hyper_rectangle(triangulation, {data.n_elements_x, data.n_elements_y, data.n_elements_z},
                                             lower_left, upper_right, true);
 
-  /*--- Consider periodic conditions along the horizontal direction ---*/
+  // Consider periodic conditions along the horizontal direction
   std::vector<GridTools::PeriodicFacePair<typename parallel::distributed::Triangulation<dim>::cell_iterator>> periodic_faces;
   GridTools::collect_periodic_faces(triangulation, 0, 1, 0, periodic_faces);
   GridTools::collect_periodic_faces(triangulation, 2, 3, 1, periodic_faces);
   triangulation.add_periodicity(periodic_faces);
 
-  /*--- Build the proper triangulation ---*/
+  // Build the proper triangulation
   if(restart) {
     triangulation.load(saving_dir.string() + "/solution_ser-" + Utilities::int_to_string(step_restart, 5));
   }
@@ -544,7 +571,7 @@ void EulerSolver<dim>::create_triangulation(const RunTimeParameters::Data_Storag
     triangulation.refine_global(data.n_global_refines);
   }
 
-  /*--- Apply the mapping to build the physical domain ---*/
+  // Apply the mapping to build the physical domain
   GridTools::transform([this](const Point<dim, Number>& chart_point) {
                                 return manifold.push_forward(chart_point);
                               },
@@ -567,7 +594,7 @@ void EulerSolver<dim>::setup_dofs() {
   h_min = GridTools::minimal_cell_diameter(triangulation, mapping)/std::sqrt(dim);
   pcout << "h_min = " << h_min << std::endl;
 
-  /*--- Set degrees of freedom ---*/
+  // Set degrees of freedom
   dof_handler_velocity.distribute_dofs(fe_velocity);
   dof_handler_pressure.distribute_dofs(fe_pressure);
   dof_handler_density.distribute_dofs(fe_density);
@@ -584,7 +611,7 @@ void EulerSolver<dim>::setup_dofs() {
         << std::endl
         << std::endl;
 
-  /*--- Set additional data to check which variables neeed to be updated ---*/
+  // Set additional data to check which variables neeed to be updated
   typename MatrixFree<dim, Number>::AdditionalData additional_data;
   additional_data.mapping_update_flags                = (update_values | update_gradients |
                                                          update_quadrature_points | update_JxW_values);
@@ -594,35 +621,35 @@ void EulerSolver<dim>::setup_dofs() {
                                                          update_quadrature_points | update_JxW_values);
   additional_data.tasks_parallel_scheme               = MatrixFree<dim, Number>::AdditionalData::none;
 
-  /*--- Set the container with the dof handlers ---*/
+  // Set the container with the dof handlers
   dof_handlers[EquationData::U_INDEX_DOF]   = &dof_handler_velocity;
   dof_handlers[EquationData::P_INDEX_DOF]   = &dof_handler_pressure;
   dof_handlers[EquationData::RHO_INDEX_DOF] = &dof_handler_density;
 
-  /*--- Set the container with the constraints. Each entry is empty (no Dirichlet and weak imposition in general)
-        and this is necessary only for compatibilty reasons ---*/
+  // Set the container with the constraints. Each entry is empty (no Dirichlet and weak imposition in general)
+  // and this is necessary only for compatibilty reasons ---*/
   constraints[EquationData::U_INDEX_DOF]   = &constraints_velocity;
   constraints[EquationData::P_INDEX_DOF]   = &constraints_pressure;
   constraints[EquationData::RHO_INDEX_DOF] = &constraints_density;
 
-  /*--- Set the quadrature formula to compute the integrals for assembling bilinear and linear forms ---*/
+  // Set the quadrature formula to compute the integrals for assembling bilinear and linear forms
   quadratures.push_back(QGauss<1>(EquationData::quadrature_degree));
   quadratures.push_back(QGauss<1>(EquationData::quadrature_degree + GalChenMapping::extra_quadrature_degree));
   quadratures.push_back(QGauss<1>(EquationData::degree_u + 1));
   quadratures.push_back(QGauss<1>(EquationData::degree_rho + 1));
   quadratures.push_back(QGauss<1>(EquationData::degree_p + 1));
 
-  /*--- Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData ---*/
+  // Initialize the matrix-free structure with DofHandlers, Constraints, Quadratures and AdditionalData
   matrix_free_storage->reinit(mapping, dof_handlers, constraints, quadratures, additional_data);
 
-  /*--- Initialize the variables related to the velocity ---*/
+  // Initialize the variables related to the velocity
   for(std::size_t idx = 0; idx < u_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(u_s[idx], EquationData::U_INDEX_DOF);
   }
   matrix_free_storage->initialize_dof_vector(u_fixed, EquationData::U_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(rhs_u, EquationData::U_INDEX_DOF);
 
-  /*--- Initialize the variables related to the pressure ---*/
+  // Initialize the variables related to the pressure
   for(std::size_t idx = 0; idx < pres_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(pres_s[idx], EquationData::P_INDEX_DOF);
   }
@@ -630,26 +657,26 @@ void EulerSolver<dim>::setup_dofs() {
   matrix_free_storage->initialize_dof_vector(dpres_fixed, EquationData::P_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(rhs_pres, EquationData::P_INDEX_DOF);
 
-  /*--- Initialize the variables related to the density ---*/
+  // Initialize the variables related to the density
   for(std::size_t idx = 0; idx < rho_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(rho_s[idx], EquationData::RHO_INDEX_DOF);
   }
   matrix_free_storage->initialize_dof_vector(rhs_rho, EquationData::RHO_INDEX_DOF);
 
-  /*--- Initialize the variables related to the potential temperature ---*/
+  // Initialize the variables related to the potential temperature
   for(std::size_t idx = 0; idx < theta_s.size(); ++idx) {
     matrix_free_storage->initialize_dof_vector(theta_s[idx], EquationData::THETA_INDEX_DOF);
   }
   matrix_free_storage->initialize_dof_vector(rhs_theta, EquationData::THETA_INDEX_DOF);
 
-  /*--- Initialize the auxiliary variable for the Schur complement ---*/
+  // Initialize the auxiliary variable for the Schur complement
   matrix_free_storage->initialize_dof_vector(rhs_momentum, EquationData::U_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(rhs_u_precomputed, EquationData::U_INDEX_DOF);
   rhs_u_precomputed = 0;
   matrix_free_storage->initialize_dof_vector(rhs_pres_precomputed, EquationData::P_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(extra_rhs_u, EquationData::U_INDEX_DOF);
 
-  /*--- Initialize the variables related to the damping layers ---*/
+  // Initialize the variables related to the damping layers
   matrix_free_storage->initialize_dof_vector(dt_tau_u, EquationData::U_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(dt_tau_pres, EquationData::P_INDEX_DOF);
   matrix_free_storage->initialize_dof_vector(dt_tau_rho, EquationData::RHO_INDEX_DOF);
@@ -742,7 +769,7 @@ void EulerSolver<dim>::setup_dofs() {
   dt_tau_pres_left_y.scale(pres_bar);
   dt_tau_rho_left_y.scale(rho_bar);
 
-  /*--- Initialize the auxiliary variable to check the error and stop the fixed point loop ---*/
+  // Initialize the auxiliary variable to check the error and stop the fixed point loop
   Vector<Number> error_per_cell_tmp(triangulation.n_active_cells());
   Linfty_error_per_cell_pres.reinit(error_per_cell_tmp);
 
@@ -778,7 +805,7 @@ template<unsigned dim>
 void EulerSolver<dim>::initialize() {
   TimerOutput::Scope t(time_table, "Initialize state");
 
-  /*--- Initialize the fields in case of restart ---*/
+  // Initialize the fields in case of restart
   if(restart) {
     parallel::distributed::SolutionTransfer<dim, Vec>
     solution_transfer_density(dof_handler_density);
@@ -795,14 +822,14 @@ void EulerSolver<dim>::initialize() {
     solution_transfer_velocity.deserialize(u_s.front());
     solution_transfer_pressure.deserialize(pres_s.front());
   }
-  /*--- Initialize the fields ---*/
+  // Initialize the fields
   else {
     VectorTools::interpolate(mapping, dof_handler_density, rho_init, rho_s.front());
     VectorTools::interpolate(mapping, dof_handler_velocity, u_init, u_s.front());
     VectorTools::interpolate(mapping, dof_handler_pressure, pres_init, pres_s.front());
   }
 
-  /*--- Initilize also the potential temperature so as to obtain a proper saving of initial state ---*/
+  // Initilize also the potential temperature so as to obtain a proper saving of initial state
   for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       std::vector<types::global_dof_index> dof_indices(fe_pressure.dofs_per_cell);
@@ -837,7 +864,8 @@ void EulerSolver<dim>::compute_multigrid_preconditioner(const DoFHandler<dim>& d
     additional_data_mg.mapping_update_flags_boundary_faces = update_default;
     additional_data_mg.mg_level                            = level;
 
-    std::shared_ptr<MatrixFree<dim, Number_MG>> mg_mf_storage_level(new MatrixFree<dim, Number_MG>()); /*--- This has to be redefined to avoid issues ---*/
+    std::shared_ptr<MatrixFree<dim, Number_MG>> mg_mf_storage_level(new MatrixFree<dim, Number_MG>());
+    // This has to be redefined to avoid issues
     mg_mf_storage_level->reinit(mapping_mg, dof_handlers, constraints, quadratures, additional_data_mg);
     mg_matrices_euler[level].initialize(mg_mf_storage_level, index_dof_handler, index_dof_handler);
     mg_matrices_euler[level].set_Euler_stage(euler_matrix.get_Euler_stage());
@@ -856,7 +884,7 @@ void EulerSolver<dim>::compute_multigrid_preconditioner(const DoFHandler<dim>& d
     smoother_data[level].preconditioner = mg_matrices_euler[level].get_matrix_diagonal_inverse();
   }
 
-  /*--- Apply smoother ---*/
+  // Apply smoother
   mg_smoother.clear();
   mg_smoother.initialize(mg_matrices_euler, smoother_data);
 
@@ -882,12 +910,12 @@ template<unsigned dim>
 void EulerSolver<dim>::update_density() {
   TimerOutput::Scope t(time_table, "Update density");
 
-  /*--- Set the proper dof index to specify that we are dealing with continuity equation ---*/
+  // Set the proper dof index to specify that we are dealing with continuity equation
   const std::vector<unsigned> index_dof_handler = {EquationData::RHO_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::RHO_INDEX_SYSTEM);
 
-  /*--- Compute the rhs ---*/
+  // Compute the rhs
   std::vector<Vec> vectors_rhs_density_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
     vectors_rhs_density_equation.push_back(rho_s[idx_s]);
@@ -896,7 +924,7 @@ void EulerSolver<dim>::update_density() {
 
   euler_matrix.vmult_rhs_density(rhs_rho, vectors_rhs_density_equation);
 
-  /*--- Compute multigrid preconditioner for density ---*/
+  // Compute multigrid preconditioner for density
   compute_multigrid_preconditioner(dof_handler_density, index_dof_handler);
 
   Multigrid<Vec_MG> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -905,7 +933,7 @@ void EulerSolver<dim>::update_density() {
                  MGTransferMatrixFree<dim,
                                       Number_MG>> preconditioner(dof_handler_density, mg, mg_transfer);
 
-  /*--- Solve the system for the density ---*/
+  // Solve the system for the density
   SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_rho.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
@@ -920,12 +948,12 @@ void EulerSolver<dim>::update_density() {
 //
 template<unsigned dim>
 void EulerSolver<dim>::precompute_rhs_pressure() {
-  /*--- Set the proper dof index ---*/
+  // Set the proper dof index
   const std::vector<unsigned> index_dof_handler = {EquationData::U_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
 
-  /*--- Compute the rhs ---*/
+  // Compute the rhs
   std::vector<Vec> vectors_rhs_momentum_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
     vectors_rhs_momentum_equation.push_back(rho_s[idx_s]);
@@ -936,7 +964,7 @@ void EulerSolver<dim>::precompute_rhs_pressure() {
 
   euler_matrix.vmult_rhs_momentum(rhs_momentum, vectors_rhs_momentum_equation);
 
-  /*--- Set MultiGrid for velocity matrix ---*/
+  // Set MultiGrid for velocity matrix
   compute_multigrid_preconditioner(dof_handler_velocity, index_dof_handler);
 
   Multigrid<Vec_MG> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -944,7 +972,7 @@ void EulerSolver<dim>::precompute_rhs_pressure() {
                  Vec_MG,
                  MGTransferMatrixFree<dim, Number_MG>> preconditioner(dof_handler_velocity, mg, mg_transfer);
 
-  /*--- Solve to compute first contribution to rhs --*/
+  // Solve to compute first contribution to rhs
   SolverControl solver_control_schur(max_its, static_cast<Number>(1e-12)*rhs_momentum.l2_norm(), false, true);
   SolverCG<Vec> cg_schur(solver_control_schur);
 
@@ -957,12 +985,12 @@ template<unsigned dim>
 void EulerSolver<dim>::pressure_fixed_point() {
   TimerOutput::Scope t(time_table, "Fixed point pressure");
 
-  /*--- Set the proper dof index ---*/
+  // Set the proper dof index
   const std::vector<unsigned> index_dof_handler = {EquationData::P_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::P_INDEX_SYSTEM);
 
-  /*--- Compute the rhs ---*/
+  // Compute the rhs
   std::vector<Vec> vectors_rhs_energy_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
     vectors_rhs_energy_equation.push_back(rho_s[idx_s]);
@@ -982,12 +1010,12 @@ void EulerSolver<dim>::pressure_fixed_point() {
   // Conclude computation of rhs for pressure fixed point
   rhs_pres.add(static_cast<Number>(-1.0), rhs_pres_precomputed);
 
-  /*--- Jacobi preconditioner for this system ---*/
+  // Jacobi preconditioner for this system
   PreconditionJacobi<MatrixType> preconditioner_Jacobi;
   euler_matrix.compute_diagonal();
   preconditioner_Jacobi.initialize(euler_matrix);
 
-  /*--- Solve the linear system for the pressure---*/
+  // Solve the linear system for the pressure
   SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
@@ -998,17 +1026,17 @@ void EulerSolver<dim>::pressure_fixed_point() {
 //
 template<unsigned dim>
 unsigned EulerSolver<dim>::perform_fixed_point_loop() {
-  /*--- Compute the contribution to the rhs that never changes ---*/
+  // Compute the contribution to the rhs that never changes
   precompute_rhs_pressure();
 
-  /*--- Perform the fixed point loop ---*/
+  // Perform the fixed point loop
   unsigned iter;
   for(iter = 0; iter < 100; ++iter) {
     dpres_fixed.equ(static_cast<Number>(1.0), pres_fixed),
     pressure_fixed_point();
     update_velocity();
 
-    /*--- Compute the relative error for the pressure ---*/
+    // Compute the relative error for the pressure
     VectorTools::integrate_difference(dof_handler_pressure, pres_fixed, Functions::ZeroFunction<dim, Number>(),
                                       Linfty_error_per_cell_pres, quadrature_pressure, VectorTools::Linfty_norm);
     const auto den = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm);
@@ -1017,7 +1045,7 @@ unsigned EulerSolver<dim>::perform_fixed_point_loop() {
                                       Linfty_error_per_cell_pres, quadrature_pressure, VectorTools::Linfty_norm);
     const auto error = VectorTools::compute_global_error(triangulation, Linfty_error_per_cell_pres, VectorTools::Linfty_norm);
     if(error < atol_fixed_point + rtol_fixed_point*den)
-      break; /*--- The fixed point loop is stopped whenever the relative error in infinity norm is below the specified tolerance ---*/
+      break; // The fixed point loop is stopped whenever the relative error in infinity norm is below the specified tolerance
   }
 
   return iter;
@@ -1032,12 +1060,12 @@ template<unsigned dim>
 void EulerSolver<dim>::update_velocity() {
   TimerOutput::Scope t(time_table, "Update velocity");
 
-  /*--- Set the proper dof index ---*/
+  // Set the proper dof index
   const std::vector<unsigned> index_dof_handler = {EquationData::U_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::U_INDEX_SYSTEM);
 
-  /*--- Compute the rhs ---*/
+  // Compute the rhs
   if(IMEX_stage <= n_stages) {
     rhs_u.equ(static_cast<Number>(1.0), rhs_momentum);
     euler_matrix.vmult_pressure(extra_rhs_u, pres_fixed);
@@ -1054,7 +1082,7 @@ void EulerSolver<dim>::update_velocity() {
     euler_matrix.vmult_rhs_momentum(rhs_u, vectors_rhs_momentum_equation);
   }
 
-  /*--- Compute MultiGrid for velocity matrix ---*/
+  // Compute MultiGrid for velocity matrix
   compute_multigrid_preconditioner(dof_handler_velocity, index_dof_handler);
 
   Multigrid<Vec_MG> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -1063,7 +1091,7 @@ void EulerSolver<dim>::update_velocity() {
                  MGTransferMatrixFree<dim,
                                       Number_MG>> preconditioner(dof_handler_velocity, mg, mg_transfer);
 
-  /*--- Solve the system for the velocity ---*/
+  // Solve the system for the velocity
   SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_u.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
@@ -1084,12 +1112,12 @@ template<unsigned dim>
 void EulerSolver<dim>::update_pressure() {
   TimerOutput::Scope t(time_table, "Update pressure");
 
-  /*--- Set the proper dof index ---*/
+  // Set the proper dof index
   const std::vector<unsigned> index_dof_handler = {EquationData::P_INDEX_DOF};
   euler_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   euler_matrix.set_Euler_stage(EquationData::P_INDEX_SYSTEM);
 
-  /*--- Compute the rhs ---*/
+  // Compute the rhss
   std::vector<Vec> vectors_rhs_energy_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
     vectors_rhs_energy_equation.push_back(rho_s[idx_s]);
@@ -1101,7 +1129,7 @@ void EulerSolver<dim>::update_pressure() {
 
   euler_matrix.vmult_rhs_energy(rhs_pres, vectors_rhs_energy_equation);
 
-  /*--- Compute multigrid preconditioner for the pressure ---*/
+  // Compute multigrid preconditioner for the pressure
   compute_multigrid_preconditioner(dof_handler_pressure, index_dof_handler);
 
   Multigrid<Vec_MG> mg(mg_matrix, mg_coarse, mg_transfer, mg_smoother, mg_smoother);
@@ -1110,7 +1138,7 @@ void EulerSolver<dim>::update_pressure() {
                  MGTransferMatrixFree<dim,
                                       Number_MG>> preconditioner(dof_handler_pressure, mg, mg_transfer);
 
-  /*--- Solve the system for the pressure ---*/
+  // Solve the system for the pressure
   SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_pres.l2_norm(), false, true);
   SolverCG<Vec> cg(solver_control);
 
@@ -1126,12 +1154,12 @@ template<unsigned dim>
 void EulerSolver<dim>::diffusion_step() {
   TimerOutput::Scope t(time_table, "Diffusion step");
 
-  /*--- Set the proper dof index ---*/
+  // Set the proper dof index
   const std::vector<unsigned> index_dof_handler = {EquationData::U_INDEX_DOF};
   turbulent_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   turbulent_matrix.set_NS_stage(EquationData::U_INDEX_SYSTEM_TURB);
 
-  /*--- Compute the rhs ---*/
+  // Compute the rhs
   std::vector<Vec> vectors_rhs_velocity_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
     vectors_rhs_velocity_equation.push_back(u_s[idx_s]);
@@ -1139,12 +1167,12 @@ void EulerSolver<dim>::diffusion_step() {
   }
   turbulent_matrix.vmult_rhs_velocity(rhs_u, vectors_rhs_velocity_equation);
 
-  /*--- Jacobi preconditioner for this system ---*/
+  // Jacobi preconditioner for this system
   PreconditionJacobi<TurbulentType> preconditioner_Jacobi;
   turbulent_matrix.compute_diagonal();
   preconditioner_Jacobi.initialize(turbulent_matrix);
 
-  /*--- Solve the linear system for the velocity ---*/
+  // Solve the linear system for the velocity
   SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_u.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
@@ -1160,12 +1188,12 @@ template<unsigned dim>
 void EulerSolver<dim>::temperature_step() {
   TimerOutput::Scope t(time_table, "Temperature step");
 
-  /*--- Set the proper dof index ---*/
+  // Set the proper dof index
   const std::vector<unsigned int> index_dof_handler = {EquationData::THETA_INDEX_DOF};
   turbulent_matrix.initialize(matrix_free_storage, index_dof_handler, index_dof_handler);
   turbulent_matrix.set_NS_stage(EquationData::THETA_INDEX_SYSTEM);
 
-  /*--- Compute the rhs ---*/
+  // Compute the rhs
   std::vector<Vec> vectors_rhs_theta_equation;
   for(unsigned idx_s = 0; idx_s < IMEX_stage - 1; ++idx_s) {
     vectors_rhs_theta_equation.push_back(u_s[idx_s]);
@@ -1173,12 +1201,12 @@ void EulerSolver<dim>::temperature_step() {
   }
   turbulent_matrix.vmult_rhs_temperature(rhs_theta, vectors_rhs_theta_equation);
 
-  /*--- Jacobi preconditioner for this system ---*/
+  // Jacobi preconditioner for this system
   PreconditionJacobi<TurbulentType> preconditioner_Jacobi;
   turbulent_matrix.compute_diagonal();
   preconditioner_Jacobi.initialize(turbulent_matrix);
 
-  /*--- Solve the linear system for the potential temperature ---*/
+  // Solve the linear system for the potential temperature
   SolverControl solver_control(max_its, atol_iterative + rtol_iterative*rhs_theta.l2_norm(), false, true);
   SolverGMRES<Vec> gmres(solver_control);
 
@@ -1199,7 +1227,7 @@ template<unsigned dim>
 void EulerSolver<dim>::output_results(const unsigned step) {
   TimerOutput::Scope t(time_table, "Output results");
 
-  /*--- Save the fields ---*/
+  // Save the fields
   DataOut<dim> data_out;
 
   rho_s.front().update_ghost_values();
@@ -1215,7 +1243,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   theta_s.front().update_ghost_values();
   data_out.add_data_vector(dof_handler_pressure, theta_s.front(), "theta", {DataComponentInterpretation::component_is_scalar});
 
-  /*--- Save background state ---*/
+  // Save background state
   rho_bar.update_ghost_values();
   data_out.add_data_vector(dof_handler_density, rho_bar, "rho_bar", {DataComponentInterpretation::component_is_scalar});
   u_bar.update_ghost_values();
@@ -1239,7 +1267,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   output = saving_dir.string() + "/solution-" + Utilities::int_to_string(step, 5) + ".vtu";
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
 
-  /*--- Save high order mapping ---*/
+  // Save high order mapping
   output = saving_dir.string() + "/solution_high_order-" + Utilities::int_to_string(step, 5) + ".vtu";
   DataOutBase::VtkFlags flags_high_order;
   flags_high_order.write_higher_order_cells = true;
@@ -1247,7 +1275,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
   data_out.build_patches(mapping, GalChenMapping::degree_mapping, DataOut<dim>::curved_inner_cells);
   data_out.write_vtu_in_parallel(output, MPI_COMM_WORLD);
 
-  /*--- Serialization ---*/
+  // Serialization
   if(save_for_restart) {
     parallel::distributed::SolutionTransfer<dim, Vec>
     solution_transfer_density(dof_handler_density);
@@ -1267,7 +1295,7 @@ void EulerSolver<dim>::output_results(const unsigned step) {
     triangulation.save(saving_dir.string() + "/solution_ser-" + Utilities::int_to_string(step, 5));
   }
 
-  /*--- Call this function to be sure to be able to write again on these fields ---*/
+  // Call this function to be sure to be able to write again on these fields
   rho_s.front().zero_out_ghost_values();
   u_s.front().zero_out_ghost_values();
   pres_s.front().zero_out_ghost_values();
@@ -1286,7 +1314,7 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::get_max_velocity() const {
 
   auto max_local_velocity = static_cast<Number>(0.0);
 
-  /*--- Loop over all cells ---*/
+  // Loop over all cells
   for(const auto& cell: dof_handler_velocity.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values_velocity.reinit(cell);
@@ -1312,7 +1340,7 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::get_min_density() const {
 
   auto min_local_density = std::numeric_limits<Number>::max();
 
-  /*--- Loop over all cells ---*/
+  // Loop over all cells
   for(const auto& cell: dof_handler_density.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
@@ -1345,7 +1373,7 @@ typename EulerSolver<dim>::Number EulerSolver<dim>::compute_max_celerity() const
 
   auto max_local_celerity = std::numeric_limits<Number>::min();
 
-  /*--- Loop over all cells ---*/
+  // Loop over all cells
   for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
@@ -1374,7 +1402,7 @@ EulerSolver<dim>::compute_max_Cu_per_direction() const {
   std::array<Number, dim> res;
   std::fill(res.begin(), res.end(), std::numeric_limits<Number>::min());
 
-  /*--- Loop over all cells ---*/
+  // Loop over all cells
   for(const auto& cell: dof_handler_velocity.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
@@ -1411,7 +1439,7 @@ EulerSolver<dim>::compute_max_C_per_direction() const {
   std::array<Number, dim> res;
   std::fill(res.begin(), res.end(), std::numeric_limits<Number>::min());
 
-  /*--- Loop over all cells ---*/
+  // Loop over all cells
   for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
     if(cell->is_locally_owned()) {
       fe_values.reinit(cell);
@@ -1458,7 +1486,7 @@ void EulerSolver<dim>::run(const bool verbose,
                            const std::string& dt_save_) {
   ConditionalOStream verbose_cout(std::cout, verbose && Utilities::MPI::this_mpi_process(MPI_COMM_WORLD) == 0);
 
-  /*--- Initialize and save initial state ---*/
+  // Initialize and save initial state
   auto time  = t0;
   unsigned n = 0;
 
@@ -1470,7 +1498,7 @@ void EulerSolver<dim>::run(const bool verbose,
     output_results(n);
   }
 
-  /*--- Set some potential parameters for time saving ---*/
+  // Set some potential parameters for time saving
   if(!n_files_.empty() && !dt_save_.empty()) {
     std::cerr << "Both number of files and time-interval saving not empty. Pick one!" << std::endl;
     exit(1);
@@ -1486,7 +1514,7 @@ void EulerSolver<dim>::run(const bool verbose,
     dt_save = static_cast<Number>(std::stod(dt_save_));
   }
 
-  /*--- Time loop ---*/
+  // Time loop
   auto tot_fixed_point_iters = static_cast<Number>(0.0);
   if(dt_from_CFL) {
     dt = CFL*h_min/(get_max_velocity()*EquationData::degree_u);
@@ -1509,7 +1537,7 @@ void EulerSolver<dim>::run(const bool verbose,
     n++;
     pcout << "Step = " << n << " Time = " << time << std::endl;
 
-    /*--- Internal stage of IMEX scheme (type II) ---*/
+    // Internal stage of IMEX scheme (type II)
     for(IMEX_stage = 2; IMEX_stage <= n_stages; ++IMEX_stage) {
       euler_matrix.set_IMEX_stage(IMEX_stage);
 
@@ -1534,7 +1562,7 @@ void EulerSolver<dim>::run(const bool verbose,
       u_s[IMEX_stage - 1].equ(static_cast<Number>(1.0), u_fixed);
     }
 
-    /*--- Final stage of RK scheme to update ---*/
+    // Final stage of RK scheme to update
     IMEX_stage = n_stages + 1;
     euler_matrix.set_IMEX_stage(IMEX_stage);
     for(unsigned level = 0; level < triangulation.n_global_levels(); ++level) {
@@ -1558,7 +1586,7 @@ void EulerSolver<dim>::run(const bool verbose,
     verbose_cout << "  Update pressure" << std::endl;
     update_pressure();
 
-    /*--- Update before turbulent operator. Compute also potential temperataure ---*/
+    // Update before turbulent operator. Compute also potential temperataure
     rho_s.front().equ(static_cast<Number>(1.0), rho_s.back());
     u_s.front().equ(static_cast<Number>(1.0), u_s.back());
     for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
@@ -1574,7 +1602,7 @@ void EulerSolver<dim>::run(const bool verbose,
       }
     }
 
-    /*--- Stages of stiffly-acurate ESDIRK scheme (type II) ---*/
+    // Stages of stiffly-acurate ESDIRK scheme (type II)
     for(IMEX_stage = 2; IMEX_stage <= n_stages; ++IMEX_stage) {
       turbulent_matrix.set_IMEX_stage(IMEX_stage);
 
@@ -1587,7 +1615,7 @@ void EulerSolver<dim>::run(const bool verbose,
       temperature_step();
     }
 
-    /*--- Update before applying damping layer ---*/
+    // Update before applying damping layer
     u_s.front().equ(static_cast<Number>(1.0), u_s[IMEX_stage - 1]);
     for(const auto& cell: dof_handler_pressure.active_cell_iterators()) {
       if(cell->is_locally_owned()) {
@@ -1601,7 +1629,7 @@ void EulerSolver<dim>::run(const bool verbose,
       }
     }
 
-    /*--- Apply the damping layer for the vertical component ---*/
+    // Apply the damping layer for the vertical component
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho);
     rho_s.front().scale(dt_tau_rho_aux);
     u_s.front().add(static_cast<Number>(1.0), dt_tau_u);
@@ -1609,7 +1637,7 @@ void EulerSolver<dim>::run(const bool verbose,
     pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres);
     pres_s.front().scale(dt_tau_pres_aux);
 
-    /*--- Apply the damping layer for the right lateral part ---*/
+    // Apply the damping layer for the right lateral part
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_right);
     rho_s.front().scale(dt_tau_rho_aux_right);
     u_s.front().add(static_cast<Number>(1.0), dt_tau_u_right);
@@ -1617,7 +1645,7 @@ void EulerSolver<dim>::run(const bool verbose,
     pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_right);
     pres_s.front().scale(dt_tau_pres_aux_right);
 
-    /*--- Apply the damping layer for the left lateral part ---*/
+    // Apply the damping layer for the left lateral part
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_left);
     rho_s.front().scale(dt_tau_rho_aux_left);
     u_s.front().add(static_cast<Number>(1.0), dt_tau_u_left);
@@ -1625,7 +1653,7 @@ void EulerSolver<dim>::run(const bool verbose,
     pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_left);
     pres_s.front().scale(dt_tau_pres_aux_left);
 
-    /*--- Apply the damping layer for the right y lateral part ---*/
+    // Apply the damping layer for the right y lateral part
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_right_y);
     rho_s.front().scale(dt_tau_rho_aux_right_y);
     u_s.front().add(static_cast<Number>(1.0), dt_tau_u_right_y);
@@ -1633,7 +1661,7 @@ void EulerSolver<dim>::run(const bool verbose,
     pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_right_y);
     pres_s.front().scale(dt_tau_pres_aux_right_y);
 
-    /*--- Apply the damping layer for the left y lateral part ---*/
+    // Apply the damping layer for the left y lateral part
     rho_s.front().add(static_cast<Number>(1.0), dt_tau_rho_left_y);
     rho_s.front().scale(dt_tau_rho_aux_left_y);
     u_s.front().add(static_cast<Number>(1.0), dt_tau_u_left_y);
@@ -1641,7 +1669,7 @@ void EulerSolver<dim>::run(const bool verbose,
     pres_s.front().add(static_cast<Number>(1.0), dt_tau_pres_left_y);
     pres_s.front().scale(dt_tau_pres_aux_left_y);
 
-    /*--- Compute auxiliary post-processing data ---*/
+    // Compute auxiliary post-processing data
     const auto max_celerity = inv_Ma*compute_max_celerity();
     pcout<< "Maximum celerity = " << max_celerity << std::endl;
     pcout << "CFL_c = " << EquationData::degree_u*(max_celerity*dt/h_min) << std::endl;
@@ -1657,13 +1685,13 @@ void EulerSolver<dim>::run(const bool verbose,
     pcout << "CFL_u_y = " << max_Cu_x_y_z[1] << std::endl;
     pcout << "CFL_u_z = " << max_Cu_x_y_z[2] << std::endl;
 
-    /*--- Recompute time step if needed ---*/
+    // Recompute time step if needed
     if(dt_from_CFL) {
       dt = CFL*h_min/(max_velocity*EquationData::degree_u);
       euler_matrix.set_dt(dt);
     }
 
-    /*--- Save the results ---*/
+    // Save the results
     if(n_files_.empty() && dt_save_.empty()) {
       if(n % output_interval == 0) {
         verbose_cout << "Plotting solution" << std::endl;
@@ -1687,13 +1715,13 @@ void EulerSolver<dim>::run(const bool verbose,
     }
 
     if(time + dt > T && T - time > static_cast<Number>(1e-10)) {
-      /*--- Recompute and reset the time if needed towards the end of the simulation to stop at the proper final time ---*/
+      // Recompute and reset the time if needed towards the end of the simulation to stop at the proper final time
       dt = T - time;
       euler_matrix.set_dt(dt);
     }
   }
 
-  /*--- Save the final results if not previously done ---*/
+  // Save the final results if not previously done
   pcout << "Average fixed point iterations: "
         << static_cast<Number>(tot_fixed_point_iters)/((n_stages - 1)*n)
         << std::endl;
@@ -1737,7 +1765,7 @@ void print_help(const char* program_name) {
 
 int main(int argc, char *argv[]) {
   try {
-    /*--- Read the parameters ---*/
+    // Read the parameters
     std::string parameter_file = "parameter-file.prm";
     for(int i = 1; i < argc; ++i) {
       std::string arg = argv[i];
@@ -1761,16 +1789,16 @@ int main(int argc, char *argv[]) {
     }
 
     RunTimeParameters::Data_Storage data;
-    data.read_data(parameter_file);
+    data.parse_parameters(parameter_file);
 
-    /*-- Initialize console and output ---*/
+    // Initialize console and output
     Utilities::MPI::MPI_InitFinalize mpi_init(argc, argv, -1);
 
     const auto& curr_rank = Utilities::MPI::this_mpi_process(MPI_COMM_WORLD);
     deallog.depth_console(data.verbose && curr_rank == 0 ? 2 : 0);
 
-    /*--- Initilize Butcher tableaux. Now the declaration of the coefficients (hard-coded for the moment)
-          is totally relegated here, so this is the only place where we need to modify (much cleaner). ---*/
+    // Initilize Butcher tableaux. The declaration of the coefficients (hard-coded for the moment)
+    // is totally relegated here, so this is the only place where we need to modify (much cleaner)
     const unsigned n_stages = 3;
     using Number = typename EulerSolver<3>::Number;
 
@@ -1798,7 +1826,7 @@ int main(int argc, char *argv[]) {
     std::vector<Number> b_tilde = b;
     TimeStepping::RungeKutta<Number> implicit_RK(a_tilde, b_tilde);
 
-    /*-- Run the simulation ---*/
+    // Run the simulation
     EulerSolver<3> test(data, explicit_RK, implicit_RK);
     test.run(data.verbose, data.output_interval, data.n_files, data.dt_save);
 

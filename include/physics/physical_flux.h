@@ -1,9 +1,22 @@
-/*--- Author: Giuseppe Orlando, 2026. ---*/
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
 #pragma once
 
 // @sect{Include files}
 
-// We start by including the necessary header file
+// We start by including the necessary header files
 //
 #include "../equation_data.h"
 
@@ -22,43 +35,73 @@ namespace Physics {
   template<unsigned dim, typename Number>
   class PhysicalFluxEuler {
   public:
+    // Define the arithmetic type for this class
     using value_type = typename std::conditional<std::is_floating_point<Number>::value,
                                                  Number,
-                                                 typename Number::value_type>::type; /*--- Define the arithmetic type for this class ---*/
+                                                 typename Number::value_type>::type;
 
-    PhysicalFluxEuler(); /*--- Default class constructor ---*/
+    /**
+     * Default class constructor
+     */
+    PhysicalFluxEuler();
 
-    PhysicalFluxEuler(const value_type Ma_); /*--- Class constructor ---*/
+    /**
+     * Class constructor
+     * @param Ma_ Mach number
+     */
+    PhysicalFluxEuler(const value_type Ma_);
 
+    /**
+     * Get the Mach number
+     * @return Ma Mach number
+     */
     inline DEAL_II_ALWAYS_INLINE
     value_type get_Mach() const;
 
+    /**
+     * Physical flux continuity equation
+     * @param rho fluid density
+     * @param u fluid velocity
+     */
     inline DEAL_II_ALWAYS_INLINE
     Tensor<1, dim, Number> physical_flux_continuity(const Number& rho,
-                                                    const Tensor<1, dim, Number>& u) const; /*--- Physical flux continuity equation ---*/
+                                                    const Tensor<1, dim, Number>& u) const;
 
+    /**
+     * Physical flux momentum equation
+     * @param rho fluid density
+     * @param u fluid velocity
+     * @param p fluid pressure
+     */
     Tensor<2, dim, Number> physical_flux_momentum(const Number& rho,
                                                   const Tensor<1, dim, Number>& u,
-                                                  const Number& p) const; /*--- Physical flux momentum equation ---*/
+                                                  const Number& p) const;
 
+    /**
+     * Physical flux energy equation
+     * @param rho fluid density
+     * @param u fluid velocity
+     * @param p fluid pressure
+     */
     Tensor<1, dim, Number> physical_flux_energy(const Number& rho,
                                                 const Tensor<1, dim, Number>& u,
-                                                const Number& p) const; /*--- Physical flux energy equation ---*/
+                                                const Number& p) const;
 
   protected:
-    value_type Ma;           /*--- Mach number ---*/
-    value_type Ma2;          /*--- Squared Mach number ---*/
-    value_type inv_Ma2;      /*--- Inverse squared Mach number ---*/
-    value_type inv_gamma_m1; /*--- Inverse gamma - 1 (gamma ratio specific heats) ---*/
+    value_type Ma;           /*!< Mach number */
+    value_type Ma2;          /*!< Squared Mach number */
+    value_type inv_Ma;       /*!< Inverse Mach number */
+    value_type inv_Ma2;      /*!< Inverse squared Mach number */
+    value_type inv_gamma_m1; /*!< Inverse gamma - 1 (gamma ratio specific heats) */
 
-    Tensor<2, dim, Number> identity; /*--- Identity tensor ---*/
+    Tensor<2, dim, Number> identity; /*!< Identity tensor */
   };
 
   // Default class constructor
   //
   template<unsigned dim, typename Number>
   PhysicalFluxEuler<dim, Number>::PhysicalFluxEuler():
-    Ma(), Ma2(), inv_Ma2(),
+    Ma(), Ma2(), inv_Ma(), inv_Ma2(),
     inv_gamma_m1(static_cast<value_type>(1.0)/
                  (static_cast<value_type>(EquationData::Cp_Cv) - static_cast<value_type>(1.0)))
     {
@@ -71,7 +114,7 @@ namespace Physics {
   //
   template<unsigned dim, typename Number>
   PhysicalFluxEuler<dim, Number>::PhysicalFluxEuler(const value_type Ma_):
-    Ma(Ma_), Ma2(Ma_*Ma_), inv_Ma2(static_cast<value_type>(1.0)/Ma2),
+    Ma(Ma_), Ma2(Ma_*Ma_), inv_Ma(static_cast<value_type>(1.0)/Ma), inv_Ma2(inv_Ma*inv_Ma),
     inv_gamma_m1(static_cast<value_type>(1.0)/
                  (static_cast<value_type>(EquationData::Cp_Cv) - static_cast<value_type>(1.0)))
     {
@@ -107,12 +150,6 @@ namespace Physics {
                                                 const Tensor<1, dim, Number>& u,
                                                 const Number& p) const {
 
-    Tensor<2, dim, Number> identity;
-    for(unsigned d = 0; d < dim; ++d) {
-      identity[d][d] = Number(1.0);
-    }
-
-    /*--- Return the momentum flux ---*/
     return outer_product(rho*u, u) + inv_Ma2*(p*identity);
   }
 
@@ -123,13 +160,13 @@ namespace Physics {
                          physical_flux_energy(const Number& rho,
                                               const Tensor<1, dim, Number>& u,
                                               const Number& p) const {
-    /*--- Compute internal enrgy ---*/
+    // Compute internal enrgy
     const auto& e = inv_gamma_m1*(p/rho);
 
-    /*--- Compute kinetic energy ---*/
+    // Compute kinetic energy
     const auto& k = static_cast<value_type>(0.5)*scalar_product(u, u);
 
-    /*--- Return the energy flux ---*/
+    // Return the energy flux
     return ((rho*e + p) + Ma2*(rho*k))*u;
   }
 

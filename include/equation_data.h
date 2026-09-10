@@ -1,4 +1,17 @@
-/*--- Author: Giuseppe Orlando, 2025. ---*/
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
 #pragma once
 
 // Implement my own ceil function as constexpr
@@ -17,9 +30,9 @@ constexpr int my_ceil(const T num) {
 // the physics and the numerical discretization
 //
 namespace EquationData {
-  static const unsigned n_vars = 3; /*--- Number of variables for which we solve a linear system ---*/
+  static const unsigned n_vars = 3; /*!< Number of variables for which we solve a linear system */
 
-  /*--- Define auxiliary indices related to the dof handlers order and to linear systems under consideration ---*/
+  // Define auxiliary indices related to the dof handlers order and to linear systems under consideration
   static const unsigned RHO_INDEX_SYSTEM = 1;
   static const unsigned P_INDEX_SYSTEM   = 2;
   static const unsigned U_INDEX_SYSTEM   = 3;
@@ -33,16 +46,16 @@ namespace EquationData {
 
   static const unsigned THETA_INDEX_DOF = P_INDEX_DOF;
 
-  /*--- Polynomial degrees. We typically consider the same polynomial degree for all the variables ---*/
+  // Polynomial degrees. We typically consider the same polynomial degree for all the variables
   static const unsigned degree_p   = 4;
   static const unsigned degree_rho = 4;
   static const unsigned degree_u   = 4;
 
-  static const unsigned quadrature_degree = 2*degree_u + 1; /*--- Accuracy for quadrature formula ---*/
+  static const unsigned quadrature_degree = 2*degree_u + 1; // Accuracy for quadrature formula
 
-  /*--- Physical parameters ---*/
-  static const double Cp_Cv = 1.4;   /*--- Specific heats ratio ---*/
-  static const double R     = 287.0; /*--- Specific gas constant ---*/
+  // Physical parameters
+  static const double Cp_Cv = 1.4;   /*!< Specific heats ratio */
+  static const double R     = 287.0; /*!< Specific gas constant */
 
-  static const double g = 9.81; /*--- Acceleration of gravity ---*/
+  static const double g = 9.81; /*!< Acceleration of gravity */
 } // namespace EquationData

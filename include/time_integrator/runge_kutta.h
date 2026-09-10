@@ -1,9 +1,22 @@
-/*--- Author: Giuseppe Orlando, 2026. ---*/
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
 #pragma once
 
 // @sect{Include files}
 
-// We start by including the necessary header files
+// We start by including the necessary header file
 //
 #include <vector>
 
@@ -12,38 +25,57 @@
 // In this namespace, we declare a general interface for Runge-Kutta method
 //
 namespace TimeStepping {
-  using namespace dealii;
-
   /**
    * We declare now the class for a generic Runge-Kutta method
    */
   template<typename T = double>
   class RungeKutta {
   public:
-    RungeKutta() = default; /*--- Default class constructor. This should never be used ---*/
+    /**
+     * Default class constructor. This should never be used
+     */
+    RungeKutta() = default;
 
+    /**
+     * Class constructor
+     * @param a coefficients of the method (Butcher tableau)
+     * @param b weights of the method (Nutcher tableau)
+     */
     RungeKutta(const std::vector<std::vector<T>>& a_,
-               const std::vector<T>& b_); /*--- Class constructor to set the coefficients of the method following the Butcher tableau representation ---*/
+               const std::vector<T>& b_);
 
-    inline unsigned get_n_stages() const; /*--- Get the number of stages of the method ---*/
+    /**
+     * Get the number of stages
+     * @return n_stages number of stages
+     */
+    inline unsigned get_n_stages() const;
 
-    void get_coefficients(std::vector<std::vector<T>>& a_) const; /*--- Get the coefficents in the Butcher tableau representation ---*/
-
+    /**
+     * Get the coefficients in the Butcher tableau representation
+     * @return a coefficient of the method
+     * @return b weights of the method
+     */
     void get_coefficients(std::vector<std::vector<T>>& a_,
-                          std::vector<T>&              b_) const; /*--- Get the coefficents in the Butcher tableau representation ---*/
+                          std::vector<T>&              b_) const;
 
+    /**
+     * Get the coefficients in the Butcher tableau representation
+     * @return a coefficient of the method
+     * @return b weights of the method
+     * @return c nodes of the method
+     */
     void get_coefficients(std::vector<std::vector<T>>& a_,
                           std::vector<T>&              b_,
-                          std::vector<T>&              c_) const; /*--- Get the coefficents in the Butcher tableau representation ---*/
+                          std::vector<T>&              c_) const;
 
   protected:
-    const unsigned int n_stages; /*--- Number of stages ---*/
+    const unsigned n_stages; /*!< Number of stages */
 
-    const std::vector<std::vector<T>> a; /*--- Coefficients of the method (Butcher tableau) ---*/
+    const std::vector<std::vector<T>> a; /*!< Coefficients of the method (Butcher tableau) */
 
-    const std::vector<T> b; /*--- Weigths of the Runge-Kutta method ---*/
+    const std::vector<T> b; /*!< Weigths of the Runge-Kutta method */
 
-    std::vector<T> c; /*--- Nodes of the Runge-Kutta method ---*/
+    std::vector<T> c; /*!< Nodes of the Runge-Kutta method */
   };
 
   // Class constructor
@@ -53,12 +85,12 @@ namespace TimeStepping {
                             const std::vector<T>&              b_):
     n_stages(b_.size()), a(a_), b(b_)
     {
-      /*--- Initialize the nodes using the classical $rule c_{i} = \sum_{j}a_{ij}$.
-            This is not mandatory, but ALL the methods obey to it ---*/
+      // Initialize the nodes using the classical rule $c_{i} = \sum_{j}a_{ij}$.
+      // This is not mandatory in principle, but ALL the methods obey to it
       c.resize(n_stages);
       std::fill(c.begin(), c.end(), static_cast<T>(0.0));
-      for(std::size_t i = 0; i < n_stages; ++i) {
-        for(std::size_t j = 0; j < n_stages; ++j) {
+      for(unsigned i = 0; i < n_stages; ++i) {
+        for(unsigned j = 0; j < n_stages; ++j) {
           c[i] += a[i][j];
         }
       }
@@ -69,13 +101,6 @@ namespace TimeStepping {
   template<typename T>
   inline unsigned RungeKutta<T>::get_n_stages() const {
     return n_stages;
-  }
-
-  // Get the coefficients of the Runge-Kutta scheme
-  //
-  template<typename T>
-  void RungeKutta<T>::get_coefficients(std::vector<std::vector<T>>& a_) const {
-    a_ = this->a;
   }
 
   // Get the coefficients of the Runge-Kutta scheme

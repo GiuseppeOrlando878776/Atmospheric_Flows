@@ -1,4 +1,17 @@
-/* Author: Giuseppe Orlando, 2026. */
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
 #pragma once
 
 // @sect{Include files}
@@ -10,7 +23,7 @@
 
 #include <deal.II/meshworker/mesh_loop.h>
 
-/*--- Include headers related to the problem of interest ---*/
+// Include headers related to the problem of interest
 #include "include/io/runtime_parameters.h"
 #include "include/equation_data.h"
 #include "include/space_discretization/numerical_flux/Rusanov_flux.h"
@@ -31,58 +44,125 @@ namespace Atmospheric_Flow {
   public:
     using Number = typename Vec::value_type;
 
-    EULEROperator(); /*--- Default constructor ---*/
+    /**
+     * Default constructor
+     */
+    EULEROperator();
 
+    /**
+     * Class constructor
+     * @param data runtime parameters
+     * @param explicit_RK explicit Runge-Kutta Butcher tableau
+     * @param implicit_RK implicit Runge-Kutta Butcher tableau
+     */
     EULEROperator(const RunTimeParameters::Data_Storage& data,
                   const TimeStepping::RungeKutta<Number>& explicit_RK,
-                  const TimeStepping::RungeKutta<Number>& implicit_RK); /*--- Constructor with some input related data ---*/
+                  const TimeStepping::RungeKutta<Number>& implicit_RK);
 
+    /**
+     * Setter of the time-step. This is useful both for (possible) multigrid purposes
+     * and also in case of modifications of the time step
+     * @param time_step time step
+     */
     template<typename T>
     inline DEAL_II_ALWAYS_INLINE
-    void set_dt(const T time_step); /*--- Setter of the time-step. This is useful both for multigrid purposes and also
-                                          in case of modifications of the time step. ---*/
+    void set_dt(const T time_step);
 
+    /**
+     * Getter of Mach number. This is useful for debugging information
+     * @return Ma Mach number
+     */
     inline DEAL_II_ALWAYS_INLINE
-    Number get_Mach() const; /*--- Getter of the Mach number. This is useful for debugging purpose. ---*/
+    Number get_Mach() const;
 
+    /**
+     * Getter of Froude number. This is useful for debugging information
+     * @return Fr Froude number
+     */
     inline DEAL_II_ALWAYS_INLINE
-    Number get_Froude() const; /*--- Getter of the Froude number. This is useful for debugging purpose. ---*/
+    Number get_Froude() const;
 
+    /**
+     * Setter of the current IMEX stage
+     * @param current IMEX stage
+     */
     inline DEAL_II_ALWAYS_INLINE
-    void set_n_stages(const unsigned n_stages_); /*--- Setter of the number of stages. This is useful for multigrid purpose. ---*/
+    void set_IMEX_stage(const unsigned stage);
 
+    /**
+     * Setter of the equation currently under solution
+     * @param stage current equation to be solved
+     */
     inline DEAL_II_ALWAYS_INLINE
-    void set_IMEX_stage(const unsigned stage); /*--- Setter of the IMEX stage. ---*/
+    void set_Euler_stage(const unsigned stage);
 
+    /**
+     * Getter of the equation currently under solution
+     * @return Euler_stage current equation to be solved
+     */
     inline DEAL_II_ALWAYS_INLINE
-    void set_Euler_stage(const unsigned stage); /*--- Setter of the equation currently under solution. ---*/
+    unsigned get_Euler_stage() const;
 
-    inline DEAL_II_ALWAYS_INLINE
-    unsigned get_Euler_stage() const; /*--- Getter of the equation currently under solution. ---*/
+    /**
+     * Setter of the current density. This is for the assembling of the bilinear forms
+     * where only one source vector can be passed in input
+     * @param src current density
+     */
+    void set_rho_for_fixed(const Vec& src);
 
-    void set_rho_for_fixed(const Vec& src); /*--- Setter of the current density. This is for the assembling of the bilinear forms
-                                                  where only one source vector can be passed in input. ---*/
+    /**
+     * Setter of the current pressure. This is for the assembling of the bilinear forms
+     * where only one source vector can be passed in input
+     * @param src current pressure
+     */
+    void set_pres_fixed(const Vec& src);
 
-    void set_pres_fixed(const Vec& src); /*--- Setter of the current pressure. This is for the assembling of the bilinear forms
-                                               where only one source vector can be passed in input. ---*/
+    // Auxiliary routines to compute the rhs
+    /**
+     * Auxiliary function to assemble the rhs of the continuity equation
+     * @return dst destination vector
+     * @param src vector with all fields to compute such contribution
+     */
+    void vmult_rhs_density(Vec& dst, const std::vector<Vec>& src) const;
 
-    void vmult_rhs_density(Vec& dst, const std::vector<Vec>& src) const; /*--- Auxiliary function to assemble the rhs
-                                                                               of the continuity equation. ---*/
+    /**
+     * Auxiliary function to assemble the contribution
+     * of the rhs for the momentum equation
+     * @return dst destination vector
+     * @param src vector with all fields to compute such contribution
+     */
+    void vmult_rhs_momentum(Vec& dst, const std::vector<Vec>& src) const;
 
-    void vmult_rhs_momentum(Vec& dst, const std::vector<Vec>& src) const;  /*--- Auxiliary function to assemble the rhs
-                                                                                 of the momentum equation. ---*/
+    /**
+     * Auxiliary function to assemble the contribution
+     * of the rhs for the energy equation
+     * @return dst destination vector
+     * @param src vector with all fields to compute such contribution
+     */
+    void vmult_rhs_energy(Vec& dst, const std::vector<Vec>& src) const;
 
-    void vmult_rhs_energy(Vec& dst, const std::vector<Vec>& src) const;  /*--- Auxiliary function to assemble the rhs
-                                                                               of the energy equation. ---*/
+    // Actions of linear operators
+    /**
+     * Action of matrix 'B'
+     * @return dst destination vector
+     * @param src vector to which apply the 'pressure' operator in momentum equation
+     */
+    void vmult_pressure(Vec& dst, const Vec& src) const;
 
-    void vmult_pressure(Vec& dst, const Vec& src) const; /*--- Action of matrix 'B'. ---*/
+    /**
+     * Action of matrix 'C'
+     * @return dst destination vector
+     * @param src vector to which apply the 'enthalpy' operator in energy equation
+     */
+    void vmult_enthalpy(Vec& dst, const Vec& src) const;
 
-    void vmult_enthalpy(Vec& dst, const Vec& src) const; /*--- Action of matrix 'C'. ---*/
-
-    virtual void compute_diagonal() override; /*--- Overriden function to compute the diagonal. ---*/
+    /**
+     * Overriden function to compute the diagonal for several (possible) preconditioners
+     */
+    virtual void compute_diagonal() override;
 
   protected:
-    /*--- Define typedef for sake of readability and convenience ----*/
+    // Define typedef for sake of readability and convenience
     using FEEvaluation_rho  = FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number>;
     using FEEvaluation_u    = FEEvaluation<dim, fe_degree_u, n_q_points_1d, dim, Number>;
     using FEEvaluation_pres = FEEvaluation<dim, fe_degree_p, n_q_points_1d, 1, Number>;
@@ -95,158 +175,328 @@ namespace Atmospheric_Flow {
     using FEFaceEvaluation_u_boundary    = FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_boundary, dim, Number>;
     using FEFaceEvaluation_pres_boundary = FEFaceEvaluation<dim, fe_degree_p, n_q_points_1d_boundary, 1, Number>;
 
-    Number Ma; /*--- Mach number. ---*/
-    Number Fr; /*--- Froude number. ---*/
+    Number Ma; /*!< Mach number */
+    Number Fr; /*!< Froude number */
 
-    Number dt; /*--- Time step. ---*/
+    Number dt; /*!< Time step */
 
-    /*--- The following variables follow the classical Butcher tableaux notation ---*/
+    // The following variables follow the classical Butcher tableaux notation
     std::vector<std::vector<Number>> a;
     std::vector<std::vector<Number>> a_tilde;
 
     std::vector<Number> b;
     std::vector<Number> b_tilde;
 
-    unsigned n_stages; /*--- Number of stages ---*/
+    unsigned n_stages; /*!< Number of stages */
 
-    unsigned IMEX_stage;          /*--- Flag for the IMEX stage ---*/
-    mutable unsigned Euler_stage; /*--- Flag for the equation actually considered ---*/
+    unsigned IMEX_stage;          /*!< Flag for the IMEX stage */
+    mutable unsigned Euler_stage; /*!< Flag for the equation actually considered */
 
-    virtual void apply_add(Vec& dst, const Vec& src) const override; /*--- Overriden function which actually assembles the
-                                                                           bilinear forms ---*/
+    /**
+     * Overriden function which actually assembles the bilinear forms
+     * @return dst destination vector
+     * @param src vector to which apply the operator
+     */
+    virtual void apply_add(Vec& dst, const Vec& src) const override;
 
   private:
     Vec rho_for_fixed,
-        pres_fixed; /*--- Auxiliary vectors for fixed point loop ---*/
+        pres_fixed; // Auxiliary vectors for fixed point loop
 
-    /*--- Auxiliary function for the numerical flux ---*/
+    // Auxiliary function for the numerical flux
     NumericalFlux::RusanovFluxEuler<dim, VectorizedArray<Number>> num_flux;
 
-    Number Ma2;          /*--- Squared Mach number ---*/
-    Number inv_Ma2;      /*--- Inverse of squared Mach number ---*/
-    Number inv_Fr2;      /*--- Inverse of squared Froude number ---*/
-    Number Ma2_ov_Fr2;   /*--- Mach squared over Froude squared ---*/
-    Number gamma_m1;     /*--- gamma - 1 (gamma ratio specific heats) ---*/
-    Number inv_gamma_m1; /*--- Inverse gamma - 1 ---*/
-    Number inv_Gamma;    /*--- gamma/(gamma - 1) ---*/
+    Number Ma2;          /*!< Squared Mach number */
+    Number inv_Ma2;      /*!< Inverse of squared Mach number */
+    Number inv_Fr2;      /*!< Inverse of squared Froude number */
+    Number Ma2_ov_Fr2;   /*!< Mach squared over Froude squared */
+    Number gamma_m1;     /*!< gamma - 1 (gamma ratio specific heats) */
+    Number inv_gamma_m1; /*!< Inverse gamma - 1 */
+    Number inv_Gamma;    /*!< gamma/(gamma - 1) */
 
-    Tensor<1, dim, VectorizedArray<Number>> e_k; /*--- Unit normal vector along vertical direction ---*/
-    Tensor<2, dim, VectorizedArray<Number>> identity; /*--- Identity tensor ---*/
-    Tensor<1, dim, VectorizedArray<Number>> tmp_diagonal_velocity; /*--- Auxiliary vector to compute the diagonal of the velocity matrix ----*/
+    Tensor<1, dim, VectorizedArray<Number>> e_k; /*!< Unit normal vector along vertical direction */
+    Tensor<2, dim, VectorizedArray<Number>> identity; /*!< Identity tensor */
+    Tensor<1, dim, VectorizedArray<Number>> tmp_diagonal_velocity; /*!< Auxiliary vector to compute the diagonal
+                                                                        of the velocity matrix */
 
-    /*--- Assembler functions for the rhs related to the continuity equation. Here, and also in the following,
-          we distinguish between the contribution for cells, faces and boundary. ---*/
+    // Assembler functions for the rhs related to the continuity equation. Here, and also in the following,
+    // we distinguish between the contribution for cells, faces and boundary
+    /**
+     * Assemble rhs cell contribution continuity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_rhs_cell_term_density(const MatrixFree<dim, Number>&       data,
                                         Vec&                                 dst,
                                         const std::vector<Vec>&              src,
                                         const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble rhs inner face contribution continuity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_rhs_face_term_density(const MatrixFree<dim, Number>&       data,
                                         Vec&                                 dst,
                                         const std::vector<Vec>&              src,
                                         const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble rhs boundary face contribution continuity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_rhs_boundary_term_density(const MatrixFree<dim, Number>&       data,
                                             Vec&                                 dst,
                                             const std::vector<Vec>&              src,
                                             const std::pair<unsigned, unsigned>& face_range) const {}
-                                               /*-- No flux, so no contribution from this function ---*/
+                                            // No flux, so no contribution from this function
 
-    /*--- Assembler function related to the bilinear form of the continuity equation. Only cell contribution is present,
-          since, basically, we end up with a mass matrix. ---*/
+    // Assembler function related to the bilinear form of the continuity equation. Only cell contribution is present,
+    // since, basically, we end up with a mass matrix
+    /**
+     * Assemble cell contribution continuity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_cell_term_density(const MatrixFree<dim, Number>&       data,
                                     Vec&                                 dst,
                                     const Vec&                           src,
                                     const std::pair<unsigned, unsigned>& cell_range) const;
 
-    /*--- Assembler functions for the rhs related to the momentum equation. ---*/
+    // Assembler functions for the rhs related to the momentum equation
+    /**
+     * Assemble rhs cell contribution momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_rhs_cell_term_momentum(const MatrixFree<dim, Number>&       data,
                                          Vec&                                 dst,
                                          const std::vector<Vec>&              src,
                                          const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble rhs inner face contribution momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_rhs_face_term_momentum(const MatrixFree<dim, Number>&       data,
                                          Vec&                                 dst,
                                          const std::vector<Vec>&              src,
                                          const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble rhs boundary face contribution momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_rhs_boundary_term_momentum(const MatrixFree<dim, Number>&       data,
                                              Vec&                                 dst,
                                              const std::vector<Vec>&              src,
                                              const std::pair<unsigned, unsigned>& face_range) const;
 
-    /*--- Assembler function for the 'A' matrix. ---*/
+    // Assembler function for the 'A' matrix
+    /**
+     * Assemble cell contribution 'velocity' operator momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_cell_term_velocity(const MatrixFree<dim, Number>&       data,
                                      Vec&                                 dst,
                                      const Vec&                           src,
                                      const std::pair<unsigned, unsigned>& cell_range) const;
 
-    /*--- Assembler functions for the 'B' matrix. ---*/
+    // Assembler functions for the 'B' matrix
+    /**
+     * Assemble matrix cell contribution 'pressure' operator momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_cell_term_pressure(const MatrixFree<dim, Number>&       data,
                                      Vec&                                 dst,
                                      const Vec&                           src,
                                      const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble matrix inner face contribution 'pressure' operator momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_face_term_pressure(const MatrixFree<dim, Number>&       data,
                                      Vec&                                 dst,
                                      const Vec&                           src,
                                      const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble matrix boundary face contribution 'pressure' operator momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_boundary_term_pressure(const MatrixFree<dim, Number>&       data,
                                          Vec&                                 dst,
                                          const Vec&                           src,
                                          const std::pair<unsigned, unsigned>& face_range) const;
 
-    /*--- Assembler functions for the rhs of the energy equation. ---*/
+    // Assembler functions for the rhs of the total energy equation
+    /**
+     * Assemble rhs cell contribution energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_rhs_cell_term_energy(const MatrixFree<dim, Number>&       data,
                                        Vec&                                 dst,
                                        const std::vector<Vec>&              src,
                                        const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble rhs inner face contribution energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_rhs_face_term_energy(const MatrixFree<dim, Number>&       data,
                                        Vec&                                 dst,
                                        const std::vector<Vec>&              src,
                                        const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble rhs boundary face contribution energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_rhs_boundary_term_energy(const MatrixFree<dim, Number>&       data,
                                            Vec&                                 dst,
                                            const std::vector<Vec>&              src,
                                            const std::pair<unsigned, unsigned>& face_range) const {}
-                                           /*-- No flux, so no contribution from this function ---*/
+                                           // No flux, so no contribution from this function
 
-    /*--- Assembler function for the 'D' matrix. ---*/
+    // Assembler function for the 'D' matrix
+    /**
+     * Assemble matrix cell contribution 'internal energy' operator energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_cell_term_internal_energy(const MatrixFree<dim, Number>&       data,
                                             Vec&                                 dst,
                                             const Vec&                           src,
                                             const std::pair<unsigned, unsigned>& cell_range) const;
 
-    /*--- Assembler function for the 'C' matrix. ---*/
+    // Assembler function for the 'C' matrix
+    /**
+     * Assemble matrix cell contribution 'enthalpy' operator energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_cell_term_enthalpy(const MatrixFree<dim, Number>&       data,
                                      Vec&                                 dst,
                                      const Vec&                           src,
                                      const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble matrix inner face contribution 'enthalpy' operator energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_face_term_enthalpy(const MatrixFree<dim, Number>&       data,
                                      Vec&                                 dst,
                                      const Vec&                           src,
                                      const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble matrix boundary face contribution 'enthalpy' operator energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_boundary_term_enthalpy(const MatrixFree<dim, Number>&       data,
                                          Vec&                                 dst,
                                          const Vec&                           src,
                                          const std::pair<unsigned, unsigned>& face_range) const {}
-                                         /*-- No flux, so no contribution from this function ---*/
+                                         // No flux, so no contribution from this function
 
-    /*--- Assembler functions for the diagonal part of the matrix for the continuity equation. For compatibilty conditions,
-          also face and boundary contributions have to be defined, even though they are empty. ---*/
+    // Assembler function for the diagonal part of the matrix for the continuity equation
+    /**
+     * Assemble diagonal mass matrix continuity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_diagonal_cell_term_density(const MatrixFree<dim, Number>&       data,
                                              Vec&                                 dst,
                                              const unsigned&                      src,
                                              const std::pair<unsigned, unsigned>& cell_range) const;
 
-    /*--- Assembler functions for the diagonal part of 'A' matrix. ---*/
+    // Assembler functions for the diagonal part of 'A' matrix
+    /**
+     * Assemble diagonal 'A' matrix momentum equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_diagonal_cell_term_velocity(const MatrixFree<dim, Number>&       data,
                                               Vec&                                 dst,
                                               const unsigned&                      src,
                                               const std::pair<unsigned, unsigned>& cell_range) const;
 
-    /*--- Assembler functions for the diagonal part of the ellptic operator associated to the Schur complement for the pressure. ---*/
+    // Assembler function for the diagonal part of the elliptic operator
+    // associated to the Schur complement for the pressure
+    /**
+     * Assemble diagonal matrix of the elliptic operator
+     * associated to the Schur complement for the pressure
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_diagonal_cell_term_pressure(const MatrixFree<dim, Number>&       data,
                                               Vec&                                 dst,
                                               const unsigned&                      src,
                                               const std::pair<unsigned, unsigned>& cell_range) const;
 
-    /*--- Assembler functions for the diagonal part of 'D' matrix. ---*/
+    // Assembler functions for the diagonal part of 'D' matrix
+    /**
+     * Assemble diagonal 'D' matrix energy equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_diagonal_cell_term_internal_energy(const MatrixFree<dim, Number>&       data,
                                                      Vec&                                 dst,
                                                      const unsigned&                      src,
@@ -276,8 +526,8 @@ namespace Atmospheric_Flow {
     inv_gamma_m1(static_cast<Number>(1.0)/gamma_m1),
     inv_Gamma(static_cast<Number>(EquationData::Cp_Cv)*inv_gamma_m1)
     {
-      /*--- We create auxiliary vectors and tensors that will never change
-            independently on the stage, so we declare it once and for all. ---*/
+      // We create auxiliary vectors and tensors that will never change
+      // independently on the stage, so we declare it once and for all
       for(unsigned d = 0; d < dim - 1; ++d) {
         e_k[d]                   = make_vectorized_array<Number>(0.0);
         identity[d][d]           = make_vectorized_array<Number>(1.0);
@@ -302,8 +552,8 @@ namespace Atmospheric_Flow {
                 const TimeStepping::RungeKutta<Number>& explicit_RK,
                 const TimeStepping::RungeKutta<Number>& implicit_RK):
     MatrixFreeOperators::Base<dim, Vec>(),
-    Ma(data.Mach),
-    Fr(data.Froude),
+    Ma(static_cast<Number>(data.Mach)),
+    Fr(static_cast<Number>(data.Froude)),
     dt(data.dt),
     n_stages(explicit_RK.get_n_stages()),
     IMEX_stage(1), Euler_stage(1), num_flux(Ma),
@@ -313,8 +563,8 @@ namespace Atmospheric_Flow {
     inv_gamma_m1(static_cast<Number>(1.0)/gamma_m1),
     inv_Gamma(static_cast<Number>(EquationData::Cp_Cv)*inv_gamma_m1)
     {
-      /*--- We create auxiliary vectors and tensors that will never change
-            independently on the stage, so we declare it once and for all. ---*/
+      // We create auxiliary vectors and tensors that will never change
+      // independently on the stage, so we declare it once and for all
       for(unsigned d = 0; d < dim - 1; ++d) {
         e_k[d]                   = make_vectorized_array<Number>(0.0);
         identity[d][d]           = make_vectorized_array<Number>(1.0);
@@ -324,7 +574,7 @@ namespace Atmospheric_Flow {
       e_k[dim - 1]                   = make_vectorized_array<Number>(1.0);
       tmp_diagonal_velocity[dim - 1] = make_vectorized_array<Number>(1.0);
 
-      /*--- Initialize the RK coefficients ---*/
+      // Initialize the RK coefficients
       explicit_RK.get_coefficients(a, b);
       implicit_RK.get_coefficients(a_tilde, b_tilde);
 
@@ -509,20 +759,21 @@ namespace Atmospheric_Flow {
                                  Vec&                                 dst,
                                  const std::vector<Vec>&              src,
                                  const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- Intermediate stages ---*/
+    // Intermediate stages
     if(IMEX_stage <= n_stages) {
-      /*--- We first start by declaring the suitable instances to read the old density and
-      the old velocity. 'phi' will be used only to 'submit' the result.
-      The second argument specifies which dof handler has to be used. ---*/
+      // We first start by declaring the suitable instances to read the old density and
+      // the old velocity. 'phi' will be used only to 'submit' the result.
+      // The second argument specifies which dof handler has to be used
+      // (hidden in EquationData for generality)
       FEEvaluation_rho              phi(data, EquationData::RHO_INDEX_DOF);
       std::vector<FEEvaluation_rho> phi_rho(IMEX_stage - 1, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
       std::vector<FEEvaluation_u>   phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
 
-      /*--- Loop over all cells ---*/
+      // Loop over all cells
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
-        /*--- Now we need to assign the current cell to each FEEvaluation object and then to specify which src vector
-        it has to read (the proper order is clearly delegated to the user, which has to pay attention in the function
-        call to be coherent). All these considerations are valid also for the other assembler functions. ---*/
+        // Now we need to assign the current cell to each FEEvaluation object and then to specify which src vector
+        // it has to read (the proper order is clearly delegated to the user, which has to pay attention in the function
+        // call to be coherent). All these considerations are valid also for the other assembler functions
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
           phi_rho[s - 1].reinit(cell);
           phi_rho[s - 1].gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
@@ -532,12 +783,12 @@ namespace Atmospheric_Flow {
 
         phi.reinit(cell);
 
-        /*--- Loop over quadrature points of each cell ---*/
+        // Loop over quadrature points of each cell
         for(const unsigned q : phi.quadrature_point_indices()) {
-          /*--- Compute the density at the previous step (always needed) ---*/
+          // Compute the density at the previous step (always needed)
           const auto& rho_old = phi_rho.front().get_value(q);
 
-          /*--- Compute the quantities at the previous stages for the flux ---*/
+          // Compute the quantities at the previous stages for the flux
           Tensor<1, dim, VectorizedArray<Number>> flux;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
             const auto& rho_s = phi_rho[s - 1].get_value(q);
@@ -547,24 +798,24 @@ namespace Atmospheric_Flow {
           }
 
           phi.submit_value(rho_old, q);
-          /*--- submit_value is used for quantities to be tested against test functions ---*/
+          // submit_value is used for quantities to be tested against test functions
           phi.submit_gradient(flux, q);
-          /*--- submit_gradient is used for quantities to be tested against gradient of test functions ---*/
+          // submit_gradient is used for quantities to be tested against gradient of test functions
         }
 
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
-        /*--- 'integrate_scatter' is the responsible of distributing into dst.
-              The flag parameter specifies if we are testing against the test function and/or its gradient ---*/
+        // 'integrate_scatter' is the responsible of distributing into dst.
+        // The flag parameter specifies if we are testing against the te st function and/or its gradient
       }
     }
-    /*--- Final update ---*/
+    // Final update
     else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEEvaluation_rho              phi(data, EquationData::RHO_INDEX_DOF);
       std::vector<FEEvaluation_rho> phi_rho(IMEX_stage - 1, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
       std::vector<FEEvaluation_u>   phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
 
-      /*--- Loop over all cells ---*/
+      // Loop over all cells
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
           phi_rho[s - 1].reinit(cell);
@@ -575,12 +826,12 @@ namespace Atmospheric_Flow {
 
         phi.reinit(cell);
 
-        /*--- Loop over quadrature points of each cell ---*/
+        // Loop over quadrature points of each cell
         for(const unsigned q : phi.quadrature_point_indices()) {
-          /*--- Compute the density at the previous step (always needed) ---*/
+          // Compute the density at the previous step (always needed)
           const auto& rho_old = phi_rho.front().get_value(q);
 
-          /*--- Compute the quantities at the previous stages for the flux ---*/
+          // Compute the quantities at the previous stages for the flux
           Tensor<1, dim, VectorizedArray<Number>> flux;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
             const auto& rho_s = phi_rho[s - 1].get_value(q);
@@ -612,10 +863,10 @@ namespace Atmospheric_Flow {
                                  Vec&                                 dst,
                                  const std::vector<Vec>&              src,
                                  const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- Intermediate stages ---*/
+    // Intermediate stages
     if(IMEX_stage <= n_stages) {
-      /*--- We first start by declaring the suitable instances to read the available quantities.
-            'true' means that we are reading the information from 'inside', whereas 'false' from 'outside' ---*/
+      // We first start by declaring the suitable instances to read the available quantities.
+      // 'true' means that we are reading the information from 'inside', whereas 'false' from 'outside'
       FEFaceEvaluation_rho phi_m(data, true, EquationData::RHO_INDEX_DOF),
                            phi_p(data, false, EquationData::RHO_INDEX_DOF),
                            phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
@@ -623,7 +874,7 @@ namespace Atmospheric_Flow {
       FEFaceEvaluation_u   phi_u_m(data, true, EquationData::U_INDEX_DOF),
                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
 
-      /*--- Loop over all internal faces ---*/
+      // Loop over all internal faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_rho_m.reinit(face);
         phi_rho_p.reinit(face);
@@ -633,15 +884,15 @@ namespace Atmospheric_Flow {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        /*--- Loop over quadrature points of each internal face ---*/
+        // Loop over quadrature points of each internal face
         for(const unsigned q : phi_m.quadrature_point_indices()) {
-          const auto& n_minus = phi_m.normal_vector(q); /*--- Notice that the unit normal vector is the same from
-                                                              'both sides'. ---*/
+          const auto& n_minus = phi_m.normal_vector(q); // Notice that the unit normal vector is the same from
+                                                        // 'both sides'
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_rho_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
             phi_rho_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
             phi_u_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
@@ -652,7 +903,7 @@ namespace Atmospheric_Flow {
             const auto& u_s_m   = phi_u_m.get_value(q);
             const auto& u_s_p   = phi_u_p.get_value(q);
 
-            /*--- Compute the numerical flux ---*/
+            // Compute the numerical flux
             flux_num += a[IMEX_stage - 1][s - 1]*dt*
                         num_flux.numerical_flux_continuity(rho_s_m, u_s_m,
                                                            rho_s_p, u_s_p,
@@ -667,9 +918,9 @@ namespace Atmospheric_Flow {
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    /*--- Final update ---*/
+    // Final update
     else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEFaceEvaluation_rho phi_m(data, true, EquationData::RHO_INDEX_DOF),
                            phi_p(data, false, EquationData::RHO_INDEX_DOF),
                            phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
@@ -677,7 +928,7 @@ namespace Atmospheric_Flow {
       FEFaceEvaluation_u   phi_u_m(data, true, EquationData::U_INDEX_DOF),
                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
 
-      /*--- Loop over all internal faces ---*/
+      // Loop over all internal faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_rho_m.reinit(face);
         phi_rho_p.reinit(face);
@@ -687,14 +938,14 @@ namespace Atmospheric_Flow {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_rho_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
             phi_rho_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values);
             phi_u_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values);
@@ -705,7 +956,7 @@ namespace Atmospheric_Flow {
             const auto& u_s_m   = phi_u_m.get_value(q);
             const auto& u_s_p   = phi_u_p.get_value(q);
 
-            /*--- Compute the numerical_flux ---*/
+            // Compute the numerical_flux
             flux_num += b[s - 1]*dt*
                         num_flux.numerical_flux_continuity(rho_s_m, u_s_m,
                                                            rho_s_p, u_s_p,
@@ -761,15 +1012,15 @@ namespace Atmospheric_Flow {
                              const std::pair<unsigned, unsigned>& cell_range) const {
     FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi(data, EquationData::RHO_INDEX_DOF);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi.reinit(cell);
       phi.gather_evaluate(src, EvaluationFlags::values);
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
-        phi.submit_value(phi.get_value(q), q); /*--- Here we need to assemble just a mass matrix,
-                                                     so we simply test against the test fuction, the 'src' vector ---*/
+        phi.submit_value(phi.get_value(q), q); // Here we need to assemble just a mass matrix,
+                                               // so we simply test against the test fuction, the 'src' vector
       }
 
       phi.integrate_scatter(EvaluationFlags::values, dst);
@@ -795,15 +1046,15 @@ namespace Atmospheric_Flow {
                                   Vec&                                 dst,
                                   const std::vector<Vec>&              src,
                                   const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- Intermediate stages ---*/
+    // Intermediate stages
     if(IMEX_stage <= n_stages) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEEvaluation_u                 phi(data, EquationData::U_INDEX_DOF);
       std::vector<FEEvaluation_u>    phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
       std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
       std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
-      /*--- Loop over all cells ---*/
+      // Loop over all cells
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
           phi_rho[s - 1].reinit(cell);
@@ -818,10 +1069,10 @@ namespace Atmospheric_Flow {
 
         phi.reinit(cell);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
-          /*--- Compute the density and the velocity at the previous step (always necessary).
-                Notice that this is ok because of ESDIRK method. ---*/
+          // Compute the density and the velocity at the previous step (always necessary).
+          // Notice that this is ok because of ESDIRK method
           const auto& rho_old = phi_rho.front().get_value(q);
           const auto& u_old   = phi_u.front().get_value(q);
 
@@ -841,7 +1092,7 @@ namespace Atmospheric_Flow {
             gravity_term += a_tilde[IMEX_stage - 1][s - 1]*dt*(inv_Fr2*rho_s*e_k);
           }
 
-          /*--- Add last contribution of the gravity term (implicit treatment) ---*/
+          // Add last contribution of the gravity term (implicit treatment)
           const auto& rho_s = phi_rho.back().get_value(q);
           gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(inv_Fr2*rho_s*e_k);
 
@@ -852,15 +1103,15 @@ namespace Atmospheric_Flow {
         phi.integrate_scatter(EvaluationFlags::values | EvaluationFlags::gradients, dst);
       }
     }
-    /*--- Final update ---*/
+    // Final update
     else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEEvaluation_u                 phi(data, EquationData::U_INDEX_DOF);
       std::vector<FEEvaluation_u>    phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
       std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
       std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage - 1, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
-      /*--- Loop over all cells ---*/
+      // Loop over all cells
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
           phi_rho[s - 1].reinit(cell);
@@ -873,14 +1124,14 @@ namespace Atmospheric_Flow {
 
         phi.reinit(cell);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
-          /*--- Compute the density and the velocity at the previous step (always necessary).
-                Notice that this is ok because of ESDIRK method. ---*/
+          // Compute the density and the velocity at the previous step (always necessary).
+          // Notice that this is ok because of ESDIRK method
           const auto& rho_old = phi_rho.front().get_value(q);
           const auto& u_old   = phi_u.front().get_value(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           Tensor<2, dim, VectorizedArray<Number>> flux;
           Tensor<1, dim, VectorizedArray<Number>> gravity_term;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
@@ -918,9 +1169,9 @@ namespace Atmospheric_Flow {
                                   Vec&                                 dst,
                                   const std::vector<Vec>&              src,
                                   const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- Intermediate stages ---*/
+    // Intermediate stages
     if(IMEX_stage <= n_stages) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEFaceEvaluation_u    phi_m(data, true, EquationData::U_INDEX_DOF),
                             phi_p(data, false, EquationData::U_INDEX_DOF),
                             phi_u_m(data, true, EquationData::U_INDEX_DOF),
@@ -930,7 +1181,7 @@ namespace Atmospheric_Flow {
       FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
                             phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
-      /*--- Loop over all internal faces ---*/
+      // Loop over all internal faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_rho_m.reinit(face);
         phi_rho_p.reinit(face);
@@ -942,14 +1193,14 @@ namespace Atmospheric_Flow {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
@@ -964,7 +1215,7 @@ namespace Atmospheric_Flow {
             const auto& pres_s_m = phi_pres_m.get_value(q);
             const auto& pres_s_p = phi_pres_p.get_value(q);
 
-            /*--- Compute the numerical flux ---*/
+            // Compute the numerical flux
             flux_num += a[IMEX_stage - 1][s - 1]*dt*
                         num_flux.numerical_flux_momentum_explicit(rho_s_m, u_s_m,
                                                                   rho_s_p, u_s_p,
@@ -983,9 +1234,9 @@ namespace Atmospheric_Flow {
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    /*--- Final update ---*/
+    // Final update
     else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEFaceEvaluation_u    phi_m(data, true, EquationData::U_INDEX_DOF),
                             phi_p(data, false, EquationData::U_INDEX_DOF),
                             phi_u_m(data, true, EquationData::U_INDEX_DOF),
@@ -995,7 +1246,7 @@ namespace Atmospheric_Flow {
       FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
                             phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
-      /*--- Loop over all internal faces ---*/
+      // Loop over all internal faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_rho_m.reinit(face);
         phi_rho_p.reinit(face);
@@ -1007,14 +1258,14 @@ namespace Atmospheric_Flow {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
@@ -1029,7 +1280,7 @@ namespace Atmospheric_Flow {
             const auto& pres_s_m = phi_pres_m.get_value(q);
             const auto& pres_s_p = phi_pres_p.get_value(q);
 
-            /*--- Compute the numerical flux ---*/
+            // Compute the numerical flux
             flux_num += b[s - 1]*dt*
                         num_flux.numerical_flux_momentum_explicit(rho_s_m, u_s_m,
                                                                   rho_s_p, u_s_p,
@@ -1064,32 +1315,32 @@ namespace Atmospheric_Flow {
                                       Vec&                                 dst,
                                       const std::vector<Vec>&              src,
                                       const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- Intermediate stages ---*/
+    // Intermediate stages
     if(IMEX_stage <= n_stages) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEFaceEvaluation_u_boundary    phi(data, true, EquationData::U_INDEX_DOF, 1);
       FEFaceEvaluation_pres_boundary phi_pres(data, true, EquationData::P_INDEX_DOF, 1);
 
-      /*--- Loop over all boundary faces ---*/
+      // Loop over all boundary faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_pres.reinit(face);
 
         phi.reinit(face);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& n_minus = phi.normal_vector(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_pres.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
             const auto& pres_s   = phi_pres.get_value(q);
             const auto& pres_s_D = pres_s;
 
-            /*--- Compute the numerical flux ---*/
+            // Compute the numerical flux
             flux_num += a_tilde[IMEX_stage - 1][s - 1]*dt*
                         num_flux.numerical_flux_momentum_implicit(pres_s,
                                                                   pres_s_D,
@@ -1102,32 +1353,32 @@ namespace Atmospheric_Flow {
         phi.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    /*--- Final update ---*/
+    // Final update
     else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEFaceEvaluation_u_boundary    phi(data, true, EquationData::U_INDEX_DOF, 1);
       FEFaceEvaluation_pres_boundary phi_pres(data, true, EquationData::P_INDEX_DOF, 1);
 
-      /*--- Loop over all boundary faces ---*/
+      // Loop over all boundary faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_pres.reinit(face);
 
         phi.reinit(face);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& n_minus = phi.normal_vector(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           Tensor<1, dim, VectorizedArray<Number>> flux_num;
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_pres.gather_evaluate(src[3*(s-1) + 2], EvaluationFlags::values);
 
             const auto& pres_s   = phi_pres.get_value(q);
             const auto& pres_s_D = pres_s;
 
-            /*--- Compute the numerical flux ---*/
+            // Compute the numerical flux
             flux_num += b_tilde[s - 1]*dt*
                         num_flux.numerical_flux_momentum_implicit(pres_s,
                                                                   pres_s_D,
@@ -1179,13 +1430,13 @@ namespace Atmospheric_Flow {
                               Vec&                                 dst,
                               const Vec&                           src,
                               const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We first start by declaring the suitable instances to read also available quantities.
-          Since here we have just one 'src' vector, but we also need to deal with the current density,
-          we employ the auxiliary vector 'rho_for_fixed' where we setted this information ---*/
+    // We first start by declaring the suitable instances to read also available quantities.
+    // Since here we have just one 'src' vector, but we also need to deal with the current density,
+    // we employ the auxiliary vector 'rho_for_fixed' where we setted this information
     FEEvaluation<dim, fe_degree_u, n_q_points_1d, dim, Number> phi(data, EquationData::U_INDEX_DOF);
     FEEvaluation<dim, fe_degree_rho, n_q_points_1d, 1, Number> phi_rho_for_fixed(data, EquationData::RHO_INDEX_DOF);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_rho_for_fixed.reinit(cell);
       phi_rho_for_fixed.gather_evaluate(rho_for_fixed, EvaluationFlags::values);
@@ -1193,7 +1444,7 @@ namespace Atmospheric_Flow {
       phi.reinit(cell);
       phi.gather_evaluate(src, EvaluationFlags::values);
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
         phi.submit_value(phi_rho_for_fixed.get_value(q)*phi.get_value(q), q);
       }
@@ -1216,13 +1467,13 @@ namespace Atmospheric_Flow {
                               Vec&                                 dst,
                               const Vec&                           src,
                               const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We first start by declaring the suitable instances to read quantities. This operator we are going to implement
-          represents a rectangular matrix (we start from the pressure FE space and we end up with the velocity FE space).
-          This is the reason of the distinction between 'phi' and 'phi_src'. ---*/
+    // We first start by declaring the suitable instances to read quantities. This operator we are going to implement
+    // represents a rectangular matrix (we start from the pressure FE space and we end up with the velocity FE space).
+    // This is the reason of the distinction between 'phi' and 'phi_src'
     FEEvaluation_u    phi(data, EquationData::U_INDEX_DOF);
     FEEvaluation_pres phi_src(data, EquationData::P_INDEX_DOF);
 
-    /*--- Loop over all cells. ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_src.reinit(cell);
       phi_src.gather_evaluate(src, EvaluationFlags::values);
@@ -1230,7 +1481,7 @@ namespace Atmospheric_Flow {
       phi.reinit(cell);
 
       for(const unsigned q : phi.quadrature_point_indices()) {
-        /*--- Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'. ---*/
+        // Here we are testing against the divergence of the test function and, therefore, we employ 'submit_divergence'
         phi.submit_divergence(-a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*(inv_Ma2*phi_src.get_value(q)), q);
       }
 
@@ -1257,7 +1508,7 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation_pres phi_src_m(data, true, EquationData::P_INDEX_DOF),
                           phi_src_p(data, false, EquationData::P_INDEX_DOF);
 
-    /*--- Loop over all internal faces ---*/
+    // Loop over all internal faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_src_m.reinit(face);
       phi_src_m.gather_evaluate(src, EvaluationFlags::values);
@@ -1267,7 +1518,7 @@ namespace Atmospheric_Flow {
       phi_m.reinit(face);
       phi_p.reinit(face);
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus  = phi_m.normal_vector(q);
 
@@ -1304,14 +1555,14 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation_u_boundary    phi(data, true, EquationData::U_INDEX_DOF, 1);
     FEFaceEvaluation_pres_boundary phi_src(data, true, EquationData::P_INDEX_DOF, 1);
 
-    /*--- Loop over all boundary faces ---*/
+    // Loop over all boundary faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_src.reinit(face);
       phi_src.gather_evaluate(src, EvaluationFlags::values);
 
       phi.reinit(face);
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& n_minus      = phi.normal_vector(q);
 
@@ -1348,15 +1599,15 @@ namespace Atmospheric_Flow {
                                 Vec&                                 dst,
                                 const std::vector<Vec>&              src,
                                 const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- Intermediate stages ---*/
+    // Intermediate stages
     if(IMEX_stage <= n_stages) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEEvaluation_pres              phi(data, EquationData::P_INDEX_DOF);
       std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
       std::vector<FEEvaluation_u>    phi_u(IMEX_stage, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
       std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
-      /*--- Loop over all cells ---*/
+      // Loop over all cells
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
           phi_rho[s - 1].reinit(cell);
@@ -1373,17 +1624,17 @@ namespace Atmospheric_Flow {
 
         phi.reinit(cell);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
-          /*--- Compute the quantities at the previous step (always necessary).
-                Notice that this is ok because of ESDIRK method. ---*/
+          // Compute the quantities at the previous step (always necessary).
+          // Notice that this is ok because of ESDIRK method
           const auto& rho_old  = phi_rho.front().get_value(q);
           const auto& u_old    = phi_u.front().get_value(q);
           const auto& pres_old = phi_pres.front().get_value(q);
           const auto& rhoE_old = inv_gamma_m1*pres_old
                                + rho_old*(static_cast<Number>(0.5)*Ma2*scalar_product(u_old, u_old));
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           Tensor<1, dim, VectorizedArray<Number>> flux;
           VectorizedArray<Number> gravity_term = make_vectorized_array<Number>(0.0);
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
@@ -1400,8 +1651,8 @@ namespace Atmospheric_Flow {
                             (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
           }
 
-          /*--- We assign to the rhs the contribution due to kinetic energy in the fixed point loop.
-                Add last contribution of the gravity term (implicit treatment) ---*/
+          // We assign to the rhs the contribution due to kinetic energy in the fixed point loop.
+          // Add last contribution of the gravity term (implicit treatment)
           const auto& rho_for_fixed_s = phi_rho.back().get_value(q);
           const auto& u_fixed_s       = phi_u.back().get_value(q);
           gravity_term += a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
@@ -1417,13 +1668,13 @@ namespace Atmospheric_Flow {
       }
     }
     else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEEvaluation_pres              phi(data, EquationData::P_INDEX_DOF);
       std::vector<FEEvaluation_pres> phi_pres(IMEX_stage - 1, FEEvaluation_pres(data, EquationData::P_INDEX_DOF));
       std::vector<FEEvaluation_u>    phi_u(IMEX_stage, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
       std::vector<FEEvaluation_rho>  phi_rho(IMEX_stage, FEEvaluation_rho(data, EquationData::RHO_INDEX_DOF));
 
-      /*--- Loop over all cells ---*/
+      // Loop over all cells
       for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
           phi_rho[s - 1].reinit(cell);
@@ -1440,17 +1691,17 @@ namespace Atmospheric_Flow {
 
         phi.reinit(cell);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
-          /*--- Compute the quantities at the previous step (always necessary).
-                Notice that this is ok because of ESDIRK method. ---*/
+          // Compute the quantities at the previous step (always necessary).
+          // Notice that this is ok because of ESDIRK method
           const auto& rho_old  = phi_rho.front().get_value(q);
           const auto& u_old    = phi_u.front().get_value(q);
           const auto& pres_old = phi_pres.front().get_value(q);
           const auto& rhoE_old = inv_gamma_m1*pres_old
                                + rho_old*(static_cast<Number>(0.5)*Ma2*scalar_product(u_old, u_old));
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           Tensor<1, dim, VectorizedArray<Number>> flux;
           VectorizedArray<Number> gravity_term = make_vectorized_array<Number>(0.0);
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
@@ -1467,7 +1718,7 @@ namespace Atmospheric_Flow {
                             (Ma2_ov_Fr2*rho_s*u_s[dim - 1]);
           }
 
-          /*--- We assign to the rhs the contribution due to the (already updated) kinetic energy ---*/
+          // We assign to the rhs the contribution due to the (already updated) kinetic energy
           const auto& rho_curr = phi_rho.back().get_value(q);
           const auto& u_curr   = phi_u.back().get_value(q);
 
@@ -1496,9 +1747,9 @@ namespace Atmospheric_Flow {
                                 Vec&                                 dst,
                                 const std::vector<Vec>&              src,
                                 const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- Intermediate stages ---*/
+    // Intermediate stages
     if(IMEX_stage <= n_stages) {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEFaceEvaluation_pres phi_m(data, true, EquationData::P_INDEX_DOF),
                             phi_p(data, false, EquationData::P_INDEX_DOF),
                             phi_pres_m(data, true, EquationData::P_INDEX_DOF),
@@ -1508,7 +1759,7 @@ namespace Atmospheric_Flow {
       FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
                             phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
-      /*--- Loop over all internal faces ---*/
+      // Loop over all internal faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_rho_m.reinit(face);
         phi_rho_p.reinit(face);
@@ -1520,14 +1771,14 @@ namespace Atmospheric_Flow {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
@@ -1542,7 +1793,7 @@ namespace Atmospheric_Flow {
             const auto& pres_s_m = phi_pres_m.get_value(q);
             const auto& pres_s_p = phi_pres_p.get_value(q);
 
-            /*--- Compute the numerical flux ---*/
+            // Compute the numerical flux
             flux_num += a[IMEX_stage - 1][s - 1]*dt*
                         num_flux.numerical_flux_energy_explicit(rho_s_m, u_s_m,
                                                                 rho_s_p, u_s_p,
@@ -1553,7 +1804,7 @@ namespace Atmospheric_Flow {
                                                                 n_minus);
           }
 
-          /*--- Compute the contribution at the current stage ---*/
+          // Compute the contribution at the current stage
           phi_u_m.gather_evaluate(src[3*(IMEX_stage - 1) + 1], EvaluationFlags::values);
           phi_u_p.gather_evaluate(src[3*(IMEX_stage - 1) + 1], EvaluationFlags::values);
           phi_pres_m.gather_evaluate(src[3*(IMEX_stage - 1) + 2], EvaluationFlags::values);
@@ -1564,7 +1815,7 @@ namespace Atmospheric_Flow {
           const auto& pres_fixed_s_m = phi_pres_m.get_value(q);
           const auto& pres_fixed_s_p = phi_pres_p.get_value(q);
 
-          /*--- Compute the stabilization term ---*/
+          // Compute the stabilization term
           const auto& lambda_fixed_s     = num_flux.compute_lambda(u_fixed_s_m,
                                                                    u_fixed_s_p,
                                                                    n_minus);
@@ -1581,9 +1832,9 @@ namespace Atmospheric_Flow {
         phi_p.integrate_scatter(EvaluationFlags::values, dst);
       }
     }
-    /*--- Final update ---*/
+    // Final update
     else {
-      /*--- We first start by declaring the suitable instances to read the available quantities. ---*/
+      // We first start by declaring the suitable instances to read the available quantities
       FEFaceEvaluation_pres phi_m(data, true, EquationData::P_INDEX_DOF),
                             phi_p(data, false, EquationData::P_INDEX_DOF),
                             phi_pres_m(data, true, EquationData::P_INDEX_DOF),
@@ -1593,7 +1844,7 @@ namespace Atmospheric_Flow {
       FEFaceEvaluation_rho  phi_rho_m(data, true, EquationData::RHO_INDEX_DOF),
                             phi_rho_p(data, false, EquationData::RHO_INDEX_DOF);
 
-      /*--- Loop over all internal faces ---*/
+      // Loop over all internal faces
       for(unsigned face = face_range.first; face < face_range.second; ++face) {
         phi_rho_m.reinit(face);
         phi_rho_p.reinit(face);
@@ -1605,14 +1856,14 @@ namespace Atmospheric_Flow {
         phi_m.reinit(face);
         phi_p.reinit(face);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.normal_vector(q);
 
-          /*--- Compute the quantities at the previous stages ---*/
+          // Compute the quantities at the previous stages
           VectorizedArray<Number> flux_num = make_vectorized_array<Number>(0.0);
           for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-            /*--- Retrieve the useful fields ---*/
+            // Retrieve the useful fields
             phi_rho_m.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_rho_p.gather_evaluate(src[3*(s-1)], EvaluationFlags::values);
             phi_u_m.gather_evaluate(src[3*(s-1) + 1], EvaluationFlags::values);
@@ -1627,7 +1878,7 @@ namespace Atmospheric_Flow {
             const auto& pres_s_m = phi_pres_m.get_value(q);
             const auto& pres_s_p = phi_pres_p.get_value(q);
 
-            /*--- Compute the numerical flux ---*/
+            // Compute the numerical flux
             flux_num += b[s - 1]*dt*
                         num_flux.numerical_flux_energy_explicit(rho_s_m, u_s_m,
                                                                 rho_s_p, u_s_p,
@@ -1692,8 +1943,8 @@ namespace Atmospheric_Flow {
       phi.gather_evaluate(src, EvaluationFlags::values);
 
       for(const unsigned q : phi.quadrature_point_indices()) {
-        /*--- For an ideal gas the part associated to the internal energy for a pressure based
-              is just a modification of the mass matrix ---*/
+        // For an ideal gas the part associated to the internal energy for a pressure based
+        // is just a modification of the mass matrix
         phi.submit_value(inv_gamma_m1*phi.get_value(q), q);
       }
 
@@ -1715,14 +1966,14 @@ namespace Atmospheric_Flow {
                               Vec&                                         dst,
                               const Vec&                                   src,
                               const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We first start by declaring the suitable instances to read also available quantities.
-          Since here we have just one 'src' vector, but we also need to deal with the current pressure
-          in the fixed point loop, we employ the auxiliary vector 'pres_fixed' where we setted this information ---*/
+    // We first start by declaring the suitable instances to read also available quantities.
+    // Since here we have just one 'src' vector, but we also need to deal with the current pressure
+    // in the fixed point loop, we employ the auxiliary vector 'pres_fixed' where we setted this information
     FEEvaluation_pres phi(data, EquationData::P_INDEX_DOF),
                       phi_pres_fixed(data, EquationData::P_INDEX_DOF);
     FEEvaluation_u    phi_src(data, EquationData::U_INDEX_DOF);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_pres_fixed.reinit(cell);
       phi_pres_fixed.gather_evaluate(pres_fixed, EvaluationFlags::values);
@@ -1732,7 +1983,7 @@ namespace Atmospheric_Flow {
 
       phi.reinit(cell);
 
-      /*--- loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& pres_fixed = phi_pres_fixed.get_value(q);
 
@@ -1765,7 +2016,7 @@ namespace Atmospheric_Flow {
     FEFaceEvaluation_u    phi_src_m(data, true, EquationData::U_INDEX_DOF),
                           phi_src_p(data, false, EquationData::U_INDEX_DOF);
 
-    /*--- Loop over all faces ---*/
+    // Loop over all faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_pres_fixed_m.reinit(face);
       phi_pres_fixed_m.gather_evaluate(pres_fixed, EvaluationFlags::values);
@@ -1780,7 +2031,7 @@ namespace Atmospheric_Flow {
       phi_m.reinit(face);
       phi_p.reinit(face);
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus           = phi_m.normal_vector(q);
 
@@ -1831,7 +2082,7 @@ namespace Atmospheric_Flow {
                             this, dst, src, false);
 
       if(IMEX_stage <= n_stages) {
-        /*--- Implementation of the Schur complement operations ---*/
+        // Implementation of the Schur complement operations
         Vec tmp_1;
         this->data->initialize_dof_vector(tmp_1, EquationData::U_INDEX_DOF);
         this->vmult_pressure(tmp_1, src);
@@ -1939,21 +2190,21 @@ namespace Atmospheric_Flow {
 
     AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi.reinit(cell);
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(VectorizedArray<Number>(), j);
         }
         phi.submit_dof_value(make_vectorized_array<Number>(1.0), i);
-        /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-              a vector which is 1 for the node of interest and 0 elsewhere.---*/
+        // We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
+        // a vector which is 1 for the node of interest and 0 elsewhere
         phi.evaluate(EvaluationFlags::values);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
           phi.submit_value(phi.get_value(q), q);
         }
@@ -1987,20 +2238,20 @@ namespace Atmospheric_Flow {
     FEEvaluation_u   phi(data, EquationData::U_INDEX_DOF);
     FEEvaluation_rho phi_rho_for_fixed(data, EquationData::RHO_INDEX_DOF);
 
-    /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-          a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp_diagonal_velocity' does.
-          Moreover, since here we have just one 'src' vector, but we also need to deal with the current density,
-          we employ the auxiliary vector 'rho_for_fixed' where we setted this information ---*/
+    // We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
+    // a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp_diagonal_velocity' does.
+    // Moreover, since here we have just one 'src' vector, but we also need to deal with the current density,
+    // we employ the auxiliary vector 'rho_for_fixed' where we setted this information
     AlignedVector<Tensor<1, dim, VectorizedArray<Number>>> diagonal(phi.dofs_per_component);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_rho_for_fixed.reinit(cell);
       phi_rho_for_fixed.gather_evaluate(rho_for_fixed, EvaluationFlags::values);
 
       phi.reinit(cell);
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
@@ -2008,7 +2259,7 @@ namespace Atmospheric_Flow {
         phi.submit_dof_value(tmp_diagonal_velocity, i);
         phi.evaluate(EvaluationFlags::values);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
           phi.submit_value(phi_rho_for_fixed.get_value(q)*phi.get_value(q), q);
         }
@@ -2045,7 +2296,7 @@ namespace Atmospheric_Flow {
 
     AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_pres_fixed.reinit(cell);
       phi_pres_fixed.gather_evaluate(pres_fixed, EvaluationFlags::values);
@@ -2055,17 +2306,17 @@ namespace Atmospheric_Flow {
 
       phi.reinit(cell);
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(VectorizedArray<Number>(), j);
         }
         phi.submit_dof_value(make_vectorized_array<Number>(1.0), i);
-        /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-              a vector which is 1 for the node of interest and 0 elsewhere.---*/
+        // We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
+        // a vector which is 1 for the node of interest and 0 elsewhere
         phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& pres_fixed    = phi_pres_fixed.get_value(q);
 
@@ -2109,14 +2360,14 @@ namespace Atmospheric_Flow {
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi.reinit(cell);
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(VectorizedArray<Number>(), j);
         }
         phi.submit_dof_value(make_vectorized_array<Number>(1.0), i);
-        /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-              a vector which is 1 for the node of interest and 0 elsewhere.---*/
+        // We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
+        // a vector which is 1 for the node of interest and 0 elsewhere
         phi.evaluate(EvaluationFlags::values);
 
         for(const unsigned q : phi.quadrature_point_indices()) {
@@ -2182,7 +2433,7 @@ namespace Atmospheric_Flow {
       Assert(false, ExcInternalError());
     }
 
-    /*--- For the preconditioner, we actually need the inverse of the diagonal ---*/
+    // For the preconditioner, we actually need the inverse of the diagonal
     for(unsigned i = 0; i < inverse_diagonal.locally_owned_size(); ++i) {
       Assert(inverse_diagonal.local_element(i) != static_cast<Number>(0.0),
              ExcMessage("No diagonal entry in a definite operator should be zero"));

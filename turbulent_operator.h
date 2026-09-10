@@ -1,4 +1,17 @@
-/* Author: Giuseppe Orlando, 2026. */
+/* ------------------------------------------------------------------------
+ *
+ * SPDX-License-Identifier: LGPL-2.1-or-later
+ * Copyright (C) 2022-2026 Giuseppe Orlando
+ *
+ * This code is free software; you can use it, redistribute it,
+ * and/or modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * ------------------------------------------------------------------------
+ *
+ * Author: Giuseppe Orlando, 2026
+ */
 #pragma once
 
 // @sect{Include files}
@@ -10,7 +23,7 @@
 
 #include <deal.II/meshworker/mesh_loop.h>
 
-/*--- Include headers related to the problem of interest ---*/
+// Include headers related to the problem of interest
 #include "include/io/runtime_parameters.h"
 #include "include/equation_data.h"
 #include "include/time_integrator/runge_kutta.h"
@@ -30,35 +43,79 @@ namespace Turbulent_Diffusivity {
   public:
     using Number = typename Vec::value_type;
 
-    TurbulentOperator(); /*--- Default constructor ---*/
+    /**
+     * Default constructor
+     */
+    TurbulentOperator();
 
+    /**
+     * Class constructor
+     * @param data runtime parameters
+     * @param implicit_RK implicit Runge-Kutta Butcher tableau
+     */
     TurbulentOperator(const RunTimeParameters::Data_Storage& data,
-                      const TimeStepping::RungeKutta<Number>& implicit_RK); /*--- Constructor with some input related data ---*/
+                      const TimeStepping::RungeKutta<Number>& implicit_RK);
 
+    /**
+     * Setter of the time-step. This is useful both for (possible) multigrid purposes
+     * and also in case of modifications of the time step
+     * @param time_step time step
+     */
     template<typename T>
     inline DEAL_II_ALWAYS_INLINE
-    void set_dt(const T time_step); /*--- Setter of the time-step. This is useful in case of modifications of the time step. ---*/
+    void set_dt(const T time_step);
 
+    /**
+     * Setter of the current IMEX stage
+     * @param current IMEX stage
+     */
     inline DEAL_II_ALWAYS_INLINE
-    void set_IMEX_stage(const unsigned stage); /*--- Setter of the IMEX stage. ---*/
+    void set_IMEX_stage(const unsigned stage);
 
+    /**
+     * Setter of the equation currently under solution
+     * @param stage current equation to be solved
+     */
     inline DEAL_II_ALWAYS_INLINE
-    void set_NS_stage(const unsigned stage); /*--- Setter of the equation currently under solution. ---*/
+    void set_NS_stage(const unsigned stage);
 
-    void set_u_curr(const Vec& src); /*--- Setter of the current velocity. This is for the assembling of the bilinear forms
-                                           where only one source vector can be passed in input to linearize diffusion coefficient. ---*/
+    /**
+     * Setter of the current velocity. This is for the assembling of the bilinear forms
+     * where only one source vector can be passed in input
+     * @param src current velocity
+     */
+    void set_u_curr(const Vec& src);
 
-    void set_theta_curr(const Vec& src); /*--- Setter of the current potential temperature. This is for the assembling of the bilinear forms
-                                               where only one source vector can be passed in input to linearize diffusion coefficient. ---*/
+    /**
+     * Setter of the current potential temperature. This is for the assembling of the bilinear forms
+     * where only one source vector can be passed in input
+     * @param src current potential temperature
+     */
+    void set_theta_curr(const Vec& src);
 
-    void vmult_rhs_velocity(Vec& dst, const std::vector<Vec>& src) const;  /*--- Auxiliary function to assemble the rhs for the velocity. ---*/
+    /**
+     * Auxiliary function to assemble the contribution
+     * of the rhs for the velocity equation
+     * @return dst destination vector
+     * @param src vector with all fields to compute such contribution
+     */
+    void vmult_rhs_velocity(Vec& dst, const std::vector<Vec>& src) const;
 
-    void vmult_rhs_temperature(Vec& dst, const std::vector<Vec>& src) const; /*--- Auxiliary function to assemble the rhs for the temperature. ---*/
+    /**
+     * Auxiliary function to assemble the contribution
+     * of the rhs for the potential temperature equation
+     * @return dst destination vector
+     * @param src vector with all fields to compute such contribution
+     */
+    void vmult_rhs_temperature(Vec& dst, const std::vector<Vec>& src) const;
 
-    virtual void compute_diagonal() override; /*--- Compute the diagonal for several preconditioners ---*/
+    /**
+     * Overriden function to compute the diagonal for several (possible) preconditioners
+     */
+    virtual void compute_diagonal() override;
 
   protected:
-    /*--- Define typedef for sake of readability and convenience ----*/
+    // Define typedef for sake of readability and convenience
     using FEEvaluation_u     = FEEvaluation<dim, fe_degree_u, n_q_points_1d, dim, Number>;
     using FEEvaluation_theta = FEEvaluation<dim, fe_degree_T, n_q_points_1d, 1, Number>;
 
@@ -68,116 +125,265 @@ namespace Turbulent_Diffusivity {
     using FEFaceEvaluation_u_boundary     = FEFaceEvaluation<dim, fe_degree_u, n_q_points_1d_boundary, dim, Number>;
     using FEFaceEvaluation_theta_boundary = FEFaceEvaluation<dim, fe_degree_T, n_q_points_1d_boundary, 1, Number>;
 
-    Number dt; /*--- Time step. ---*/
+    Number dt; /*!< Time step */
 
-    std::vector<std::vector<Number>> a_tilde; /*--- Classical Butcher tableau notation.
-                                                    We assume a stiffly-accurate implicit scheme ----*/
+    std::vector<std::vector<Number>> a_tilde; /*!< Classical Butcher tableau notation.
+                                                   We assume a stiffly-accurate implicit scheme */
 
-    unsigned n_stages; /*--- Number of stages ---*/
+    unsigned n_stages; /*!< Total number of IMEX stages */
 
-    unsigned IMEX_stage; /*--- Flag for the IMEX stage ---*/
-    unsigned NS_stage;   /*--- Flag for the equation actually solved ---*/
+    unsigned IMEX_stage; /*!< Flag for the IMEX stage */
+    unsigned NS_stage;   /*!< Flag for the equation actually solved */
 
-    virtual void apply_add(Vec& dst, const Vec& src) const override; /*--- Overriden function which actually assembles the
-                                                                           bilinear forms ---*/
+    /**
+     * Overriden function which actually assembles the bilinear forms
+     * @return dst destination vector
+     * @param src vector to which apply the operator
+     */
+    virtual void apply_add(Vec& dst, const Vec& src) const override;
 
   private:
-    /*--- Parameters related to IP ---*/
+    // Parameters related to IP
     Number C_T = static_cast<Number>(1.0)*(fe_degree_T + 1)*(fe_degree_T + 1);
     Number C_u = static_cast<Number>(1.0)*(fe_degree_u + 1)*(fe_degree_u + 1);
 
     Vec u_curr,
         theta_curr;
 
-    Number inv_Fr2;   /*--- Inverse of squared Froude number ---*/
-    Number l2_mixing; /*--- Square of mixing length ---*/
+    Number inv_Fr2;   /*!< Inverse of squared Froude number */
+    Number l2_mixing; /*!< Square of mixing length */
 
-    Tensor<1, dim, VectorizedArray<Number>> tmp_diagonal_velocity; /*--- Auxiliary vector to compute the diagonal of the velocity matrix ----*/
+    Tensor<1, dim, VectorizedArray<Number>> tmp_diagonal_velocity; /*!< Auxiliary vector to compute the diagonal
+                                                                        of the velocity matrix */
 
-    /*--- Assembler functions for the rhs related to the velocity equation. Here, and also in the following,
-          we distinguish between the contribution for cells, faces and boundary. ---*/
+    // Assembler functions for the rhs related to the velocity equation. Here, and also in the following,
+    // we distinguish between the contribution for cells, faces and boundary
+    /**
+     * Assemble rhs cell contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_rhs_cell_term_velocity(const MatrixFree<dim, Number>&       data,
                                          Vec&                                 dst,
                                          const std::vector<Vec>&              src,
                                          const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble rhs inner face contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_rhs_face_term_velocity(const MatrixFree<dim, Number>&       data,
                                          Vec&                                 dst,
                                          const std::vector<Vec>&              src,
                                          const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble rhs boundary face contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector with all fields to assemble this contribution
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_rhs_boundary_term_velocity(const MatrixFree<dim, Number>&       data,
                                              Vec&                                 dst,
                                              const std::vector<Vec>&              src,
                                              const std::pair<unsigned, unsigned>& face_range) const {}
+                                             // No flux, so no contribution from this function
 
-    /*--- Assembler functions related to the bilinear form of the velocity equation. ---*/
+    // Assembler function related to the bilinear form of the velocity equation
+    /**
+     * Assemble matrix cell contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_cell_term_velocity(const MatrixFree<dim, Number>&       data,
                                      Vec&                                 dst,
                                      const Vec&                           src,
                                      const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble matrix inner face contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_face_term_velocity(const MatrixFree<dim, Number>&       data,
                                      Vec&                                 dst,
                                      const Vec&                           src,
                                      const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble matrix boundary face contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_boundary_term_velocity(const MatrixFree<dim, Number>&       data,
                                          Vec&                                 dst,
                                          const Vec&                           src,
                                          const std::pair<unsigned, unsigned>& face_range) const {}
+                                         // No flux, so no contribution from this function
 
-    /*--- Assembler functions for the rhs related to the potential temperature equation. ---*/
+    // Assembler function related to the bilinear form of the potential temperature equation
+    /**
+     * Assemble rhs cell contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_rhs_cell_term_temperature(const MatrixFree<dim, Number>&       data,
                                             Vec&                                 dst,
                                             const std::vector<Vec>&              src,
                                             const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble rhs inner face contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_rhs_face_term_temperature(const MatrixFree<dim, Number>&       data,
                                             Vec&                                 dst,
                                             const std::vector<Vec>&              src,
                                             const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble rhs boundary face contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_rhs_boundary_term_temperature(const MatrixFree<dim, Number>&       data,
                                                 Vec&                                 dst,
                                                 const std::vector<Vec>&              src,
                                                 const std::pair<unsigned, unsigned>& face_range) const {}
+                                                // No flux, so no contribution from this function
 
-    /*--- Assembler functions for the potential temperature equation. ---*/
+    // Assembler functions for the potential temperature equation
+    /**
+     * Assemble matrix cell contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_cell_term_temperature(const MatrixFree<dim, Number>&       data,
                                         Vec&                                 dst,
                                         const Vec&                           src,
                                         const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble matrix inner face contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_face_term_temperature(const MatrixFree<dim, Number>&       data,
                                         Vec&                                 dst,
                                         const Vec&                           src,
                                         const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble matrix boundary face contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_boundary_term_temperature(const MatrixFree<dim, Number>&       data,
                                             Vec&                                 dst,
                                             const Vec&                           src,
                                             const std::pair<unsigned, unsigned>& face_range) const {}
+                                            // No flux, so no contribution from this function
 
-    /*--- Assembler functions for the diagonal part of the matrix for the velocity equation. ---*/
+    // Assembler functions for the diagonal part of the matrix for the velocity equation
+    /**
+     * Assemble diagonal of the matrix cell contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_diagonal_cell_term_velocity(const MatrixFree<dim, Number>&       data,
                                               Vec&                                 dst,
                                               const unsigned&                      src,
                                               const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble diagonal of the matrix inner face contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_diagonal_face_term_velocity(const MatrixFree<dim, Number>&       data,
                                               Vec&                                 dst,
                                               const unsigned&                      src,
                                               const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble diagonal of the matrix boundary face contribution velocity equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_diagonal_boundary_term_velocity(const MatrixFree<dim, Number>&       data,
                                                   Vec&                                 dst,
                                                   const unsigned&                      src,
                                                   const std::pair<unsigned, unsigned>& face_range) const {}
+                                                  // No flux, so no contribution from this function
 
-    /*--- Assembler functions for the diagonal part of the matrix for the potential temperature equation. ---*/
+    // Assembler functions for the diagonal part of the matrix for the potential temperature equation
+    /**
+     * Assemble diagonal of the matrix cell contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param cell_range range of cells to be locally assembled
+     */
     void assemble_diagonal_cell_term_temperature(const MatrixFree<dim, Number>&       data,
                                                  Vec&                                 dst,
                                                  const unsigned&                      src,
                                                  const std::pair<unsigned, unsigned>& cell_range) const;
+    
+    /**
+     * Assemble diagonal of the matrix inner face contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of inner faces to be locally assembled
+     */
     void assemble_diagonal_face_term_temperature(const MatrixFree<dim, Number>&               data,
                                                  Vec&                                         dst,
                                                  const unsigned&                          src,
                                                  const std::pair<unsigned, unsigned>& face_range) const;
+    
+    /**
+     * Assemble diagonal of the matrix boundary face contribution potential temperature equation
+     * @param data matrix-free infrastructure with all data
+     * @return dst destination vector
+     * @param src vector to which aply the operator
+     * @param face_range range of boundary faces to be locally assembled
+     */
     void assemble_diagonal_boundary_term_temperature(const MatrixFree<dim, Number>&               data,
                                                      Vec&                                         dst,
                                                      const unsigned&                          src,
                                                      const std::pair<unsigned, unsigned>& face_range) const {}
+                                                     // No flux, so no contribution from this function
   };
 
 
@@ -199,8 +405,8 @@ namespace Turbulent_Diffusivity {
     dt(), n_stages(), IMEX_stage(1), NS_stage(1),
     inv_Fr2(), l2_mixing()
     {
-      /*--- We create an auxiliary vector that will never change
-            independently on the stage, so we declare it once and for all. ---*/
+      // We create an auxiliary vector that will never change
+      // independently on the stage, so we declare it once and for all
       for(unsigned d = 0; d < dim; ++d) {
         tmp_diagonal_velocity[d] = make_vectorized_array<Number>(1.0);
       }
@@ -227,8 +433,8 @@ namespace Turbulent_Diffusivity {
     {
       implicit_RK.get_coefficients(a_tilde);
 
-      /*--- We create an auxiliary vector that will never change
-            independently on the stage, so we declare it once and for all. ---*/
+      // We create an auxiliary vector that will never change
+      // independently on the stage, so we declare it once and for all
       for(unsigned d = 0; d < dim; ++d) {
         tmp_diagonal_velocity[d] = make_vectorized_array<Number>(1.0);
       }
@@ -239,7 +445,7 @@ namespace Turbulent_Diffusivity {
   /*---- FOCUS NOW ON SOME AUXILIARY SETTERS ---*/
   /////////////////////////////////////////////////////////////
 
-  // Setter of time-step
+  // Setter of time step
   //
   template<unsigned dim,
            unsigned fe_degree_u, unsigned fe_degree_T,
@@ -341,12 +547,12 @@ namespace Turbulent_Diffusivity {
                                   Vec&                                 dst,
                                   const std::vector<Vec>&              src,
                                   const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We start by declaring suitable instances to read the available quantities ---*/
+    // We start by declaring suitable instances to read the available quantities
     FEEvaluation_u                  phi(data, EquationData::U_INDEX_DOF);
     std::vector<FEEvaluation_u>     phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
     std::vector<FEEvaluation_theta> phi_theta(IMEX_stage - 1, FEEvaluation_theta(data, EquationData::THETA_INDEX_DOF));
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
         phi_u[s - 1].reinit(cell);
@@ -357,13 +563,13 @@ namespace Turbulent_Diffusivity {
 
       phi.reinit(cell);
 
-      /*--- Loop over all quadrature points. ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
-        /*--- Compute the velocity after hyperbolic operator (always needed).
-              Notice this is ok because of ESDIRK method ---*/
+        // Compute the velocity after hyperbolic operator (always needed).
+        // Notice this is ok because of ESDIRK method
         const auto& u_curr = phi_u.front().get_value(q);
 
-        /*--- Compute contribution of the flux at each stage ---*/
+        // Compute contribution of the flux at each stage
         Tensor<2, dim, VectorizedArray<Number>> diff_flux;
         diff_flux = 0;
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
@@ -417,7 +623,7 @@ namespace Turbulent_Diffusivity {
                                   Vec&                                 dst,
                                   const std::vector<Vec>&              src,
                                   const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- We start by declaring suitable quantities to read the available quantities ---*/
+    // We start by declaring suitable quantities to read the available quantities
     FEFaceEvaluation_u     phi_m(data, true, EquationData::U_INDEX_DOF),
                            phi_p(data, false, EquationData::U_INDEX_DOF),
                            phi_u_m(data, true, EquationData::U_INDEX_DOF),
@@ -425,7 +631,7 @@ namespace Turbulent_Diffusivity {
     FEFaceEvaluation_theta phi_theta_m(data, true, EquationData::THETA_INDEX_DOF),
                            phi_theta_p(data, false, EquationData::THETA_INDEX_DOF);
 
-    /*--- Loop over all internal faces ---*/
+    // Loop over all internal faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_u_m.reinit(face);
       phi_u_p.reinit(face);
@@ -437,16 +643,17 @@ namespace Turbulent_Diffusivity {
 
       const auto coef_jump = C_u*(static_cast<Number>(0.5)*
                                   (std::abs((phi_m.get_normal_vector(0) * phi_m.inverse_jacobian(0))[dim - 1]) +
-                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
+                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1])));
+                             // Jump constant for IP
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
-        /*--- Compute the quantities at the previous stages ---*/
+        // Compute the quantities at the previous stages
         Tensor<1, dim, VectorizedArray<Number>> IP_flux_num;
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-          /*--- Retrieve the useful fields ---*/
+          // Retrieve the useful fields
           phi_u_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::values | EvaluationFlags::gradients);
           phi_u_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::values | EvaluationFlags::gradients);
           phi_theta_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::gradients);
@@ -494,7 +701,7 @@ namespace Turbulent_Diffusivity {
                                         (kappa_s_m*grad_u_s_m[0][dim - 1] +
                                          kappa_s_p*grad_u_s_p[0][dim - 1]);
 
-          /*--- Consider also jump penalization contribution ---*/
+          // Consider also jump penalization contribution
           const auto& u_s_m       = phi_u_m.get_value(q);
           const auto& u_s_p       = phi_u_p.get_value(q);
           const auto& avg_kappa_s = static_cast<Number>(2.0)/
@@ -503,7 +710,7 @@ namespace Turbulent_Diffusivity {
           auto jump_u_s           = u_s_m - u_s_p;
           jump_u_s[dim - 1]       = make_vectorized_array<Number>(0.0);
 
-          /*--- Compute the numerical flux ---*/
+          // Compute the numerical flux
           IP_flux_num += a_tilde[IMEX_stage - 1][s - 1]*dt*
                          (avg_diff_flux_s*n_minus -
                           coef_jump*avg_kappa_s*jump_u_s);
@@ -555,12 +762,12 @@ namespace Turbulent_Diffusivity {
                               Vec&                                 dst,
                               const Vec&                           src,
                               const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We start declaring suitable instances to read the available quantities ---*/
+    // We start declaring suitable instances to read the available quantities
     FEEvaluation_u     phi(data, EquationData::U_INDEX_DOF),
                        phi_u_curr(data, EquationData::U_INDEX_DOF);
     FEEvaluation_theta phi_theta_curr(data, EquationData::THETA_INDEX_DOF);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_u_curr.reinit(cell);
       phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -570,11 +777,11 @@ namespace Turbulent_Diffusivity {
       phi.reinit(cell);
       phi.gather_evaluate(src, EvaluationFlags::values | EvaluationFlags::gradients);
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& u = phi.get_value(q);
 
-        /*--- Compute contribution at current stage ---*/
+        // Compute contribution at current stage
         const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
         const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
 
@@ -584,16 +791,16 @@ namespace Turbulent_Diffusivity {
         VectorizedArray<Number> beta;
         for(unsigned idx = 0; idx < VectorizedArray<Number>::size(); ++idx) {
           if(Ri_curr[idx] > static_cast<Number>(0.0)) {
-            b[idx]    = 5.0;
-            beta[idx] = -2.0;
+            b[idx]    = static_cast<Number>(5.0);
+            beta[idx] = static_cast<Number>(-2.0);
           }
           else {
-            b[idx]    = 20.0;
-            beta[idx] = 0.5;
+            b[idx]    = static_cast<Number>(20.0);
+            beta[idx] = static_cast<Number>(0.5);
           }
         }
         const auto& kappa_curr = l2_mixing*std::sqrt(mod_squared_grad_uz_curr)*
-                                 std::pow(1.0 + b*std::abs(Ri_curr), beta);
+                                 std::pow(static_cast<Number>(1.0) + b*std::abs(Ri_curr), beta);
 
         Tensor<2, dim, VectorizedArray<Number>> diff_flux;
         diff_flux = 0;
@@ -622,7 +829,7 @@ namespace Turbulent_Diffusivity {
                               Vec&                                 dst,
                               const Vec&                           src,
                               const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- We start by declaring suitable instances to read the available quantities ---*/
+    // We start by declaring suitable instances to read the available quantities
     FEFaceEvaluation_u     phi_m(data, true, EquationData::U_INDEX_DOF),
                            phi_p(data, false, EquationData::U_INDEX_DOF),
                            phi_u_curr_m(data, true, EquationData::U_INDEX_DOF),
@@ -630,7 +837,7 @@ namespace Turbulent_Diffusivity {
     FEFaceEvaluation_theta phi_theta_curr_m(data, true, EquationData::THETA_INDEX_DOF),
                            phi_theta_curr_p(data, false, EquationData::THETA_INDEX_DOF);
 
-    /*--- Loop over all internal faces ---*/
+    // Loop over all internal faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_u_curr_m.reinit(face);
       phi_u_curr_m.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -648,13 +855,14 @@ namespace Turbulent_Diffusivity {
 
       const auto coef_jump = C_u*(static_cast<Number>(0.5)*
                                   (std::abs((phi_m.get_normal_vector(0) * phi_m.inverse_jacobian(0))[dim - 1]) +
-                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
+                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1])));
+                             // Jump constant for IP
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
-        /*--- Compute contribution at current stage ---*/
+        // Compute contribution at current stage
         const auto& grad_u_curr_m     = phi_u_curr_m.get_gradient(q);
         const auto& grad_u_curr_p     = phi_u_curr_p.get_gradient(q);
         const auto& grad_theta_curr_m = phi_theta_curr_m.get_gradient(q);
@@ -698,7 +906,7 @@ namespace Turbulent_Diffusivity {
                                     (kappa_curr_m*grad_u_m[0][dim - 1] +
                                      kappa_curr_p*grad_u_p[0][dim - 1]);
 
-        /*--- Consider jump penalization ---*/
+        // Consider jump penalization
         const auto& u_m            = phi_m.get_value(q);
         const auto& u_p            = phi_p.get_value(q);
         const auto& avg_kappa_curr = static_cast<Number>(2.0)/
@@ -707,7 +915,7 @@ namespace Turbulent_Diffusivity {
         auto jump_u                = u_m - u_p;
         jump_u[dim - 1]            = make_vectorized_array<Number>(0.0);
 
-        /*-- Compute the numerical flux ---*/
+        // Compute the numerical flux
         const auto& IP_flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                                   (-avg_diff_flux*n_minus +
                                     coef_jump*avg_kappa_curr*jump_u);
@@ -740,12 +948,12 @@ namespace Turbulent_Diffusivity {
                                      Vec&                                 dst,
                                      const std::vector<Vec>&              src,
                                      const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We start by declaring suitable instances to read the available quantities ---*/
+    // We start by declaring suitable instances to read the available quantities
     FEEvaluation_theta              phi(data, EquationData::THETA_INDEX_DOF);
     std::vector<FEEvaluation_u>     phi_u(IMEX_stage - 1, FEEvaluation_u(data, EquationData::U_INDEX_DOF));
     std::vector<FEEvaluation_theta> phi_theta(IMEX_stage - 1, FEEvaluation_theta(data, EquationData::THETA_INDEX_DOF));
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
         phi_u[s - 1].reinit(cell);
@@ -756,13 +964,13 @@ namespace Turbulent_Diffusivity {
 
       phi.reinit(cell);
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
-        /*--- Compute the potential temperature after hyperbolic operator (always needed).
-              Notice this is ok because of ESDIRK method ---*/
+        // Compute the potential temperature after hyperbolic operator (always needed).
+        // Notice this is ok because of ESDIRK method
         const auto& theta_curr = phi_theta.front().get_value(q);
 
-        /*--- Compute the contribution at the previous stages ---*/
+        // Compute the contribution at the previous stages
         Tensor<1, dim, VectorizedArray<Number>> diff_flux;
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
           const auto& grad_u_s     = phi_u[s - 1].get_gradient(q);
@@ -815,7 +1023,7 @@ namespace Turbulent_Diffusivity {
                                      Vec&                                 dst,
                                      const std::vector<Vec>&              src,
                                      const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- We start by declaring suitable quantities to read the available quantities ---*/
+    // We start by declaring suitable quantities to read the available quantities
     FEFaceEvaluation_theta phi_m(data, true, EquationData::THETA_INDEX_DOF),
                            phi_p(data, false, EquationData::THETA_INDEX_DOF),
                            phi_theta_m(data, true, EquationData::THETA_INDEX_DOF),
@@ -823,7 +1031,7 @@ namespace Turbulent_Diffusivity {
     FEFaceEvaluation_u     phi_u_m(data, true, EquationData::U_INDEX_DOF),
                            phi_u_p(data, false, EquationData::U_INDEX_DOF);
 
-    /*--- Loop over all internal faces ---*/
+    // Loop over all internal faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_u_m.reinit(face);
       phi_u_p.reinit(face);
@@ -835,16 +1043,17 @@ namespace Turbulent_Diffusivity {
 
       const auto coef_jump = C_T*(static_cast<Number>(0.5)*
                                   (std::abs((phi_m.get_normal_vector(0) * phi_m.inverse_jacobian(0))[dim - 1]) +
-                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
+                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1])));
+                             // Jump constant for IP
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
-        /*--- Compute the quantities at the previous stages ---*/
+        // Compute the quantities at the previous stages
         VectorizedArray<Number> IP_flux_num = make_vectorized_array<Number>(0.0);
         for(unsigned s = 1; s <= IMEX_stage - 1; ++s) {
-          /*--- Retrieve the useful fields ---*/
+          // Retrieve the useful fields
           phi_u_m.gather_evaluate(src[2*(s-1)], EvaluationFlags::gradients);
           phi_u_p.gather_evaluate(src[2*(s-1)], EvaluationFlags::gradients);
           phi_theta_m.gather_evaluate(src[2*(s-1) + 1], EvaluationFlags::values | EvaluationFlags::gradients);
@@ -896,7 +1105,7 @@ namespace Turbulent_Diffusivity {
                                         (diff_tensor_s_m*grad_theta_s_m +
                                          diff_tensor_s_p*grad_theta_s_p);
 
-          /*--- Consider also jump penalization contribution ---*/
+          // Consider also jump penalization contribution
           const auto& theta_s_m    = phi_theta_m.get_value(q);
           const auto& theta_s_p    = phi_theta_p.get_value(q);
           const auto& avg_kappa_s  = static_cast<Number>(2.0)/
@@ -904,7 +1113,7 @@ namespace Turbulent_Diffusivity {
                                       static_cast<Number>(1.0)/kappa_s_p);
           const auto& jump_theta_s = theta_s_m - theta_s_p;
 
-          /*--- Compute the numerical flux ---*/
+          // Compute the numerical flux
           IP_flux_num += a_tilde[IMEX_stage - 1][s - 1]*dt*
                          (scalar_product(avg_diff_flux_s, n_minus) -
                           coef_jump*avg_kappa_s*jump_theta_s);
@@ -956,12 +1165,12 @@ namespace Turbulent_Diffusivity {
                                  Vec&                                 dst,
                                  const Vec&                           src,
                                  const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We start by declaring suitable instances to read the available quantities ---*/
+    // We start by declaring suitable instances to read the available quantities
     FEEvaluation_theta phi(data, EquationData::THETA_INDEX_DOF),
                        phi_theta_curr(data, EquationData::THETA_INDEX_DOF);
     FEEvaluation_u     phi_u_curr(data, EquationData::U_INDEX_DOF);
 
-    /*--- Loop over all cells. ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_u_curr.reinit(cell);
       phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -971,7 +1180,7 @@ namespace Turbulent_Diffusivity {
       phi.reinit(cell);
       phi.gather_evaluate(src, EvaluationFlags::values | EvaluationFlags::gradients);
 
-      /*--- Loop over all quadrature points. ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi.quadrature_point_indices()) {
         const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
         const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
@@ -1019,7 +1228,7 @@ namespace Turbulent_Diffusivity {
                                  Vec&                                         dst,
                                  const Vec&                                   src,
                                  const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- We start by declaring suitable instances to read the available quantities ---*/
+    // We start by declaring suitable instances to read the available quantities
     FEFaceEvaluation_theta phi_m(data, true, EquationData::THETA_INDEX_DOF),
                            phi_p(data, false, EquationData::THETA_INDEX_DOF),
                            phi_theta_curr_m(data, true, EquationData::THETA_INDEX_DOF),
@@ -1027,7 +1236,7 @@ namespace Turbulent_Diffusivity {
     FEFaceEvaluation_u     phi_u_curr_m(data, true, EquationData::U_INDEX_DOF),
                            phi_u_curr_p(data, false, EquationData::U_INDEX_DOF);
 
-    /*--- Loop over all internal faces ---*/
+    // Loop over all internal faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_u_curr_m.reinit(face);
       phi_u_curr_m.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -1045,13 +1254,14 @@ namespace Turbulent_Diffusivity {
 
       const auto coef_jump = C_T*(static_cast<Number>(0.5)*
                                   (std::abs((phi_m.get_normal_vector(0) * phi_m.inverse_jacobian(0))[dim - 1]) +
-                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump cosntant for IP ---*/
+                                   std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1])));
+                             // Jump constant for IP
 
-      /*--- Loop over all quadrature points ---*/
+      // Loop over all quadrature points
       for(const unsigned q : phi_m.quadrature_point_indices()) {
         const auto& n_minus = phi_m.get_normal_vector(q);
 
-        /*--- Compute contribution at current stage ---*/
+        // Compute contribution at current stage
         const auto& grad_u_curr_m     = phi_u_curr_m.get_gradient(q);
         const auto& grad_u_curr_p     = phi_u_curr_p.get_gradient(q);
         const auto& grad_theta_curr_m = phi_theta_curr_m.get_gradient(q);
@@ -1097,7 +1307,7 @@ namespace Turbulent_Diffusivity {
                                     (diff_tensor_curr_m*phi_m.get_gradient(q) +
                                      diff_tensor_curr_p*phi_p.get_gradient(q));
 
-        /*--- Consider also IP term ---*/
+        // Consider also IP term
         const auto& theta_m        = phi_m.get_value(q);
         const auto& theta_p        = phi_p.get_value(q);
         const auto& avg_kappa_curr = static_cast<Number>(2.0)/
@@ -1105,7 +1315,7 @@ namespace Turbulent_Diffusivity {
                                       static_cast<Number>(1.0)/kappa_curr_p);
         const auto& jump_theta     = theta_m - theta_p;
 
-        /*--- Compute the numerical flux ---*/
+        // Compute the numerical flux
         const auto& IP_flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                                   (-scalar_product(avg_diff_flux, n_minus) +
                                    coef_jump*avg_kappa_curr*jump_theta);
@@ -1176,16 +1386,16 @@ namespace Turbulent_Diffusivity {
                                        Vec&                                 dst,
                                        const unsigned&                      ,
                                        const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We start by declaring suitable instances to read the available quantities ---*/
+    // We start by declaring suitable instances to read the available quantities
     FEEvaluation_u     phi(data, EquationData::U_INDEX_DOF),
                        phi_u_curr(data, EquationData::U_INDEX_DOF);
     FEEvaluation_theta phi_theta_curr(data, EquationData::THETA_INDEX_DOF);
 
-    /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-          a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp_diagonal_velocity' does. ---*/
+    // We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
+    // a vector which is 1 for the node of interest and 0 elsewhere. This is what 'tmp_diagonal_velocity' does
     AlignedVector<Tensor<1, dim, VectorizedArray<Number>>> diagonal(phi.dofs_per_component);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_u_curr.reinit(cell);
       phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -1194,7 +1404,7 @@ namespace Turbulent_Diffusivity {
 
       phi.reinit(cell);
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
@@ -1202,7 +1412,7 @@ namespace Turbulent_Diffusivity {
         phi.submit_dof_value(tmp_diagonal_velocity, i);
         phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
-        /*--- Loop over all quadrature points. ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
           const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
@@ -1222,7 +1432,7 @@ namespace Turbulent_Diffusivity {
             }
           }
           const auto& kappa_curr = l2_mixing*std::sqrt(mod_squared_grad_uz_curr)*
-                                   std::pow(1.0 + b*std::abs(Ri_curr), beta);
+                                   std::pow(static_cast<Number>(1.0) + b*std::abs(Ri_curr), beta);
 
           Tensor<2, dim, VectorizedArray<Number>> diff_flux;
           diff_flux = 0;
@@ -1258,7 +1468,7 @@ namespace Turbulent_Diffusivity {
                                        Vec&                                 dst,
                                        const unsigned&                      ,
                                        const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- We start by declaring suitable instances to read the available quantities ---*/
+    // We start by declaring suitable instances to read the available quantities
     FEFaceEvaluation_u     phi_m(data, true, EquationData::U_INDEX_DOF),
                            phi_p(data, false, EquationData::U_INDEX_DOF),
                            phi_u_curr_m(data, true, EquationData::U_INDEX_DOF),
@@ -1269,7 +1479,7 @@ namespace Turbulent_Diffusivity {
     AlignedVector<Tensor<1, dim, VectorizedArray<Number>>> diagonal_m(phi_m.dofs_per_component),
                                                            diagonal_p(phi_p.dofs_per_component);
 
-    /*--- Loop over all internal faces ---*/
+    // Loop over all internal faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_u_curr_m.reinit(face);
       phi_u_curr_m.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -1287,7 +1497,7 @@ namespace Turbulent_Diffusivity {
                                   (std::abs((phi_m.get_normal_vector(0) * phi_m.inverse_jacobian(0))[dim - 1]) +
                                    std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi_m.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi_m.dofs_per_component; ++j) {
           phi_m.submit_dof_value(Tensor<1, dim, VectorizedArray<Number>>(), j);
@@ -1298,11 +1508,11 @@ namespace Turbulent_Diffusivity {
         phi_p.submit_dof_value(tmp_diagonal_velocity, i);
         phi_p.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
-          /*--- Compute contribution at current stage ---*/
+          // Compute contribution at current stage
           const auto& grad_u_curr_m     = phi_u_curr_m.get_gradient(q);
           const auto& grad_u_curr_p     = phi_u_curr_p.get_gradient(q);
           const auto& grad_theta_curr_m = phi_theta_curr_m.get_gradient(q);
@@ -1346,7 +1556,7 @@ namespace Turbulent_Diffusivity {
                                       (kappa_curr_m*grad_u_m[0][dim - 1] +
                                        kappa_curr_p*grad_u_p[0][dim - 1]);
 
-          /*--- Consider also IP term ---*/
+          // Consider also IP term
           const auto& u_m            = phi_m.get_value(q);
           const auto& u_p            = phi_p.get_value(q);
           const auto& avg_kappa_curr = static_cast<Number>(2.0)/
@@ -1355,7 +1565,7 @@ namespace Turbulent_Diffusivity {
           auto jump_u                = u_m - u_p;
           jump_u[dim - 1]            = make_vectorized_array<Number>(0.0);
 
-          /*--- Compute the numerical flux ---*/
+          // Compute the numerical flux
           const auto& IP_flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                                     (-avg_diff_flux*n_minus +
                                       coef_jump*avg_kappa_curr*jump_u);
@@ -1394,14 +1604,14 @@ namespace Turbulent_Diffusivity {
                                           Vec&                                 dst,
                                           const unsigned&                      ,
                                           const std::pair<unsigned, unsigned>& cell_range) const {
-    /*--- We start by decalring suitable instances to read the available quantities ---*/
+    // We start by decalring suitable instances to read the available quantities
     FEEvaluation_theta phi(data, EquationData::THETA_INDEX_DOF),
                        phi_theta_curr(data, EquationData::THETA_INDEX_DOF);
     FEEvaluation_u     phi_u_curr(data, EquationData::U_INDEX_DOF);
 
     AlignedVector<VectorizedArray<Number>> diagonal(phi.dofs_per_component);
 
-    /*--- Loop over all cells ---*/
+    // Loop over all cells
     for(unsigned cell = cell_range.first; cell < cell_range.second; ++cell) {
       phi_u_curr.reinit(cell);
       phi_u_curr.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -1410,17 +1620,17 @@ namespace Turbulent_Diffusivity {
 
       phi.reinit(cell);
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi.dofs_per_component; ++j) {
           phi.submit_dof_value(VectorizedArray<Number>(), j);
         }
         phi.submit_dof_value(make_vectorized_array<Number>(1.0), i);
-        /*--- We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
-              a vector which is 1 for the node of interest and 0 elsewhere.---*/
+        // We are in a matrix-free framework. Hence, in order to compute the diagonal, we need to test the operator against
+        // a vector which is 1 for the node of interest and 0 elsewhere
         phi.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi.quadrature_point_indices()) {
           const auto& grad_u_curr     = phi_u_curr.get_gradient(q);
           const auto& grad_theta_curr = phi_theta_curr.get_gradient(q);
@@ -1462,7 +1672,6 @@ namespace Turbulent_Diffusivity {
     }
   }
 
-
   // Assemble diagonal face term for the temperature equation
   //
   template<unsigned dim,
@@ -1476,7 +1685,7 @@ namespace Turbulent_Diffusivity {
                                           Vec&                                 dst,
                                           const unsigned&                      ,
                                           const std::pair<unsigned, unsigned>& face_range) const {
-    /*--- We start by decalring suitable instances to read the available quantities ---*/
+    // We start by decalring suitable instances to read the available quantities
     FEFaceEvaluation_theta phi_m(data, true, EquationData::THETA_INDEX_DOF),
                            phi_p(data, false, EquationData::THETA_INDEX_DOF),
                            phi_theta_curr_m(data, true, EquationData::THETA_INDEX_DOF),
@@ -1487,7 +1696,7 @@ namespace Turbulent_Diffusivity {
     AlignedVector<VectorizedArray<Number>> diagonal_m(phi_m.dofs_per_component),
                                            diagonal_p(phi_p.dofs_per_component);
 
-    /*--- Loop over all face ---*/
+    // Loop over all internal faces
     for(unsigned face = face_range.first; face < face_range.second; ++face) {
       phi_u_curr_m.reinit(face);
       phi_u_curr_m.gather_evaluate(u_curr, EvaluationFlags::gradients);
@@ -1505,7 +1714,7 @@ namespace Turbulent_Diffusivity {
                                   (std::abs((phi_m.get_normal_vector(0) * phi_m.inverse_jacobian(0))[dim - 1]) +
                                    std::abs((phi_p.get_normal_vector(0) * phi_p.inverse_jacobian(0))[dim - 1]))); /*--- Jump constant for IP ---*/
 
-      /*--- Loop over all dofs ---*/
+      // Loop over all dofs
       for(unsigned i = 0; i < phi_m.dofs_per_component; ++i) {
         for(unsigned j = 0; j < phi_m.dofs_per_component; ++j) {
           phi_m.submit_dof_value(VectorizedArray<Number>(), j);
@@ -1516,11 +1725,11 @@ namespace Turbulent_Diffusivity {
         phi_m.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
         phi_p.evaluate(EvaluationFlags::values | EvaluationFlags::gradients);
 
-        /*--- Loop over all quadrature points ---*/
+        // Loop over all quadrature points
         for(const unsigned q : phi_m.quadrature_point_indices()) {
           const auto& n_minus = phi_m.get_normal_vector(q);
 
-          /*--- Compute contribution at current stage ---*/
+          // Compute contribution at current stage
           const auto& grad_u_curr_m              = phi_u_curr_m.get_gradient(q);
           const auto& grad_u_curr_p              = phi_u_curr_p.get_gradient(q);
           const auto& grad_theta_curr_m          = phi_theta_curr_m.get_gradient(q);
@@ -1566,7 +1775,7 @@ namespace Turbulent_Diffusivity {
                                       (diff_tensor_curr_m*phi_m.get_gradient(q) +
                                        diff_tensor_curr_p*phi_p.get_gradient(q));
 
-          /*--- Consider also IP term ---*/
+          // Consider also IP term
           const auto& theta_m        = phi_m.get_value(q);
           const auto& theta_p        = phi_p.get_value(q);
           const auto& avg_kappa_curr = static_cast<Number>(2.0)/
@@ -1574,7 +1783,7 @@ namespace Turbulent_Diffusivity {
                                         static_cast<Number>(1.0)/kappa_curr_p);
           const auto& jump_theta     = theta_m - theta_p;
 
-          /*--- Compute the numerical flux ---*/
+          // Compute the numerical flux
           const auto& IP_flux_num = a_tilde[IMEX_stage - 1][IMEX_stage - 1]*dt*
                                     (-scalar_product(avg_diff_flux, n_minus) +
                                      coef_jump*avg_kappa_curr*jump_theta);
@@ -1642,7 +1851,7 @@ namespace Turbulent_Diffusivity {
       Assert(false, ExcInternalError());
     }
 
-    /*--- For the preconditioner, we actually need the inverse of the diagonal ---*/
+    // For the preconditioner, we actually need the inverse of the diagonal
     for(unsigned i = 0; i < inverse_diagonal.locally_owned_size(); ++i) {
       Assert(inverse_diagonal.local_element(i) != static_cast<Number>(0.0),
              ExcMessage("No diagonal entry in a definite operator should be zero"));
